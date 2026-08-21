@@ -3,11 +3,14 @@ package com.elma.gohan.controller;
 import com.elma.gohan.application.RecommendationService;
 import com.elma.gohan.application.DeepEvidenceService;
 import com.elma.gohan.application.ValidationFailedException;
+import com.elma.gohan.application.BehaviorService;
 import com.elma.gohan.controller.api.CreateRecommendationRequest;
 import com.elma.gohan.controller.api.DeepEvidenceResponse;
 import com.elma.gohan.controller.api.FeedbackResponse;
 import com.elma.gohan.controller.api.RecommendationResponse;
 import com.elma.gohan.controller.api.SubmitFeedbackRequest;
+import com.elma.gohan.controller.api.SubmitBehaviorRequest;
+import com.elma.gohan.controller.api.BehaviorResponse;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -28,11 +31,14 @@ public class RecommendationController {
 
     private final RecommendationService service;
     private final DeepEvidenceService deepEvidenceService;
+    private final BehaviorService behaviorService;
 
     public RecommendationController(RecommendationService service,
-                                    DeepEvidenceService deepEvidenceService) {
+                                    DeepEvidenceService deepEvidenceService,
+                                    BehaviorService behaviorService) {
         this.service = service;
         this.deepEvidenceService = deepEvidenceService;
+        this.behaviorService = behaviorService;
     }
 
     @PostMapping("/recommendations")
@@ -60,6 +66,17 @@ public class RecommendationController {
         UUID anonymousUserId = parseUserId(anonymousUserIdHeader);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.submitFeedback(anonymousUserId, parseRecommendationId(id), request));
+    }
+
+    @PostMapping("/recommendations/{id}/behaviors")
+    public ResponseEntity<BehaviorResponse> behavior(
+            @RequestHeader("X-Anonymous-User-Id") String anonymousUserIdHeader,
+            @PathVariable("id") String id,
+            @Valid @RequestBody SubmitBehaviorRequest request) {
+        UUID userId = parseUserId(anonymousUserIdHeader);
+        var result = behaviorService.recordClient(userId, parseRecommendationId(id), request);
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+                .body(result.response());
     }
 
     @PostMapping("/recommendations/{id}/deep-evidence")

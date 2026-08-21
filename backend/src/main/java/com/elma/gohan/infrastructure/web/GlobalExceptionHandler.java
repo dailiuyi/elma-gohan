@@ -3,6 +3,7 @@ package com.elma.gohan.infrastructure.web;
 import com.elma.gohan.application.NoRecommendationAvailableException;
 import com.elma.gohan.application.RecommendationNotFoundException;
 import com.elma.gohan.application.ValidationFailedException;
+import com.elma.gohan.application.FeedbackAlreadyRecordedException;
 import com.elma.gohan.controller.api.ErrorResponse;
 import com.elma.gohan.provider.poi.PoiProviderException;
 import java.util.List;
@@ -73,6 +74,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RecommendationNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(RecommendationNotFoundException e) {
         return build(HttpStatus.NOT_FOUND, "RECOMMENDATION_NOT_FOUND", e.getMessage(), null);
+    }
+
+    @ExceptionHandler(FeedbackAlreadyRecordedException.class)
+    public ResponseEntity<ErrorResponse> handleFeedbackConflict(FeedbackAlreadyRecordedException e) {
+        return build(HttpStatus.CONFLICT, "FEEDBACK_ALREADY_RECORDED", e.getMessage(), null);
     }
 
     @ExceptionHandler(PoiProviderException.class)

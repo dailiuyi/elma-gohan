@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 仓库现状
 
-这是「ELMA 今天吃什么」前后端仓库。当前版本为 V0.3.2：默认推荐保持高德 + 百度与 `risk-v0.3`，并在进入细品类映射前验证高德 POI 的餐饮身份；用户点击“深挖一下这家”后才通过正规 Web Search API 查询公开索引线索，并生成不参与排序的 `deep-risk-v0.1`。接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，当前增量规则见 [docs/V0.3.2-product-polish.md](docs/V0.3.2-product-polish.md)。
+这是「ELMA 今天吃什么」前后端仓库。当前版本为 V0.4：默认推荐保持高德 + 百度与 `risk-v0.3`，新增 `taste-v0.1`、行为闭环、近期饮食历史、有限探索和 `recommendation-v0.4`；用户主动深挖仍生成不参与排序的 `deep-risk-v0.1`。接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，当前增量规则见 [docs/V0.4-personalized-decision-loop.md](docs/V0.4-personalized-decision-loop.md)。
 
 两份方案文档（`elma-gohan_V0.1_Demo_技术与产品方案.md`、`elma-gohan产品介绍.md`）是项目起点，不得覆盖或重写。
 
@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 python contracts/validate_openapi.py
 ```
 
-需要 `pyyaml`。脚本会校验操作集合（只允许四个 POST 接口）、operationId、`X-Anonymous-User-Id` 头、反馈 DTO 形状以及所有 example/default 与 schema 一致，输出 `CONTRACT_OK` 或 `CONTRACT_INVALID`。
+需要 `pyyaml`。脚本会校验操作集合（只允许五个 POST 接口）、operationId、`X-Anonymous-User-Id` 头、反馈/行为 DTO 形状以及所有 example/default 与 schema 一致，输出 `CONTRACT_OK` 或 `CONTRACT_INVALID`。
 
 后端工程在 `backend/`（Java 17 + Spring Boot 3.5 + Maven 单模块）：
 
@@ -32,11 +32,12 @@ cd backend && mvn test
 
 接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，说明见 [contracts/README.md](contracts/README.md)。前后端实现不得自行定义第二套 DTO 字段含义；改契约必须先改 YAML 并通过验证脚本。
 
-四个接口（均要求 `X-Anonymous-User-Id` 请求头，值为客户端生成的匿名 UUID）：
+五个接口（均要求 `X-Anonymous-User-Id` 请求头，值为客户端生成的匿名 UUID）：
 
 - `POST /api/v1/recommendations` — 创建推荐会话，只返回一家（201）
 - `POST /api/v1/recommendations/{id}/reroll` — 换一家（200）
-- `POST /api/v1/recommendations/{id}/feedback` — 用户反馈，请求体只有 `result`（LIKE/NORMAL/DISLIKE）（201）
+- `POST /api/v1/recommendations/{id}/feedback` — 用户反馈，可附最多 3 个口味标签（201）
+- `POST /api/v1/recommendations/{id}/behaviors` — 幂等记录 ACCEPT/NAVIGATE/SKIP（201/200）
 - `POST /api/v1/recommendations/{id}/deep-evidence` — 只深挖当前展示餐厅，无请求体（200）
 
 路径中的 `id` 是推荐会话 ID，不是餐厅 ID。
@@ -50,7 +51,7 @@ cd backend && mvn test
 5. 高德与百度服务端 Key 只从后端环境变量读取；Key、平台 POI ID、原始结构、内部匹配特征、RiskEngine 和排序过程不得进入接口响应。
 6. `radius` 只允许 500/1000/2000/3000 米；`maxBudget` 单位为人民币元，`null` 表示不限。
 7. 业务错误统一 `ErrorResponse`（`code`/`message`/可选 `fieldErrors`/`traceId`），前端按稳定 `code` 分支处理。
-8. 请求品类只允许 `MEAL`、`FAST_FOOD`、`DESSERT_DRINK`、`ANY`，缺省为 `MEAL`；响应继续给细品类代码和 `label`。
+8. 请求品类以 OpenAPI 枚举为准，缺省为 `MEAL`；响应继续给细品类代码和 `label`。
 
 ## 架构（目标形态）
 
@@ -62,9 +63,11 @@ cd backend && mvn test
 - `EvidenceProvider` — File 评论 Evidence 扩展点继续保留；`PlatformEvidenceProvider` 使用批量检索并统一映射成 `PlatformEvidence`。百度失败、无匹配与字段缺失均须降级，不能中断高德主推荐。
 - `EntityResolver` — 使用名称、GCJ-02 坐标、地址、电话执行确定性一对一匹配；模糊匹配不得自动绑定。
 - `RiskEngine` — `risk-v0.3` 可配置规则模型（非 ML），输出六项 factors（含跨平台评分冲突）、`riskScore`(0~100)、`riskLevel`、`confidence`、`reasons[]` 和版本；高风险项（61+）不主动推荐。
-- `RecommendationEngine` — 硬过滤 → Evidence/Risk → 高风险剔除 → LowRegretScore（含可信度校正与 TasteProfile）→ Top-10 多样化 → 有限加权随机 → 最多 6 家候选池。
+- `RecommendationEngine` — 硬过滤 → Evidence/Risk → 高风险剔除 → 个性化 LowRegretScore → 低风险有限探索 → 最多 6 家冻结候选池。
+- `TasteProfileService` — 90 天半衰期画像，只处理用户喜好与行为；不得写入或改变 RiskScore。
+- `RecentFoodHistoryService` — 只把显式反馈视作吃过，计算短期重复惩罚和多样性。
 
-推荐流程：定位 → 高德 POI → 硬过滤 → 百度批量检索 → Entity Resolution → 跨平台一致性 → Risk → 高风险过滤 → 排序 → 主动推荐一家 → 反馈更新画像。每次推荐必须落 `recommendation_log`（请求条件快照、候选数、首次推荐餐厅、两种算法版本、分数），并把证据摘要冻结在风险结果和候选池中，reroll 不重新调用百度。数据库用 Flyway 建表，核心表新增 `external_entity_mapping`。
+推荐流程：定位 → 高德 POI → 硬过滤 → 百度批量检索 → Entity Resolution → 客观 Risk → 高风险过滤 → Taste/预算/距离/近期历史 → LowRegretScore → 有限探索 → 推荐一家 → 显式与隐式反馈更新画像。候选快照必须保存 Risk、Taste、分项、惩罚、解释和选择模式；reroll 不重新读取画像、Evidence 或 Risk。
 
 ## V0.3.1 明确边界
 

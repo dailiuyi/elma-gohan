@@ -12,6 +12,7 @@ import com.elma.gohan.domain.risk.RiskLevel;
 import com.elma.gohan.domain.risk.RiskResult;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,7 @@ class DefaultRecommendationEngineTest {
         assertThat(result.pool()).hasSize(6);
         assertThat(result.pool()).extracting(c -> c.restaurant().sourcePoiId())
                 .doesNotHaveDuplicates();
-        assertThat(result.algorithmVersion()).isEqualTo("recommendation-v0.3.2");
+        assertThat(result.algorithmVersion()).isEqualTo("recommendation-v0.4");
     }
 
     @Test
@@ -98,6 +99,30 @@ class DefaultRecommendationEngineTest {
         var result = engine.recommend(two, risks(two),
                 new UserPreference(new SearchCondition(1000, null, "ANY", List.of())));
         assertThat(result.pool()).hasSize(2);
+    }
+
+    @Test
+    void explorationOnlySelectsLowRiskNewCategory() {
+        RecommendationProperties explorationProps = new RecommendationProperties();
+        explorationProps.setExplorationRate(1.0);
+        DefaultRecommendationEngine explorationEngine = new DefaultRecommendationEngine(
+                new HardFilter(), new LowRegretScorer(explorationProps), explorationProps, () -> 0.0);
+        Restaurant familiar = categoryRestaurant("c", "CHINESE", 4.9);
+        Restaurant novel = categoryRestaurant("f", "FOREIGN", 4.2);
+        LocalDateTime now = LocalDateTime.of(2026, 8, 21, 12, 0);
+        RecentFoodHistory history = new RecentFoodHistory(List.of(
+                new RecentFoodHistory.Entry("AMAP", "old", "CHINESE", "LIKE", now.minusDays(1))), now);
+        UserPreference preference = new UserPreference(
+                new SearchCondition(1000, null, "ANY", List.of()), TasteProfile.empty(now),
+                Map.of(), history);
+
+        var result = explorationEngine.recommend(List.of(familiar, novel),
+                risks(List.of(familiar, novel)), preference);
+
+        assertThat(result.pool().get(0).restaurant().sourcePoiId()).isEqualTo("f");
+        assertThat(result.pool().get(0).personalization().selectionMode())
+                .isEqualTo(SelectionMode.EXPLORATION);
+        assertThat(result.pool().get(0).reasons()).contains("低风险的新类型尝试");
     }
 
     private Restaurant categoryRestaurant(String id, String categoryCode, double rating) {

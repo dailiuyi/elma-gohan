@@ -8,6 +8,11 @@ import com.elma.gohan.controller.api.RestaurantSummary;
 import com.elma.gohan.controller.api.RiskAssessment;
 import com.elma.gohan.controller.api.EvidenceSummaryResponse;
 import com.elma.gohan.controller.api.SubmitFeedbackRequest;
+import com.elma.gohan.controller.api.PersonalizationResponse;
+import com.elma.gohan.domain.recommendation.BehaviorType;
+import com.elma.gohan.domain.recommendation.PersonalizationSnapshot;
+import com.elma.gohan.domain.recommendation.ScoreBreakdown;
+import com.elma.gohan.domain.recommendation.SelectionMode;
 import com.elma.gohan.domain.recommendation.RecommendationEngine;
 import com.elma.gohan.domain.recommendation.HardFilter;
 import com.elma.gohan.domain.recommendation.RecommendationResult;
@@ -64,6 +69,9 @@ public class RecommendationService {
     private final RecommendationEngine recommendationEngine;
     private final HardFilter hardFilter;
     private final TasteProfileService tasteProfileService;
+    private final FlavorFeatureService flavorFeatureService;
+    private final UserFoodHistoryService foodHistoryService;
+    private final BehaviorService behaviorService;
     private final RecommendationProperties recommendationProperties;
     private final RestaurantRepository restaurantRepository;
     private final RiskResultRepository riskResultRepository;
@@ -75,6 +83,9 @@ public class RecommendationService {
     public RecommendationService(PoiProvider poiProvider, EvidenceAggregator evidenceAggregator,
                                  RiskEngine riskEngine, RecommendationEngine recommendationEngine,
                                  HardFilter hardFilter, TasteProfileService tasteProfileService,
+                                 FlavorFeatureService flavorFeatureService,
+                                 UserFoodHistoryService foodHistoryService,
+                                 BehaviorService behaviorService,
                                  RecommendationProperties recommendationProperties,
                                  RestaurantRepository restaurantRepository,
                                  RiskResultRepository riskResultRepository,
@@ -88,6 +99,9 @@ public class RecommendationService {
         this.recommendationEngine = recommendationEngine;
         this.hardFilter = hardFilter;
         this.tasteProfileService = tasteProfileService;
+        this.flavorFeatureService = flavorFeatureService;
+        this.foodHistoryService = foodHistoryService;
+        this.behaviorService = behaviorService;
         this.recommendationProperties = recommendationProperties;
         this.restaurantRepository = restaurantRepository;
         this.riskResultRepository = riskResultRepository;
@@ -136,15 +150,18 @@ public class RecommendationService {
                 new Location(request.latitude(), request.longitude()), radius, poolAvgPrice);
         Map<String, RiskResult> risks = riskEngine.evaluateAllBundles(eligible, evidence);
 
+        LocalDateTime now = LocalDateTime.now(ZONE);
+        var tasteProfile = tasteProfileService.load(anonymousUserId);
+        var flavorFeatures = flavorFeatureService.loadForCandidates(anonymousUserId, eligible);
+        var foodHistory = foodHistoryService.load(anonymousUserId, now);
         RecommendationResult result = recommendationEngine.recommend(
                 eligible, risks, new com.elma.gohan.domain.recommendation.UserPreference(
-                        condition, tasteProfileService.load(anonymousUserId)));
+                        condition, tasteProfile, flavorFeatures, foodHistory));
         if (result.pool().isEmpty()) {
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
 
         List<RestaurantCandidate> pool = result.pool();
-        LocalDateTime now = LocalDateTime.now(ZONE);
         UUID logId = UUID.randomUUID();
 
         // upsert restaurant,同时把内部 id 回填到候选
@@ -157,8 +174,8 @@ public class RecommendationService {
                     toJson(candidate.risk().factors()), evidenceJson(candidate.risk()),
                     toJson(candidate.risk().reasons()),
                     candidate.risk().algorithmVersion(), now));
-            persisted.add(new RestaurantCandidate(
-                    saved, candidate.risk(), candidate.lowRegretScore(), candidate.reasons()));
+            persisted.add(new RestaurantCandidate(saved, candidate.risk(),
+                    candidate.lowRegretScore(), candidate.reasons(), candidate.personalization()));
         }
 
         RestaurantCandidate first = persisted.get(0);
@@ -171,23 +188,36 @@ public class RecommendationService {
         conditionSnapshot.put("maxBudget", request.maxBudget());
         conditionSnapshot.put("category", condition.category());
         conditionSnapshot.put("dislikes", condition.dislikes());
-        logRepository.save(new RecommendationLogEntity(
+        RecommendationLogEntity recommendationLog = logRepository.save(new RecommendationLogEntity(
                 logId, anonymousUserId, toJson(conditionSnapshot),
                 persisted.size(), first.restaurant().id(), first.restaurant().id(),
                 first.risk().riskScore(), first.lowRegretScore(),
-                first.risk().algorithmVersion(), result.algorithmVersion(), now));
+                first.risk().algorithmVersion(), result.algorithmVersion(),
+                first.personalization().algorithmVersion(),
+                first.personalization().selectionMode().name(), now));
 
+        RecommendationCandidateEntity firstEntity = null;
         for (int i = 0; i < persisted.size(); i++) {
             RestaurantCandidate candidate = persisted.get(i);
-            candidateRepository.save(new RecommendationCandidateEntity(
+            RecommendationCandidateEntity candidateEntity = candidateRepository.save(
+                    new RecommendationCandidateEntity(
                     UUID.randomUUID(), logId, candidate.restaurant().id(), i + 1,
                     candidate.restaurant().distanceMeters(),
                     candidate.risk().riskScore(), candidate.risk().riskLevel().name(),
                     candidate.risk().confidence(), toJson(candidate.risk().factors()),
                     evidenceJson(candidate.risk()),
                     toJson(candidate.risk().reasons()), candidate.risk().algorithmVersion(),
-                    candidate.lowRegretScore(), toJson(candidate.reasons()), i == 0));
+                    candidate.lowRegretScore(), toJson(candidate.reasons()),
+                    candidate.personalization().tasteMatchScore(),
+                    candidate.personalization().confidence(),
+                    toJson(candidate.personalization().scoreBreakdown()),
+                    toJson(candidate.personalization().reasons()),
+                    candidate.personalization().selectionMode().name(), i == 0));
+            if (i == 0) firstEntity = candidateEntity;
         }
+
+        behaviorService.recordRecommended(anonymousUserId, recommendationLog,
+                java.util.Objects.requireNonNull(firstEntity), now);
 
         return toResponse(logId, persisted.get(0), persisted.size() - 1);
     }
@@ -197,6 +227,10 @@ public class RecommendationService {
         RecommendationLogEntity log = findLog(anonymousUserId, recommendationId);
         List<RecommendationCandidateEntity> candidates =
                 candidateRepository.findByRecommendationLogIdOrderBySlotAsc(recommendationId);
+        RecommendationCandidateEntity previous = candidateRepository
+                .findByRecommendationLogIdAndRestaurantId(recommendationId,
+                        log.getCurrentRestaurantId())
+                .orElseThrow(() -> new RecommendationNotFoundException("推荐已失效,请重新获取"));
 
         RecommendationCandidateEntity target = null;
         int remaining = 0;
@@ -214,8 +248,12 @@ public class RecommendationService {
             // 候选耗尽:回到初始推荐,不再生成新候选
             target = candidates.get(0);
             remaining = 0;
+            return toResponse(log.getId(), toView(log.getId(), target), remaining);
         }
+        LocalDateTime now = LocalDateTime.now(ZONE);
+        behaviorService.recordReroll(anonymousUserId, log, previous, now);
         log.updateCurrent(target.getRestaurantId());
+        behaviorService.recordRecommended(anonymousUserId, log, target, now);
 
         return toResponse(log.getId(), toView(log.getId(), target), remaining);
     }
@@ -225,18 +263,41 @@ public class RecommendationService {
                                            SubmitFeedbackRequest request) {
         RecommendationLogEntity log = findLog(anonymousUserId, recommendationId);
         LocalDateTime now = LocalDateTime.now(ZONE);
-        var currentProfile = tasteProfileService.load(anonymousUserId);
         RestaurantEntity restaurantEntity = restaurantRepository.findById(log.getCurrentRestaurantId())
                 .orElseThrow(() -> new RecommendationNotFoundException("推荐已失效,请重新获取"));
         RecommendationCandidateEntity currentCandidate = candidateRepository
                 .findByRecommendationLogIdAndRestaurantId(log.getId(), log.getCurrentRestaurantId())
                 .orElseThrow(() -> new RecommendationNotFoundException("推荐已失效,请重新获取"));
+        if (request.flavorTags().stream().distinct().count() != request.flavorTags().size()) {
+            throw new ValidationFailedException("flavorTags", "不能有重复项");
+        }
+        UserFeedbackEntity existing = feedbackRepository
+                .findByRecommendationLogIdAndRestaurantId(log.getId(), log.getCurrentRestaurantId())
+                .orElse(null);
+        if (existing != null) {
+            if (existing.getResult().equals(request.result().name())
+                    && java.util.Set.copyOf(existing.flavorTags(objectMapper))
+                    .equals(java.util.Set.copyOf(request.flavorTags()))) {
+                return new FeedbackResponse(existing.getId().toString(), log.getId().toString(),
+                        existing.getRestaurantId().toString(), existing.getResult(),
+                        existing.getCreatedAt().atZone(ZONE).toString());
+            }
+            throw new FeedbackAlreadyRecordedException("这家餐厅的反馈已经记录");
+        }
+        var currentProfile = tasteProfileService.load(anonymousUserId);
         UserFeedbackEntity feedback = feedbackRepository.save(new UserFeedbackEntity(
                 UUID.randomUUID(), log.getId(), log.getCurrentRestaurantId(), anonymousUserId,
-                request.result().name(), now));
-        tasteProfileService.update(anonymousUserId, currentProfile,
+                request.result().name(), toJson(request.flavorTags()), now));
+        flavorFeatureService.record(anonymousUserId, restaurantEntity, request.flavorTags(),
+                request.result().name(), now);
+        tasteProfileService.updateFeedback(anonymousUserId, currentProfile,
                 toDomain(restaurantEntity, currentCandidate.getDistanceMeters()),
-                currentCandidate.getDistanceMeters(), request.result().name(), now);
+                currentCandidate.getDistanceMeters(), request.result().name(),
+                request.flavorTags(), now);
+        foodHistoryService.record(anonymousUserId, log.getId(), restaurantEntity,
+                request.result().name(), now);
+        behaviorService.recordFeedback(anonymousUserId, log, currentCandidate,
+                BehaviorType.valueOf(request.result().name()), now);
         return new FeedbackResponse(
                 feedback.getId().toString(), log.getId().toString(),
                 feedback.getRestaurantId().toString(), feedback.getResult(),
@@ -284,8 +345,13 @@ public class RecommendationService {
                 c.getRiskConfidence(), fromFactorsJson(c.getRiskFactorsJson()),
                 fromJson(c.getRiskReasonsJson()), c.getRiskAlgorithmVersion(),
                 fromEvidenceSummaryJson(c.getEvidenceSummaryJson()));
+        PersonalizationSnapshot personalization = new PersonalizationSnapshot(
+                c.getTasteMatchScore(), c.getTasteConfidence(),
+                SelectionMode.valueOf(c.getSelectionMode()),
+                fromJson(c.getPersonalizationReasonsJson()), "taste-v0.1",
+                fromScoreBreakdownJson(c.getScoreBreakdownJson()));
         return new RestaurantCandidate(restaurant, risk, c.getLowRegretScore(),
-                fromJson(c.getReasonsJson()));
+                fromJson(c.getReasonsJson()), personalization);
     }
 
     private RecommendationResponse toResponse(UUID logId, RestaurantCandidate candidate,
@@ -304,6 +370,11 @@ public class RecommendationService {
                         candidate.risk().confidence(),
                         candidate.risk().reasons(), candidate.risk().algorithmVersion()),
                 EvidenceSummaryResponse.from(candidate.risk().evidenceSummary()),
+                new PersonalizationResponse(candidate.personalization().tasteMatchScore(),
+                        candidate.personalization().confidence(),
+                        candidate.personalization().selectionMode().name(),
+                        candidate.personalization().reasons(),
+                        candidate.personalization().algorithmVersion()),
                 candidate.reasons(),
                 Math.min(MAX_ALTERNATIVES, Math.max(0, alternativesRemaining)));
     }
@@ -329,6 +400,14 @@ public class RecommendationService {
             return objectMapper.readValue(json, RiskFactors.class);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("风险因子反序列化失败", e);
+        }
+    }
+
+    private ScoreBreakdown fromScoreBreakdownJson(String json) {
+        try {
+            return objectMapper.readValue(json, ScoreBreakdown.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("个性化分项反序列化失败", e);
         }
     }
 

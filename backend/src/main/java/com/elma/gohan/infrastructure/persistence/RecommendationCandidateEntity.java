@@ -59,6 +59,23 @@ public class RecommendationCandidateEntity {
     @Column(name = "reasons_json", columnDefinition = "jsonb", nullable = false)
     private String reasonsJson;
 
+    @Column(name = "taste_match_score", nullable = false)
+    private double tasteMatchScore;
+
+    @Column(name = "taste_confidence", nullable = false)
+    private double tasteConfidence;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "score_breakdown_json", columnDefinition = "jsonb", nullable = false)
+    private String scoreBreakdownJson;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "personalization_reasons_json", columnDefinition = "jsonb", nullable = false)
+    private String personalizationReasonsJson;
+
+    @Column(name = "selection_mode", length = 16, nullable = false)
+    private String selectionMode;
+
     @Column(name = "shown", nullable = false)
     private boolean shown;
 
@@ -71,6 +88,22 @@ public class RecommendationCandidateEntity {
                                          String evidenceSummaryJson,
                                          String riskReasonsJson, String riskAlgorithmVersion,
                                          double lowRegretScore, String reasonsJson, boolean shown) {
+        this(id, recommendationLogId, restaurantId, slot, distanceMeters, riskScore, riskLevel,
+                riskConfidence, riskFactorsJson, evidenceSummaryJson, riskReasonsJson,
+                riskAlgorithmVersion, lowRegretScore, reasonsJson, 50.0, 0.0, "{}", "[]",
+                "DEFAULT", shown);
+    }
+
+    public RecommendationCandidateEntity(UUID id, UUID recommendationLogId, UUID restaurantId, int slot,
+                                         int distanceMeters, int riskScore, String riskLevel,
+                                         double riskConfidence, String riskFactorsJson,
+                                         String evidenceSummaryJson,
+                                         String riskReasonsJson, String riskAlgorithmVersion,
+                                         double lowRegretScore, String reasonsJson,
+                                         double tasteMatchScore, double tasteConfidence,
+                                         String scoreBreakdownJson,
+                                         String personalizationReasonsJson,
+                                         String selectionMode, boolean shown) {
         this.id = id;
         this.recommendationLogId = recommendationLogId;
         this.restaurantId = restaurantId;
@@ -85,6 +118,11 @@ public class RecommendationCandidateEntity {
         this.riskAlgorithmVersion = riskAlgorithmVersion;
         this.lowRegretScore = lowRegretScore;
         this.reasonsJson = reasonsJson;
+        this.tasteMatchScore = tasteMatchScore;
+        this.tasteConfidence = tasteConfidence;
+        this.scoreBreakdownJson = scoreBreakdownJson;
+        this.personalizationReasonsJson = personalizationReasonsJson;
+        this.selectionMode = selectionMode;
         this.shown = shown;
     }
 
@@ -102,6 +140,11 @@ public class RecommendationCandidateEntity {
     public String getRiskAlgorithmVersion() { return riskAlgorithmVersion; }
     public double getLowRegretScore() { return lowRegretScore; }
     public String getReasonsJson() { return reasonsJson; }
+    public double getTasteMatchScore() { return tasteMatchScore; }
+    public double getTasteConfidence() { return tasteConfidence; }
+    public String getScoreBreakdownJson() { return scoreBreakdownJson; }
+    public String getPersonalizationReasonsJson() { return personalizationReasonsJson; }
+    public String getSelectionMode() { return selectionMode; }
     public boolean isShown() { return shown; }
 
     public void markShown() {

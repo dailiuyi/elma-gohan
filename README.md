@@ -1,6 +1,6 @@
-# ELMA 今天吃什么 V0.3.2
+# ELMA 今天吃什么 V0.4
 
-LowRegret V0.3.2 是 Java 模块化单体后端与 uni-app 微信小程序前端。默认推荐使用高德、百度与 `risk-v0.3`；高德 POI 会先验证餐饮身份，再按分类可信度参与 `recommendation-v0.3.2` 排序。用户对当前餐厅感兴趣时，可点击“深挖一下这家”，按需读取 B站、小红书和大众点评的公开 Web 搜索线索，生成独立 `deep-risk-v0.1`。接口事实源是 [`contracts/openapi.yaml`](contracts/openapi.yaml)，本次增量见 [`docs/V0.3.2-product-polish.md`](docs/V0.3.2-product-polish.md)。
+LowRegret V0.4 是 Java 模块化单体后端与 uni-app 微信小程序前端。`risk-v0.3` 继续判断餐厅的客观风险；`taste-v0.1` 从显式反馈、轻量行为与近期饮食历史形成匿名用户画像；`recommendation-v0.4` 将两者保持隔离后组合成个性化 LowRegretScore。接口事实源是 [`contracts/openapi.yaml`](contracts/openapi.yaml)，本次增量见 [`docs/V0.4-personalized-decision-loop.md`](docs/V0.4-personalized-decision-loop.md)。
 
 ## 环境
 
@@ -24,7 +24,7 @@ pnpm test:run
 pnpm build:mp-weixin
 ```
 
-当前闭环：首页默认正餐，可选纠偏为中餐（Chinese）、火锅、烧烤、粉面、小吃快餐、西餐、日韩料理、饮品甜品或随便；“不想吃”支持空格、中英文逗号和换行分隔。服务端返回一家推荐并允许测试用户最多重新选择 5 次；“就它了”通过 `uni.openLocation` 打开当前餐厅；三种反馈会更新 TasteProfile，并从下一次新推荐开始影响排序。当前会话候选池冻结，reroll 不重复且不会被反馈重排。
+当前闭环：首页默认正餐，可按互斥的距离与预算区间筛选；服务端只返回一家推荐，并允许测试用户最多重新选择 5 次。“就它了”、导航、换一家和跳过形成隐式行为；三态反馈可附带最多 3 个口味标签。长期画像和近期饮食历史只影响下一次新推荐，当前会话最多 6 家候选的风险、个性化分项和顺序快照保持冻结。
 
 ## 配置与边界
 

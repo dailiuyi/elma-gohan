@@ -85,29 +85,41 @@ elma:
       medium-low-max-inclusive: 40
       medium-max-inclusive: 60
   recommendation:
-    algorithm-version: recommendation-v0.3.2
+    algorithm-version: recommendation-v0.4
     top-k: 10
     pool-size: 6
     walking-speed-meters-per-minute: 80
     weights:
-      rating: 25
-      distance: 20
-      budget: 15
-      category: 10
-      completeness: 10
-      risk: 20
+      restaurant-quality: 25
+      risk-safety: 25
+      taste-match: 20
+      budget-fit: 12
+      distance-fit: 10
+      recent-diversity: 8
     uncertainty-risk: 50
-    taste:
-      max-adjustment: 15
-      category-weight: 0.50
-      price-weight: 0.25
-      distance-weight: 0.25
+    exploration-rate: 0.20
+    exploration-minimum-confidence: 0.60
+    exploration-bonus: 5
+    category-confidence-penalty:
+      verified: 0
+      supported: 6
+      inferred: 18
   taste:
-    decay: 0.95
+    algorithm-version: taste-v0.1
+    half-life-days: 90
     max-absolute-weight: 3.0
+    confidence-target-samples: 5
+    implicit-window-days: 30
+    implicit-threshold: 3
+    max-implicit-batch-adjustment: 0.25
     feedback:
       like: 1.0
       normal: 0.1
       dislike: -1.0
+    behavior:
+      accept: 0.1
+      navigate: 0.1
+      reroll: -0.1
+      skip: -0.05
     price-band-upper-bounds: [30, 60, 100]
     distance-band-upper-bounds: [500, 1000, 2000]

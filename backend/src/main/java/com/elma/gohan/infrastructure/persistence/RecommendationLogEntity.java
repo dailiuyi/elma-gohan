@@ -45,6 +45,12 @@ public class RecommendationLogEntity {
     @Column(name = "recommendation_algorithm_version", length = 32, nullable = false)
     private String recommendationAlgorithmVersion;
 
+    @Column(name = "taste_algorithm_version", length = 32, nullable = false)
+    private String tasteAlgorithmVersion;
+
+    @Column(name = "selection_mode", length = 16, nullable = false)
+    private String selectionMode;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -56,6 +62,18 @@ public class RecommendationLogEntity {
                                    UUID recommendedRestaurantId, int riskScore,
                                    double lowRegretScore, String riskAlgorithmVersion,
                                    String recommendationAlgorithmVersion, LocalDateTime createdAt) {
+        this(id, anonymousUserId, requestConditionJson, candidateCount, currentRestaurantId,
+                recommendedRestaurantId, riskScore, lowRegretScore, riskAlgorithmVersion,
+                recommendationAlgorithmVersion, "taste-v0.1", "DEFAULT", createdAt);
+    }
+
+    public RecommendationLogEntity(UUID id, UUID anonymousUserId, String requestConditionJson,
+                                   int candidateCount, UUID currentRestaurantId,
+                                   UUID recommendedRestaurantId, int riskScore,
+                                   double lowRegretScore, String riskAlgorithmVersion,
+                                   String recommendationAlgorithmVersion,
+                                   String tasteAlgorithmVersion, String selectionMode,
+                                   LocalDateTime createdAt) {
         this.id = id;
         this.anonymousUserId = anonymousUserId;
         this.requestConditionJson = requestConditionJson;
@@ -66,6 +84,8 @@ public class RecommendationLogEntity {
         this.lowRegretScore = lowRegretScore;
         this.riskAlgorithmVersion = riskAlgorithmVersion;
         this.recommendationAlgorithmVersion = recommendationAlgorithmVersion;
+        this.tasteAlgorithmVersion = tasteAlgorithmVersion;
+        this.selectionMode = selectionMode;
         this.createdAt = createdAt;
     }
 
@@ -79,6 +99,8 @@ public class RecommendationLogEntity {
     public double getLowRegretScore() { return lowRegretScore; }
     public String getRiskAlgorithmVersion() { return riskAlgorithmVersion; }
     public String getRecommendationAlgorithmVersion() { return recommendationAlgorithmVersion; }
+    public String getTasteAlgorithmVersion() { return tasteAlgorithmVersion; }
+    public String getSelectionMode() { return selectionMode; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     public void updateCurrent(UUID currentRestaurantId) {

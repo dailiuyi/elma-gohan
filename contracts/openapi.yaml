@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ELMA 今天吃什么 API
-  version: 0.3.2
+  version: 0.4.0
   description: |
     V0.3 测试版的前后端接口契约。服务端负责高德 POI、百度 Evidence、实体匹配、跨平台一致性、风险过滤、TasteProfile、
     Low Regret 排序、多样化重排、候选池管理与按需公开 Web Evidence 深挖；客户端不得自行重算风险或排序。
@@ -133,6 +133,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeepEvidenceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/RecommendationNotFound'
+
+  /recommendations/{id}/behaviors:
+    post:
+      tags: [Recommendations]
+      operationId: submitRecommendationBehavior
+      summary: 记录推荐行为
+      description: |
+        客户端只提交 ACCEPT、NAVIGATE 或 SKIP。相同 eventId 重试不会重复计数；
+        行为只影响下一次新推荐，不改写当前冻结候选池。
+      parameters:
+        - $ref: '#/components/parameters/RecommendationId'
+        - $ref: '#/components/parameters/AnonymousUserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitBehaviorRequest'
+      responses:
+        '201':
+          description: 行为首次记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BehaviorResponse'
+        '200':
+          description: eventId 幂等命中
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BehaviorResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -272,6 +307,11 @@ components:
             - $ref: '#/components/schemas/EvidenceSummary'
           nullable: true
           description: V0.3 多平台证据摘要；旧客户端可忽略，不包含第三方 POI ID 或内部匹配特征。
+        personalization:
+          allOf:
+            - $ref: '#/components/schemas/Personalization'
+          nullable: true
+          description: V0.4 个性化摘要；旧客户端可忽略，Risk 仍保持独立。
         reasons:
           type: array
           minItems: 1
@@ -656,6 +696,60 @@ components:
       properties:
         result:
           $ref: '#/components/schemas/FeedbackResult'
+        flavorTags:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          default: []
+          items:
+            $ref: '#/components/schemas/FlavorTag'
+
+    Personalization:
+      type: object
+      additionalProperties: false
+      required: [tasteMatchScore, confidence, selectionMode, reasons, algorithmVersion]
+      properties:
+        tasteMatchScore: { type: number, minimum: 0, maximum: 100 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        selectionMode:
+          type: string
+          enum: [DEFAULT, PERSONALIZED, EXPLORATION]
+        reasons:
+          type: array
+          maxItems: 3
+          items: { type: string, maxLength: 120 }
+        algorithmVersion:
+          type: string
+          example: taste-v0.1
+
+    SubmitBehaviorRequest:
+      type: object
+      additionalProperties: false
+      required: [eventId, restaurantId, type]
+      properties:
+        eventId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [ACCEPT, NAVIGATE, SKIP]
+
+    BehaviorResponse:
+      type: object
+      additionalProperties: false
+      required: [eventId, recommendationId, restaurantId, type, recordedAt, deduplicated]
+      properties:
+        eventId: { type: string, format: uuid }
+        recommendationId: { type: string, format: uuid }
+        restaurantId: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [ACCEPT, NAVIGATE, SKIP]
+        recordedAt: { type: string, format: date-time }
+        deduplicated: { type: boolean }
+
+    FlavorTag:
+      type: string
+      enum: [SPICY, SWEET, OILY, SALTY, LIGHT]
 
     FeedbackResponse:
       type: object
@@ -723,3 +817,4 @@ components:
         - NO_RECOMMENDATION_AVAILABLE
         - RECOMMENDATION_NOT_FOUND
         - POI_PROVIDER_UNAVAILABLE
+        - FEEDBACK_ALREADY_RECORDED

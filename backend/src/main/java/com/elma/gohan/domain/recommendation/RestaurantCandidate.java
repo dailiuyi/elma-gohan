@@ -11,6 +11,12 @@ public record RestaurantCandidate(
         Restaurant restaurant,
         RiskResult risk,
         double lowRegretScore,
-        List<String> reasons
+        List<String> reasons,
+        PersonalizationSnapshot personalization
 ) {
+    public RestaurantCandidate(Restaurant restaurant, RiskResult risk, double lowRegretScore,
+            List<String> reasons) {
+        this(restaurant, risk, lowRegretScore, reasons,
+                PersonalizationSnapshot.neutral("taste-v0.1"));
+    }
 }

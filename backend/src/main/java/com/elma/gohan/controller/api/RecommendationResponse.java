@@ -8,7 +8,14 @@ public record RecommendationResponse(
         RestaurantSummary restaurant,
         RiskAssessment risk,
         EvidenceSummaryResponse evidenceSummary,
+        PersonalizationResponse personalization,
         List<String> reasons,
         int alternativesRemaining
 ) {
+    public RecommendationResponse(String recommendationId, RestaurantSummary restaurant,
+            RiskAssessment risk, EvidenceSummaryResponse evidenceSummary,
+            List<String> reasons, int alternativesRemaining) {
+        this(recommendationId, restaurant, risk, evidenceSummary, null, reasons,
+                alternativesRemaining);
+    }
 }

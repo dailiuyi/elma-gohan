@@ -137,6 +137,10 @@ class RecommendationApiTest {
         evidenceFailure.set(false);
         deepEvidenceCalls.set(0);
         deepEvidenceFailure.set(null);
+        jdbc.update("DELETE FROM restaurant_flavor_observation");
+        jdbc.update("DELETE FROM user_food_history");
+        jdbc.update("DELETE FROM user_behavior");
+        jdbc.update("DELETE FROM user_taste_profile");
         jdbc.update("DELETE FROM user_preference");
         jdbc.update("DELETE FROM user_feedback");
         jdbc.update("DELETE FROM recommendation_candidate");
@@ -181,12 +185,17 @@ class RecommendationApiTest {
         assertThat(evidenceSummary.get("baidu").get("status").asText()).isEqualTo("UNAVAILABLE");
         assertThat(body.get("reasons").size()).isBetween(1, 5);
         assertThat(body.get("alternativesRemaining").asInt()).isBetween(0, 5);
+        JsonNode personalization = body.get("personalization");
+        assertThat(personalization.get("tasteMatchScore").asDouble()).isBetween(0.0, 100.0);
+        assertThat(personalization.get("confidence").asDouble()).isBetween(0.0, 1.0);
+        assertThat(personalization.get("algorithmVersion").asText()).isEqualTo("taste-v0.1");
         // 落库校验:推荐日志含条件快照与双算法版本
         Integer logs = jdbc.queryForObject(
                 "SELECT count(*) FROM recommendation_log WHERE request_condition_json IS NOT NULL "
                         + "AND recommended_restaurant_id = current_restaurant_id "
                         + "AND risk_algorithm_version = 'risk-v0.3' "
-                        + "AND recommendation_algorithm_version = 'recommendation-v0.3.2'", Integer.class);
+                        + "AND recommendation_algorithm_version = 'recommendation-v0.4' "
+                        + "AND taste_algorithm_version = 'taste-v0.1'", Integer.class);
         assertThat(logs).isEqualTo(1);
         String requestSnapshot = jdbc.queryForObject(
                 "SELECT request_condition_json::text FROM recommendation_log WHERE id = ?::uuid",
@@ -253,9 +262,13 @@ class RecommendationApiTest {
         assertThat(feedback.get("restaurantId").asText()).isEqualTo(displayed);
         assertThat(feedback.get("recordedAt")).isNotNull();
         Integer profiles = jdbc.queryForObject(
-                "SELECT count(*) FROM user_preference "
-                        + "WHERE preference_json ->> 'schemaVersion' = '2'", Integer.class);
+                "SELECT count(*) FROM user_taste_profile WHERE schema_version = 3", Integer.class);
         assertThat(profiles).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_food_history", Integer.class))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM user_behavior WHERE behavior_type = 'LIKE'", Integer.class))
+                .isEqualTo(1);
     }
 
     @Test
@@ -265,19 +278,70 @@ class RecommendationApiTest {
                 .get("recommendationId").asText();
         assertThat(post("/api/v1/recommendations/" + recommendationId + "/feedback",
                 USER, "{\"result\": \"DISLIKE\"}").getStatusCode().value()).isEqualTo(201);
-        jdbc.update("DELETE FROM user_preference WHERE anonymous_user_id = ?::uuid", USER);
+        jdbc.update("DELETE FROM user_taste_profile WHERE anonymous_user_id = ?::uuid", USER);
 
         assertThat(create(USER,
                 "{\"latitude\": 28.2282, \"longitude\": 112.9388}").getStatusCode().value())
                 .isEqualTo(201);
         String snapshot = jdbc.queryForObject(
-                "SELECT preference_json::text FROM user_preference "
-                        + "WHERE anonymous_user_id = ?::uuid ORDER BY created_at DESC LIMIT 1",
+                "SELECT category_weights_json::text FROM user_taste_profile "
+                        + "WHERE anonymous_user_id = ?::uuid",
                 String.class, USER);
         JsonNode profile = JSON.readTree(snapshot);
-        assertThat(profile.get("schemaVersion").asInt()).isEqualTo(2);
-        assertThat(profile.get("feedbackCount").asInt()).isEqualTo(1);
-        assertThat(profile.get("categoryWeights").elements().next().asDouble()).isNegative();
+        assertThat(profile.elements().next().asDouble()).isNegative();
+        assertThat(jdbc.queryForObject(
+                "SELECT explicit_feedback_count FROM user_taste_profile WHERE anonymous_user_id = ?::uuid",
+                Integer.class, USER)).isEqualTo(1);
+    }
+
+    @Test
+    void behaviorEndpointIsIdempotentAndClientTypeIsRestricted() throws Exception {
+        JsonNode created = JSON.readTree(create(USER,
+                "{\"latitude\": 28.2282, \"longitude\": 112.9388}").getBody());
+        String recommendationId = created.get("recommendationId").asText();
+        String restaurantId = created.get("restaurant").get("id").asText();
+        String eventId = UUID.randomUUID().toString();
+        String payload = "{\"eventId\":\"" + eventId + "\",\"restaurantId\":\""
+                + restaurantId + "\",\"type\":\"ACCEPT\"}";
+
+        ResponseEntity<String> first = post("/api/v1/recommendations/" + recommendationId
+                + "/behaviors", USER, payload);
+        ResponseEntity<String> duplicate = post("/api/v1/recommendations/" + recommendationId
+                + "/behaviors", USER, payload);
+
+        assertThat(first.getStatusCode().value()).isEqualTo(201);
+        assertThat(duplicate.getStatusCode().value()).isEqualTo(200);
+        assertThat(JSON.readTree(duplicate.getBody()).get("deduplicated").asBoolean()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_behavior WHERE id = ?::uuid",
+                Integer.class, eventId)).isEqualTo(1);
+
+        ResponseEntity<String> forbidden = post("/api/v1/recommendations/" + recommendationId
+                + "/behaviors", USER, "{\"eventId\":\"" + UUID.randomUUID()
+                + "\",\"restaurantId\":\"" + restaurantId
+                + "\",\"type\":\"RECOMMENDED\"}");
+        assertThat(forbidden.getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    void feedbackStoresOptionalFlavorTagsAndRejectsConflictingSecondSubmission() throws Exception {
+        JsonNode created = JSON.readTree(create(USER,
+                "{\"latitude\": 28.2282, \"longitude\": 112.9388}").getBody());
+        String recommendationId = created.get("recommendationId").asText();
+        ResponseEntity<String> first = post("/api/v1/recommendations/" + recommendationId
+                + "/feedback", USER,
+                "{\"result\":\"DISLIKE\",\"flavorTags\":[\"SPICY\",\"OILY\"]}");
+        assertThat(first.getStatusCode().value()).isEqualTo(201);
+        String stored = jdbc.queryForObject("SELECT flavor_tags_json::text FROM user_feedback",
+                String.class);
+        assertThat(JSON.readTree(stored).size()).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurant_flavor_observation",
+                Integer.class)).isEqualTo(2);
+
+        ResponseEntity<String> conflict = post("/api/v1/recommendations/" + recommendationId
+                + "/feedback", USER, "{\"result\":\"LIKE\"}");
+        assertThat(conflict.getStatusCode().value()).isEqualTo(409);
+        assertThat(JSON.readTree(conflict.getBody()).get("code").asText())
+                .isEqualTo("FEEDBACK_ALREADY_RECORDED");
     }
 
     @Test
@@ -453,6 +517,29 @@ class RecommendationApiTest {
         assertThat(body.get("sourceCoverage").toString())
                 .contains("XIAOHONGSHU", "UNAVAILABLE");
         assertThat(deepEvidenceCalls).hasValue(3);
+    }
+
+    @Test
+    void calibrationAndRecommendationMetricViewsAreQueryable() throws Exception {
+        JsonNode created = JSON.readTree(create(USER,
+                "{\"latitude\": 28.2282, \"longitude\": 112.9388}").getBody());
+        String recommendationId = created.get("recommendationId").asText();
+
+        ResponseEntity<String> feedback = post(
+                "/api/v1/recommendations/" + recommendationId + "/feedback",
+                USER,
+                "{\"result\":\"DISLIKE\"}");
+        assertThat(feedback.getStatusCode().value()).isEqualTo(201);
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM v_risk_calibration", Integer.class))
+                .isGreaterThan(0);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM v_recommendation_metrics", Integer.class))
+                .isGreaterThan(0);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM v_recommendation_metrics "
+                        + "WHERE recommendation_algorithm_version = 'recommendation-v0.4' "
+                        + "AND taste_algorithm_version = 'taste-v0.1'",
+                Integer.class)).isGreaterThan(0);
     }
 
     private ResponseEntity<String> create(String userId, String body) {

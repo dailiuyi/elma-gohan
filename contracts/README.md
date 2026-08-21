@@ -1,6 +1,6 @@
 # ELMA API 契约说明
 
-V0.3.2 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本文只解释已确定的跨端规则，不定义第二套 DTO。
+V0.4 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本文只解释已确定的跨端规则，不定义第二套 DTO。
 
 ## 接口范围
 
@@ -9,9 +9,10 @@ V0.3.2 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本�
 | 推荐一家 | `POST /api/v1/recommendations` | `CreateRecommendationRequest` | `201 RecommendationResponse` |
 | 换一家 | `POST /api/v1/recommendations/{id}/reroll` | 无请求体 | `200 RecommendationResponse` |
 | 用户反馈 | `POST /api/v1/recommendations/{id}/feedback` | `SubmitFeedbackRequest` | `201 FeedbackResponse` |
+| 用户行为 | `POST /api/v1/recommendations/{id}/behaviors` | `SubmitBehaviorRequest` | `201/200 BehaviorResponse` |
 | 按需深挖 | `POST /api/v1/recommendations/{id}/deep-evidence` | 无请求体 | `200 DeepEvidenceResponse` |
 
-四个接口都要求 `X-Anonymous-User-Id` 请求头，值为客户端首次启动生成并持久化的 UUID。`id` 是推荐会话 ID，不是餐厅 ID。深挖只允许操作该用户当前展示的餐厅。
+五个接口都要求 `X-Anonymous-User-Id` 请求头，值为客户端首次启动生成并持久化的 UUID。`id` 是推荐会话 ID，不是餐厅 ID。行为和深挖只允许操作属于该用户且已经展示的餐厅。
 
 ## 已确定规则
 
@@ -19,7 +20,7 @@ V0.3.2 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本�
 2. 创建推荐只返回当前一家，不返回候选列表。
 3. 服务端保存最多 6 个候选；首次推荐之外允许最多 5 次 reroll。候选耗尽后的调用返回初始推荐，不产生第七家。
 4. `alternativesRemaining` 是前端是否显示“换一家”的唯一判断字段。
-5. 反馈体遵循产品方案，仅包含 `LIKE`、`NORMAL` 或 `DISLIKE`。服务端根据推荐会话当前展示项确定餐厅，并在响应中返回实际关联的 `restaurantId`。
+5. 反馈体包含 `LIKE`、`NORMAL` 或 `DISLIKE`，并可附最多 3 个不重复口味标签；同一会话和餐厅只接受一次反馈。
 6. 风险分数、风险等级、置信度、风险理由、推荐理由和算法版本全部由服务端产生，前端只展示最多两条风险理由。
 7. 高德/百度服务端 Key、第三方 POI 原始结构、内部匹配特征、RiskEngine 和排序过程均不进入接口响应。
 
@@ -33,7 +34,7 @@ V0.3.2 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本�
 
 - 必填：`latitude`、`longitude`。
 - 服务端兼容默认：`radius=1000`、`minDistance=null`、`maxBudget=null`、`minBudget=null`、`category=MEAL`、`dislikes=[]`。
-- V0.3.2 首页默认请求：`minDistance=null`、`radius=500`、`minBudget=20`、`maxBudget=40`。
+- 当前首页默认请求：`minDistance=null`、`radius=500`、`minBudget=20`、`maxBudget=40`。
 - “不想吃”输入支持空格、中英文逗号和换行分隔，最多形成 10 个去重关键词。
 - `minDistance` 是不包含的距离下界，`radius` 是包含的距离上界；`radius` 只允许 500、1000、2000、3000 米。
 - `minBudget` 是不包含的人均预算下界，`maxBudget` 是包含的预算上界；任一字段为 `null` 表示该方向不限。
@@ -46,12 +47,18 @@ V0.3.2 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本�
 - `risk`：可解释、带版本的风险结果；`confidence` 为 0～1，内部 factors 不对客户端公开。
 - `evidenceSummary`：V0.3 可选兼容字段；后端正常返回高德/百度评分摘要、门店匹配状态和一条一致性说明，不含平台 POI ID 与匹配特征。
 - `reasons`：服务端生成的推荐理由。
+- `personalization`：Taste 匹配分、画像可信度、选择模式、个性化理由及 `taste-v0.1` 版本。
 - `alternativesRemaining`：剩余未展示替代项数量，范围 0～5。
 
 ### SubmitFeedbackRequest / FeedbackResponse
 
-- 请求只有 `result`。
+- 请求包含 `result`，可选 `flavorTags` 支持 `SPICY/SWEET/OILY/SALTY/LIGHT`，最多 3 个且不可重复。
 - 响应返回反馈 ID、推荐会话 ID、实际餐厅 ID、反馈值和记录时间。
+
+### SubmitBehaviorRequest / BehaviorResponse
+
+- 客户端仅可提交 `ACCEPT/NAVIGATE/SKIP`，并携带持久化 `eventId` 与已展示的 `restaurantId`。
+- 首次事件返回 201；相同 `eventId` 重试返回已有结果和 200，不会重复学习画像。
 
 ### DeepEvidenceResponse
 

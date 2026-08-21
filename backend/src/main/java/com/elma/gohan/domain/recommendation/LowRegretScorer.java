@@ -2,164 +2,151 @@ package com.elma.gohan.domain.recommendation;
 
 import com.elma.gohan.config.RecommendationProperties;
 import com.elma.gohan.config.TasteProperties;
-import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.elma.gohan.domain.restaurant.CategoryConfidence;
+import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.elma.gohan.domain.restaurant.Restaurant;
 import com.elma.gohan.domain.restaurant.SearchCondition;
+import com.elma.gohan.domain.risk.RiskLevel;
 import com.elma.gohan.domain.risk.RiskResult;
 import java.util.ArrayList;
 import java.util.List;
-import org.springframework.stereotype.Component;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
-/**
- * LowRegretScore:基础质量 / 距离 / 预算 / 品类 / 数据完整度 / 风险 六因子加权(0~100),
- * 权重全部来自 RecommendationProperties。同时生成面向用户的推荐理由(1~5 条)。
- */
 @Component
 public class LowRegretScorer {
-
     private final RecommendationProperties props;
     private final TasteProperties tasteProperties;
 
     @Autowired
     public LowRegretScorer(RecommendationProperties props, TasteProperties tasteProperties) {
-        this.props = props;
-        this.tasteProperties = tasteProperties;
+        this.props = props; this.tasteProperties = tasteProperties;
     }
-
-    public LowRegretScorer(RecommendationProperties props) {
-        this(props, new TasteProperties());
-    }
+    public LowRegretScorer(RecommendationProperties props) { this(props, new TasteProperties()); }
 
     public double score(Restaurant r, RiskResult risk, SearchCondition condition) {
         return score(r, risk, new UserPreference(condition));
     }
-
     public double score(Restaurant r, RiskResult risk, UserPreference preference) {
-        SearchCondition condition = preference.condition();
-        RecommendationProperties.Weights w = props.getWeights();
-        double base = w.getRating() * ratingFactor(r)
-                + w.getDistance() * distanceFactor(r, condition)
-                + w.getBudget() * budgetFactor(r, condition)
-                + w.getCategory() * categoryFactor(r, condition)
-                + w.getCompleteness() * completenessFactor(r)
-                + w.getRisk() * riskFactor(risk);
-        return Math.max(0.0, Math.min(100.0,
-                base + tasteAdjustment(r, preference.tasteProfile())
-                        - categoryConfidencePenalty(r.categoryConfidence())));
+        return details(r, risk, preference).score();
     }
-
     public List<String> reasons(Restaurant r, RiskResult risk, SearchCondition condition) {
         return reasons(r, risk, new UserPreference(condition));
     }
-
     public List<String> reasons(Restaurant r, RiskResult risk, UserPreference preference) {
+        return details(r, risk, preference).reasons();
+    }
+
+    public PersonalizedScore details(Restaurant r, RiskResult risk, UserPreference preference) {
         SearchCondition condition = preference.condition();
+        TasteProfile profile = preference.tasteProfile();
+        double confidence = profile.confidence(tasteProperties);
+        double quality = quality(r, props.getWeights().getRestaurantQuality());
+        double safety = riskSafety(risk);
+        double taste = tasteMatch(r, profile, preference.flavorTags(r), confidence);
+        double budget = 0.60 * currentBudget(r, condition)
+                + 0.40 * historical(profile.priceWeight(r, tasteProperties), confidence);
+        double distance = 0.60 * currentDistance(r, condition)
+                + 0.40 * historical(profile.distanceWeight(r, tasteProperties), confidence);
+        double diversity = preference.recentHistory().diversityScore(r);
+        double recentPenalty = preference.recentHistory().penalty(r);
+        RecommendationProperties.Weights w = props.getWeights();
+        double weighted = (w.getRestaurantQuality() * quality
+                + w.getRiskSafety() * safety
+                + w.getTasteMatch() * taste
+                + w.getBudgetFit() * budget
+                + w.getDistanceFit() * distance
+                + w.getRecentDiversity() * diversity) / 100.0;
+        double score = clamp(weighted - recentPenalty, 0, 100);
+        List<String> personal = personalizationReasons(r, profile, confidence, budget,
+                distance, recentPenalty);
         List<String> reasons = new ArrayList<>();
-        if (distanceFactor(r, condition) >= 0.6) {
-            reasons.add("距离近");
+        if (risk.riskLevel() == RiskLevel.LOW) reasons.add("客观风险较低");
+        if (currentBudget(r, condition) >= 60 && r.averagePrice() != null) reasons.add("预算合适");
+        if (currentDistance(r, condition) >= 60) reasons.add("距离符合当前选择");
+        if (r.categoryConfidence() == CategoryConfidence.INFERRED) reasons.add("餐饮信息相对有限");
+        for (String reason : personal) {
+            if (!reasons.contains(reason)) reasons.add(reason);
         }
-        if (r.averagePrice() != null && budgetFactor(r, condition) > 0.0) {
-            reasons.add("预算合适");
-        }
-        if (r.categoryConfidence() == CategoryConfidence.INFERRED) {
-            reasons.add("餐饮信息相对有限");
-        }
-        if (r.rating() != null && r.rating() >= 4.2) {
-            reasons.add("评分稳定");
-        }
-        if (r.dataCompleteness() == DataCompleteness.FULL) {
-            reasons.add("数据完整度较高");
-        }
-        if (risk.riskLevel() == com.elma.gohan.domain.risk.RiskLevel.LOW) {
-            reasons.add("踩坑风险低");
-        }
-        if (tasteAdjustment(r, preference.tasteProfile()) >= 3.0) {
-            reasons.add("符合你的历史口味");
-        }
-        if (reasons.isEmpty()) {
-            reasons.add("综合匹配度较高");
-        }
-        return reasons.size() > 5 ? reasons.subList(0, 5) : reasons;
+        if (reasons.isEmpty()) reasons.add("综合匹配度较高");
+        if (reasons.size() > 4) reasons = new ArrayList<>(reasons.subList(0, 4));
+        return new PersonalizedScore(score, taste, confidence, List.copyOf(reasons),
+                personal, new ScoreBreakdown(quality, safety, taste, budget, distance,
+                        diversity, recentPenalty, 0));
     }
 
-    private double ratingFactor(Restaurant r) {
-        return r.rating() == null ? 0.3 : Math.max(0, Math.min(1, r.rating() / 5.0));
+    public PersonalizedScore withExploration(PersonalizedScore base) {
+        double bonus = props.getExplorationBonus();
+        ScoreBreakdown b = base.breakdown();
+        List<String> personal = new ArrayList<>(base.personalizationReasons());
+        personal.add(0, "低风险的新类型尝试");
+        List<String> reasons = new ArrayList<>(base.reasons());
+        if (!reasons.contains("低风险的新类型尝试")) reasons.add(0, "低风险的新类型尝试");
+        if (reasons.size() > 4) reasons = new ArrayList<>(reasons.subList(0, 4));
+        return new PersonalizedScore(clamp(base.score() + bonus, 0, 100),
+                base.tasteMatchScore(), base.confidence(), List.copyOf(reasons),
+                List.copyOf(personal), new ScoreBreakdown(b.restaurantQuality(), b.riskSafety(),
+                b.tasteMatch(), b.budgetFit(), b.distanceFit(), b.recentDiversity(),
+                b.recentPenalty(), bonus));
     }
 
-    private double distanceFactor(Restaurant r, SearchCondition c) {
-        int lowerBound = c.minDistance() == null ? 0 : c.minDistance();
-        int interval = c.radius() - lowerBound;
-        if (interval <= 0) {
-            return 0.5;
-        }
-        return Math.max(0, Math.min(1,
-                1.0 - (double) (r.distanceMeters() - lowerBound) / interval));
+    private double quality(Restaurant r, double qualityWeight) {
+        double rating = r.rating() == null ? 40 : clamp(r.rating() / 5.0 * 100, 0, 100);
+        double completeness = switch (r.dataCompleteness()) {
+            case FULL -> 100; case PARTIAL -> 60; case MINIMAL -> 30;
+        };
+        double penalty = switch (r.categoryConfidence() == null
+                ? CategoryConfidence.SUPPORTED : r.categoryConfidence()) {
+            case VERIFIED -> props.getCategoryConfidencePenalty().getVerified();
+            case SUPPORTED -> props.getCategoryConfidencePenalty().getSupported();
+            case INFERRED -> props.getCategoryConfidencePenalty().getInferred();
+        };
+        double componentPenalty = penalty * 100.0 / Math.max(0.0001, qualityWeight);
+        return clamp(0.80 * rating + 0.20 * completeness - componentPenalty, 0, 100);
     }
-
-    private double budgetFactor(Restaurant r, SearchCondition c) {
-        if (r.averagePrice() == null) {
-            return 0.5;
+    private double riskSafety(RiskResult risk) {
+        double effective = risk.confidence() * risk.riskScore()
+                + (1 - risk.confidence()) * props.getUncertaintyRisk();
+        return 100 - clamp(effective, 0, 100);
+    }
+    private double tasteMatch(Restaurant r, TasteProfile p, Set<FlavorTag> flavors, double confidence) {
+        double category = rawPreference(p.categoryWeight(r));
+        double flavor = 50;
+        if (flavors != null && !flavors.isEmpty()) {
+            flavor = flavors.stream().mapToDouble(tag -> rawPreference(p.flavorWeight(tag))).average().orElse(50);
         }
+        double raw = 0.65 * category + 0.35 * flavor;
+        return 50 + (raw - 50) * confidence;
+    }
+    private double currentBudget(Restaurant r, SearchCondition c) {
+        if (r.averagePrice() == null) return 50;
         if ((c.minBudget() != null && r.averagePrice() <= c.minBudget())
-                || (c.maxBudget() != null && r.averagePrice() > c.maxBudget())) {
-            return 0.0;
-        }
-        if (c.minBudget() != null && c.maxBudget() == null) {
-            return 1.0;
-        }
-        if (c.maxBudget() == null) {
-            return 0.8;
-        }
-        int lowerBound = c.minBudget() == null ? 0 : c.minBudget();
-        int interval = c.maxBudget() - lowerBound;
-        if (interval <= 0) {
-            return 0.5;
-        }
-        // 预算内越便宜越好:留一半分给"接近预算"的餐厅,避免只推最便宜。
-        return 1.0 - 0.5 * (r.averagePrice() - lowerBound) / interval;
+                || (c.maxBudget() != null && r.averagePrice() > c.maxBudget())) return 0;
+        if (c.minBudget() != null && c.maxBudget() == null) return 100;
+        if (c.maxBudget() == null) return 80;
+        int lower = c.minBudget() == null ? 0 : c.minBudget();
+        return 100 - 50.0 * (r.averagePrice() - lower) / Math.max(1, c.maxBudget() - lower);
     }
-
-    private double categoryFactor(Restaurant r, SearchCondition c) {
-        return c.categoryUnlimited() ? 0.9 : 1.0;
+    private double currentDistance(Restaurant r, SearchCondition c) {
+        int lower = c.minDistance() == null ? 0 : c.minDistance();
+        return clamp(100.0 * (1.0 - (r.distanceMeters() - lower)
+                / (double) Math.max(1, c.radius() - lower)), 0, 100);
     }
-
-    private double completenessFactor(Restaurant r) {
-        return switch (r.dataCompleteness()) {
-            case FULL -> 1.0;
-            case PARTIAL -> 0.6;
-            case MINIMAL -> 0.3;
-        };
+    private double historical(double weight, double confidence) {
+        return 50 + (rawPreference(weight) - 50) * confidence;
     }
-
-    private double riskFactor(RiskResult risk) {
-        double effectiveRisk = risk.confidence() * risk.riskScore()
-                + (1.0 - risk.confidence()) * props.getUncertaintyRisk();
-        return 1.0 - Math.max(0.0, Math.min(100.0, effectiveRisk)) / 100.0;
+    private double rawPreference(double weight) {
+        return 50 + 50 * clamp(weight / Math.max(0.0001, tasteProperties.getMaxAbsoluteWeight()), -1, 1);
     }
-
-    double tasteAdjustment(Restaurant restaurant, TasteProfile profile) {
-        if (profile == null || profile.feedbackCount() == 0) return 0.0;
-        RecommendationProperties.Taste taste = props.getTaste();
-        double maxWeight = Math.max(0.0001, tasteProperties.getMaxAbsoluteWeight());
-        double normalized = taste.getCategoryWeight()
-                * profile.categoryWeight(restaurant) / maxWeight
-                + taste.getPriceWeight()
-                * profile.priceWeight(restaurant, tasteProperties) / maxWeight
-                + taste.getDistanceWeight()
-                * profile.distanceWeight(restaurant, tasteProperties) / maxWeight;
-        normalized = Math.max(-1.0, Math.min(1.0, normalized));
-        return normalized * taste.getMaxAdjustment();
+    private List<String> personalizationReasons(Restaurant r, TasteProfile profile,
+            double confidence, double budget, double distance, double recentPenalty) {
+        List<String> reasons = new ArrayList<>();
+        if (confidence > 0 && profile.categoryWeight(r) > 0.3) reasons.add("你过去对这类餐厅反馈不错");
+        if (confidence > 0 && budget >= 60) reasons.add("价格符合你常用预算");
+        if (confidence > 0 && distance >= 60) reasons.add("距离符合你的常用范围");
+        if (recentPenalty == 0) reasons.add("最近几天没有吃过类似类型");
+        return reasons.size() > 3 ? List.copyOf(reasons.subList(0, 3)) : List.copyOf(reasons);
     }
-
-    double categoryConfidencePenalty(CategoryConfidence confidence) {
-        RecommendationProperties.CategoryConfidencePenalty penalty =
-                props.getCategoryConfidencePenalty();
-        return switch (confidence == null ? CategoryConfidence.SUPPORTED : confidence) {
-            case VERIFIED -> penalty.getVerified();
-            case SUPPORTED -> penalty.getSupported();
-            case INFERRED -> penalty.getInferred();
-        };
-    }
+    private static double clamp(double value, double min, double max) { return Math.max(min, Math.min(max, value)); }
 }
