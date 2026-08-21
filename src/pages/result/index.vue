@@ -79,6 +79,10 @@
         <text class="reason-title">为什么是它</text>
         <text class="reason-count">{{ String(recommendation.reasons.length).padStart(2, '0') }}</text>
       </view>
+      <view v-if="recommendation.personalization" class="personalization-meta">
+        <text>{{ personalizationLabel }}</text>
+        <text>匹配度 {{ Math.round(recommendation.personalization.tasteMatchScore) }}</text>
+      </view>
       <view v-for="reason in recommendation.reasons" :key="reason" class="reason-row">
         <view class="reason-pixel" aria-hidden="true" />
         <text>{{ reason }}</text>
@@ -127,14 +131,32 @@
           :key="option.value"
           class="feedback-button"
           :class="{
-            'feedback-button--active': selectedFeedback === option.value,
+            'feedback-button--active': selectedFeedback === option.value || pendingFeedback === option.value,
             'feedback-button--disabled': operationBusy || selectedFeedback !== null,
           }"
           :disabled="operationBusy || selectedFeedback !== null"
-          @click="submitFeedback(option.value)"
+          @click="chooseFeedback(option.value)"
         >
           <text class="feedback-icon">{{ option.icon }}</text>
           <text>{{ submittingFeedback && pendingFeedback === option.value ? '提交中' : option.label }}</text>
+        </button>
+      </view>
+      <view v-if="feedbackPanelOpen" class="flavor-panel">
+        <text class="flavor-title">{{ flavorPrompt }}</text>
+        <view class="flavor-options">
+          <button
+            v-for="flavor in flavorOptions"
+            :key="flavor.value"
+            class="flavor-option"
+            :class="{ 'flavor-option--active': selectedFlavorTags.includes(flavor.value) }"
+            :disabled="submittingFeedback"
+            @click="toggleFlavor(flavor.value)"
+          >
+            {{ flavor.label }}
+          </button>
+        </view>
+        <button class="flavor-submit" :disabled="submittingFeedback" @click="submitPendingFeedback">
+          {{ submittingFeedback ? '提交中…' : selectedFlavorTags.length ? '提交反馈' : '跳过标签并提交' }}
         </button>
       </view>
     </view>
@@ -142,14 +164,15 @@
 </template>
 
 <script setup lang="ts">
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 
-import { rerollRecommendation, submitRecommendationFeedback } from '@/api/recommendation'
+import { rerollRecommendation, submitRecommendationBehavior, submitRecommendationFeedback } from '@/api/recommendation'
 import { ApiError, getUserFacingError } from '@/api/errors'
 import { NavigationService, NavigationServiceError } from '@/services/navigation'
 import { recommendationStore } from '@/stores/recommendation'
-import type { FeedbackResult, RiskLevel } from '@/types/recommendation'
+import { createUuidV4 } from '@/services/anonymous-user'
+import type { BehaviorType, FeedbackResult, FlavorTag, RiskLevel } from '@/types/recommendation'
 
 const riskLabels: Record<RiskLevel, string> = {
   LOW: '低风险',
@@ -170,12 +193,25 @@ const feedbackOptions: Array<{ icon: string; label: string; value: FeedbackResul
   { icon: '—', label: '一般', value: 'NORMAL' },
   { icon: '↓', label: '踩坑', value: 'DISLIKE' },
 ]
+const flavorOptions: Array<{ label: string; value: FlavorTag }> = [
+  { label: '辣', value: 'SPICY' },
+  { label: '甜', value: 'SWEET' },
+  { label: '油', value: 'OILY' },
+  { label: '咸', value: 'SALTY' },
+  { label: '清淡', value: 'LIGHT' },
+]
 
 const recommendation = computed(() => recommendationStore.state.current)
 const rerolling = ref(false)
 const navigating = ref(false)
 const submittingFeedback = ref(false)
 const pendingFeedback = ref<FeedbackResult | null>(null)
+const feedbackPanelOpen = ref(false)
+const selectedFlavorTags = ref<FlavorTag[]>([])
+const acceptedCurrent = ref(false)
+const feedbackSubmitted = ref(false)
+const skipReported = new Set<string>()
+const eventIds = new Map<string, string>()
 const operationError = ref('')
 const operationTraceId = ref('')
 
@@ -204,12 +240,28 @@ const baiduDetailRatings = computed(() => {
   ].filter(Boolean).join(' · ')
 })
 const selectedFeedback = computed(() => recommendationStore.getCurrentFeedback())
+const flavorPrompt = computed(() => pendingFeedback.value === 'LIKE'
+  ? '哪里合你口味？最多选 3 个'
+  : pendingFeedback.value === 'DISLIKE'
+    ? '哪里不合口味？最多选 3 个'
+    : '这家有什么口味特点？最多选 3 个')
+const personalizationLabel = computed(() => {
+  switch (recommendation.value?.personalization?.selectionMode) {
+    case 'EXPLORATION': return '低风险探索'
+    case 'PERSONALIZED': return '为你匹配'
+    default: return '默认推荐'
+  }
+})
 const operationBusy = computed(
   () => rerolling.value || navigating.value || submittingFeedback.value,
 )
 
 onLoad(() => {
   if (!recommendation.value) goHome()
+})
+
+onUnload(() => {
+  reportSkipBestEffort()
 })
 
 function formatDistance(distanceMeters: number) {
@@ -225,6 +277,7 @@ function formatRating(rating: number | null) {
 }
 
 function goHome() {
+  reportSkipBestEffort()
   recommendationStore.clear()
   uni.reLaunch({ url: '/pages/home/index' })
 }
@@ -259,6 +312,7 @@ async function reroll() {
   try {
     const response = await rerollRecommendation(current.recommendationId)
     recommendationStore.replaceCurrent(response)
+    resetInteractionState()
   } catch (error) {
     handleOperationError(error)
   } finally {
@@ -272,8 +326,11 @@ async function openNavigation() {
 
   resetOperationError()
   navigating.value = true
+  acceptedCurrent.value = true
+  void reportBehavior('ACCEPT', current.recommendationId, current.restaurant.id)
   try {
     await NavigationService.openRestaurant(current.restaurant)
+    void reportBehavior('NAVIGATE', current.recommendationId, current.restaurant.id)
   } catch (error) {
     handleOperationError(error)
   } finally {
@@ -290,22 +347,87 @@ function openDeepEvidence() {
   })
 }
 
-async function submitFeedback(result: FeedbackResult) {
+function chooseFeedback(result: FeedbackResult) {
+  if (operationBusy.value || selectedFeedback.value) return
+  pendingFeedback.value = result
+  selectedFlavorTags.value = []
+  feedbackPanelOpen.value = true
+}
+
+function toggleFlavor(tag: FlavorTag) {
+  const index = selectedFlavorTags.value.indexOf(tag)
+  if (index >= 0) {
+    selectedFlavorTags.value.splice(index, 1)
+  } else if (selectedFlavorTags.value.length < 3) {
+    selectedFlavorTags.value.push(tag)
+  } else {
+    uni.showToast({ title: '最多选择 3 个', icon: 'none' })
+  }
+}
+
+async function submitPendingFeedback() {
   const current = recommendation.value
-  if (!current || operationBusy.value || selectedFeedback.value) return
+  const result = pendingFeedback.value
+  if (!current || !result || operationBusy.value || selectedFeedback.value) return
 
   resetOperationError()
   submittingFeedback.value = true
-  pendingFeedback.value = result
   try {
-    const response = await submitRecommendationFeedback(current.recommendationId, result)
+    const response = await submitRecommendationFeedback(
+      current.recommendationId,
+      result,
+      selectedFlavorTags.value,
+    )
     recommendationStore.recordFeedback(response)
+    feedbackSubmitted.value = true
+    feedbackPanelOpen.value = false
   } catch (error) {
     handleOperationError(error)
   } finally {
     submittingFeedback.value = false
-    pendingFeedback.value = null
   }
+}
+
+function resetInteractionState() {
+  acceptedCurrent.value = false
+  feedbackSubmitted.value = false
+  feedbackPanelOpen.value = false
+  pendingFeedback.value = null
+  selectedFlavorTags.value = []
+}
+
+function behaviorEventId(recommendationId: string, restaurantId: string, type: BehaviorType) {
+  const key = `${recommendationId}:${restaurantId}:${type}`
+  const existing = eventIds.get(key)
+  if (existing) return existing
+  const created = createUuidV4()
+  eventIds.set(key, created)
+  return created
+}
+
+async function reportBehavior(
+  type: BehaviorType,
+  recommendationId: string,
+  restaurantId: string,
+) {
+  try {
+    await submitRecommendationBehavior(
+      recommendationId,
+      behaviorEventId(recommendationId, restaurantId, type),
+      restaurantId,
+      type,
+    )
+  } catch {
+    // 行为是 best-effort 信号，不能阻断主流程。
+  }
+}
+
+function reportSkipBestEffort() {
+  const current = recommendation.value
+  if (!current || acceptedCurrent.value || feedbackSubmitted.value
+    || skipReported.has(current.restaurant.id)) return
+  skipReported.add(current.restaurant.id)
+  void reportBehavior('SKIP', current.recommendationId, current.restaurant.id)
 }
 </script>
 
@@ -631,6 +753,14 @@ async function submitFeedback(result: FeedbackResult) {
   font-weight: 400;
 }
 
+.personalization-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+  color: #5b61d6;
+  font-size: 18rpx;
+}
+
 .deep-evidence-button {
   width: 100%;
   margin: 16rpx 0 0;
@@ -740,4 +870,54 @@ async function submitFeedback(result: FeedbackResult) {
   color: #5b61d6;
   font-size: 24rpx;
 }
+
+.flavor-panel {
+  margin-top: 18rpx;
+  padding: 22rpx;
+  border: 2rpx solid #dfe2ed;
+  border-radius: 12rpx;
+  background: #f7f8fc;
+}
+
+.flavor-title {
+  display: block;
+  color: #3f4862;
+  font-size: 20rpx;
+}
+
+.flavor-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.flavor-option {
+  margin: 0;
+  padding: 13rpx 22rpx;
+  border: 2rpx solid #d7dae6;
+  border-radius: 999rpx;
+  background: #ffffff;
+  color: #59627c;
+  font-size: 20rpx;
+  line-height: 1;
+}
+
+.flavor-option--active {
+  border-color: #5b61d6;
+  background: #e8e9ff;
+  color: #343a9f;
+}
+
+.flavor-submit {
+  width: 100%;
+  margin: 18rpx 0 0;
+  padding: 18rpx;
+  border-radius: 10rpx;
+  background: #5b61d6;
+  color: #ffffff;
+  font-size: 21rpx;
+  line-height: 1;
+}
 </style>
+  suppressSkip.value = true

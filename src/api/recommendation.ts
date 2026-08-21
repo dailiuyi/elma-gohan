@@ -2,8 +2,11 @@ import { apiRequest } from '@/api/client'
 import type {
   CreateRecommendationRequest,
   DeepEvidenceResponse,
+  BehaviorResponse,
+  BehaviorType,
   FeedbackResponse,
   FeedbackResult,
+  FlavorTag,
   RecommendationResponse,
 } from '@/types/recommendation'
 
@@ -27,11 +30,25 @@ export function rerollRecommendation(recommendationId: string): Promise<Recommen
 export function submitRecommendationFeedback(
   recommendationId: string,
   result: FeedbackResult,
+  flavorTags: FlavorTag[] = [],
 ): Promise<FeedbackResponse> {
   return apiRequest<FeedbackResponse>({
     path: `/recommendations/${encodeURIComponent(recommendationId)}/feedback`,
     method: 'POST',
-    data: { result },
+    data: flavorTags.length ? { result, flavorTags } : { result },
+  })
+}
+
+export function submitRecommendationBehavior(
+  recommendationId: string,
+  eventId: string,
+  restaurantId: string,
+  type: BehaviorType,
+): Promise<BehaviorResponse> {
+  return apiRequest<BehaviorResponse>({
+    path: `/recommendations/${encodeURIComponent(recommendationId)}/behaviors`,
+    method: 'POST',
+    data: { eventId, restaurantId, type },
   })
 }
 

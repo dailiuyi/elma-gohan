@@ -11,6 +11,9 @@ export type CategoryFilterCode =
   | 'DESSERT_DRINK'
   | 'ANY'
 export type FeedbackResult = 'LIKE' | 'NORMAL' | 'DISLIKE'
+export type FlavorTag = 'SPICY' | 'SWEET' | 'OILY' | 'SALTY' | 'LIGHT'
+export type BehaviorType = 'ACCEPT' | 'NAVIGATE' | 'SKIP'
+export type SelectionMode = 'DEFAULT' | 'PERSONALIZED' | 'EXPLORATION'
 export type RiskLevel = 'LOW' | 'MEDIUM_LOW' | 'MEDIUM' | 'HIGH'
 export type BusinessStatus = 'OPEN' | 'CLOSED' | 'UNKNOWN'
 export type EvidenceStatus = 'AVAILABLE' | 'NO_DATA' | 'UNAVAILABLE'
@@ -33,6 +36,22 @@ export interface CreateRecommendationRequest {
 
 export interface SubmitFeedbackRequest {
   result: FeedbackResult
+  flavorTags?: FlavorTag[]
+}
+
+export interface SubmitBehaviorRequest {
+  eventId: string
+  restaurantId: string
+  type: BehaviorType
+}
+
+export interface BehaviorResponse {
+  eventId: string
+  recommendationId: string
+  restaurantId: string
+  type: BehaviorType
+  recordedAt: string
+  deduplicated: boolean
 }
 
 export interface FeedbackResponse {
@@ -48,8 +67,17 @@ export interface RecommendationResponse {
   restaurant: RestaurantSummary
   risk: RiskAssessment
   evidenceSummary?: EvidenceSummary | null
+  personalization?: Personalization | null
   reasons: string[]
   alternativesRemaining: number
+}
+
+export interface Personalization {
+  tasteMatchScore: number
+  confidence: number
+  selectionMode: SelectionMode
+  reasons: string[]
+  algorithmVersion: string
 }
 
 export interface EvidenceSummary {

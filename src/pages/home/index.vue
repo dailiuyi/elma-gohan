@@ -4,7 +4,7 @@
 
       <view class="brand-row">
         <text class="product-name">ELMA 今天吃什么</text>
-        <text class="edition">elma-gohan / 0.3.2</text>
+        <text class="edition">elma-gohan / 0.4.0</text>
       </view>
       <view class="header-rail" aria-hidden="true">
         <view class="header-rail__lead" />

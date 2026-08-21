@@ -18,7 +18,7 @@ function randomBytes(length: number): Uint8Array {
   return bytes
 }
 
-export function createAnonymousUserId(): string {
+export function createUuidV4(): string {
   const bytes = randomBytes(16)
   bytes[6] = (bytes[6] & 0x0f) | 0x40
   bytes[8] = (bytes[8] & 0x3f) | 0x80
@@ -27,6 +27,8 @@ export function createAnonymousUserId(): string {
 
   return [value.slice(0, 8), value.slice(8, 12), value.slice(12, 16), value.slice(16, 20), value.slice(20)].join('-')
 }
+
+export const createAnonymousUserId = createUuidV4
 
 export function isAnonymousUserId(value: unknown): value is string {
   return typeof value === 'string' && UUID_V4_PATTERN.test(value)

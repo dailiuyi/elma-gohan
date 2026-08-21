@@ -2,8 +2,8 @@
   "name": "ELMA 今天吃什么",
   "appid": "",
   "description": "直接替你决定今天吃什么",
-  "versionName": "0.3.2",
-  "versionCode": "302",
+  "versionName": "0.4.0",
+  "versionCode": "400",
   "transformPx": false,
   "app-plus": {
     "usingComponents": true,

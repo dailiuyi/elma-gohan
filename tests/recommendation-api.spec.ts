@@ -5,6 +5,7 @@ import {
   createRecommendation,
   deepenRecommendationEvidence,
   rerollRecommendation,
+  submitRecommendationBehavior,
   submitRecommendationFeedback,
 } from '@/api/recommendation'
 import type {
@@ -70,6 +71,27 @@ describe('recommendation API', () => {
       path: '/recommendations/session-id/feedback',
       method: 'POST',
       data: { result: 'DISLIKE' },
+    })
+  })
+
+  it('submits optional flavor tags with feedback', async () => {
+    const response = { feedbackId: 'feedback-id' } as FeedbackResponse
+    vi.mocked(apiRequest).mockResolvedValue(response)
+    await submitRecommendationFeedback('session-id', 'DISLIKE', ['SPICY', 'OILY'])
+    expect(apiRequest).toHaveBeenCalledWith({
+      path: '/recommendations/session-id/feedback',
+      method: 'POST',
+      data: { result: 'DISLIKE', flavorTags: ['SPICY', 'OILY'] },
+    })
+  })
+
+  it('submits an idempotent client behavior event', async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ eventId: 'event-id' })
+    await submitRecommendationBehavior('session-id', 'event-id', 'restaurant-a', 'ACCEPT')
+    expect(apiRequest).toHaveBeenCalledWith({
+      path: '/recommendations/session-id/behaviors',
+      method: 'POST',
+      data: { eventId: 'event-id', restaurantId: 'restaurant-a', type: 'ACCEPT' },
     })
   })
 })

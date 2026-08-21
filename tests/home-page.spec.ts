@@ -48,7 +48,7 @@ describe('home page acceptance states', () => {
     vi.unstubAllGlobals()
   })
 
-  it('uses the V0.3.2 range defaults and submits normalized dislikes', async () => {
+  it('uses the V0.4 range defaults and submits normalized dislikes', async () => {
     vi.spyOn(LocationService, 'getCurrentLocation').mockResolvedValue({
       latitude: 28.2282,
       longitude: 112.9388,
@@ -61,7 +61,7 @@ describe('home page acceptance states', () => {
     expect(wrapper.find('.product-name').text()).toBe('ELMA 今天吃什么')
     expect(wrapper.findAll('.product-name')).toHaveLength(1)
     expect(wrapper.find('.brand').exists()).toBe(false)
-    expect(wrapper.find('.edition').text()).toBe('elma-gohan / 0.3.2')
+    expect(wrapper.find('.edition').text()).toBe('elma-gohan / 0.4.0')
     expect(wrapper.find('.header-rail').exists()).toBe(true)
     expect(wrapper.findAll('.decision-flow__step').map((item) => item.text())).toEqual([
       '定位附近',

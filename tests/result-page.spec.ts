@@ -9,6 +9,7 @@ import type { CreateRecommendationRequest, RecommendationResponse } from '@/type
 
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: (callback: () => void) => callback(),
+  onUnload: vi.fn(),
 }))
 
 const request: CreateRecommendationRequest = {
@@ -147,7 +148,7 @@ describe('result page acceptance states', () => {
     expect(wrapper.find('.reroll-button').exists()).toBe(false)
   })
 
-  it('records feedback once and keeps all feedback buttons disabled', async () => {
+  it('collects optional flavor tags and records feedback once', async () => {
     recommendationStore.setCurrent(recommendation(), request)
     const feedbackSpy = vi.spyOn(recommendationApi, 'submitRecommendationFeedback').mockResolvedValue({
       feedbackId: 'feedback-id',
@@ -159,9 +160,17 @@ describe('result page acceptance states', () => {
     const wrapper = mount(ResultPage)
 
     await wrapper.findAll('.feedback-button')[0].trigger('click')
+    expect(wrapper.find('.flavor-panel').exists()).toBe(true)
+    await wrapper.findAll('.flavor-option')[0].trigger('click')
+    await wrapper.find('.flavor-submit').trigger('click')
     await flushPromises()
 
     expect(feedbackSpy).toHaveBeenCalledOnce()
+    expect(feedbackSpy).toHaveBeenCalledWith(
+      recommendation().recommendationId,
+      'LIKE',
+      ['SPICY'],
+    )
     expect(wrapper.text()).toContain('这家反馈已记录')
     expect(wrapper.findAll('.feedback-button').every((button) => button.attributes('disabled') !== undefined)).toBe(true)
   })
