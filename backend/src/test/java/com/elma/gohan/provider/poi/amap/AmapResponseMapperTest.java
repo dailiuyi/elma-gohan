@@ -20,6 +20,10 @@ class AmapResponseMapperTest {
         AmapProperties p = new AmapProperties();
         p.setCategoryMap(Map.of("050100", mapping("CHINESE", "中餐厅"),
                 "050300", mapping("SNACK", "小吃快餐")));
+        p.setCategoryRules(List.of(
+                rule("HOT_POT", "火锅", "火锅", "麻辣烫"),
+                rule("NOODLES", "粉面", "粉面", "米粉", "面馆"),
+                rule("WESTERN", "西餐", "西餐", "牛排")));
         return p;
     }
 
@@ -30,8 +34,16 @@ class AmapResponseMapperTest {
         return m;
     }
 
+    private static AmapProperties.CategoryRule rule(String code, String label, String... keywords) {
+        AmapProperties.CategoryRule rule = new AmapProperties.CategoryRule();
+        rule.setCode(code);
+        rule.setLabel(label);
+        rule.setKeywords(List.of(keywords));
+        return rule;
+    }
+
     @Test
-    @DisplayName("完整 POI:叶子 typecode 归并父品类,location 为 经度,纬度 顺序")
+    @DisplayName("完整 POI:名称和 type 文本优先识别细品类,location 为 经度,纬度 顺序")
     void fullMapping() throws Exception {
         var poi = objectMapper.readTree("""
                 {
@@ -52,13 +64,28 @@ class AmapResponseMapperTest {
         assertThat(r.latitude()).isEqualTo(28.2291);
         assertThat(r.longitude()).isEqualTo(112.9412);
         assertThat(r.distanceMeters()).isEqualTo(620);
-        assertThat(r.categoryCode()).isEqualTo("CHINESE");
-        assertThat(r.categoryLabel()).isEqualTo("中餐厅");
+        assertThat(r.categoryCode()).isEqualTo("NOODLES");
+        assertThat(r.categoryLabel()).isEqualTo("粉面");
         assertThat(r.rating()).isEqualTo(4.5);
         assertThat(r.averagePrice()).isEqualTo(26);
         assertThat(r.openingHours()).isEqualTo("09:00-21:00");
         assertThat(r.telephone()).isEqualTo("0731-12345678");
         assertThat(r.dataCompleteness()).isEqualTo(DataCompleteness.FULL);
+    }
+
+
+    @Test
+    @DisplayName("细品类未命中时仍按 typecode 父级映射")
+    void fallsBackToParentCategory() throws Exception {
+        var poi = objectMapper.readTree("""
+                {"id":"B3","name":"家常菜馆","type":"餐饮服务;中餐厅;综合酒楼",
+                 "typecode":"050199","location":"112.9,28.2","distance":"100"}
+                """);
+
+        var restaurant = mapper.toRestaurant(poi);
+
+        assertThat(restaurant.categoryCode()).isEqualTo("CHINESE");
+        assertThat(restaurant.categoryLabel()).isEqualTo("中餐厅");
     }
 
     @Test
@@ -81,8 +108,8 @@ class AmapResponseMapperTest {
         assertThat(r.averagePrice()).isNull();
         assertThat(r.openingHours()).isNull();
         assertThat(r.address()).isEqualTo("湖南省长沙市岳麓区");
-        assertThat(r.categoryCode()).isEqualTo("OTHER");
-        assertThat(r.categoryLabel()).isEqualTo("餐饮服务");
+        assertThat(r.categoryCode()).isEqualTo("NOODLES");
+        assertThat(r.categoryLabel()).isEqualTo("粉面");
         // rating/price/hours 三项缺失 -> MINIMAL(<=2 项缺失才是 PARTIAL)
         assertThat(r.dataCompleteness()).isEqualTo(DataCompleteness.MINIMAL);
     }

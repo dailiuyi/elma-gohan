@@ -1,5 +1,15 @@
 export type Radius = 500 | 1000 | 2000 | 3000
-export type CategoryFilterCode = 'MEAL' | 'FAST_FOOD' | 'DESSERT_DRINK' | 'ANY'
+export type CategoryFilterCode =
+  | 'MEAL'
+  | 'CHINESE'
+  | 'HOT_POT'
+  | 'BARBECUE'
+  | 'NOODLES'
+  | 'FAST_FOOD'
+  | 'WESTERN'
+  | 'JAPANESE_KOREAN'
+  | 'DESSERT_DRINK'
+  | 'ANY'
 export type FeedbackResult = 'LIKE' | 'NORMAL' | 'DISLIKE'
 export type RiskLevel = 'LOW' | 'MEDIUM_LOW' | 'MEDIUM' | 'HIGH'
 export type BusinessStatus = 'OPEN' | 'CLOSED' | 'UNKNOWN'

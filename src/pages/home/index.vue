@@ -162,7 +162,13 @@ const budgetOptions: Array<{ label: string; value: number | null }> = [
 
 const categoryOptions: Array<{ label: string; value: CategoryFilterCode }> = [
   { label: '正餐', value: 'MEAL' },
+  { label: '中餐（Chinese）', value: 'CHINESE' },
+  { label: '火锅', value: 'HOT_POT' },
+  { label: '烧烤', value: 'BARBECUE' },
+  { label: '粉面', value: 'NOODLES' },
   { label: '小吃快餐', value: 'FAST_FOOD' },
+  { label: '西餐', value: 'WESTERN' },
+  { label: '日韩料理', value: 'JAPANESE_KOREAN' },
   { label: '饮品甜品', value: 'DESSERT_DRINK' },
   { label: '随便', value: 'ANY' },
 ]

@@ -11,7 +11,7 @@ export class DislikesValidationError extends Error {
 export function parseDislikes(input: string): string[] {
   const uniqueValues = new Map<string, string>()
 
-  for (const segment of input.split(/[,，\r\n]+/)) {
+  for (const segment of input.split(/[,，\s]+/u)) {
     const value = segment.trim()
     if (!value) continue
 

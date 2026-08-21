@@ -227,7 +227,7 @@ components:
           default: []
           maxItems: 10
           uniqueItems: true
-          description: 不想吃的食材、口味或品类短语；服务端负责解释和过滤。
+          description: 不想吃的食材、口味或品类短语；客户端输入支持空格、中英文逗号和换行分隔，服务端负责解释和过滤。
           items:
             type: string
             minLength: 1
@@ -386,11 +386,13 @@ components:
     CategoryFilterCode:
       type: string
       default: MEAL
-      enum: [MEAL, FAST_FOOD, DESSERT_DRINK, ANY]
+      enum: [MEAL, CHINESE, HOT_POT, BARBECUE, NOODLES, FAST_FOOD, WESTERN, JAPANESE_KOREAN, DESSERT_DRINK, ANY]
       example: MEAL
       description: |
-        V0.2 保留的四类筛选：MEAL（正餐，默认）、FAST_FOOD（小吃快餐）、
-        DESSERT_DRINK（饮品甜品）和 ANY（随便）。细品类到大类的映射由服务端负责。
+        MEAL（正餐）仍是默认兜底；用户可选 CHINESE（中餐）、HOT_POT（火锅）、
+        BARBECUE（烧烤）、NOODLES（粉面）、FAST_FOOD（小吃快餐）、WESTERN（西餐）、
+        JAPANESE_KOREAN（日韩料理）、DESSERT_DRINK（饮品甜品）或 ANY（随便）进行纠偏。
+        高德 POI 到产品品类的映射由服务端负责。
 
     RestaurantCategoryCode:
       type: string

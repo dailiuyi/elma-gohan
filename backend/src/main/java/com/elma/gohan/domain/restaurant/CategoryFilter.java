@@ -4,11 +4,18 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * V0.12 面向用户的四类筛选。餐厅响应仍保留细品类,这里只负责把细品类归入产品大类。
+ * 面向用户的品类筛选。MEAL 保持默认兜底，具体类型用于可选纠偏。
  */
 public enum CategoryFilter {
-    MEAL(Set.of("CHINESE", "FOREIGN", "FOOD_COURT")),
+    MEAL(Set.of("CHINESE", "HOT_POT", "BARBECUE", "NOODLES", "WESTERN",
+            "JAPANESE_KOREAN", "FOREIGN", "FOOD_COURT")),
+    CHINESE(Set.of("CHINESE", "HOT_POT", "BARBECUE", "NOODLES")),
+    HOT_POT(Set.of("HOT_POT")),
+    BARBECUE(Set.of("BARBECUE")),
+    NOODLES(Set.of("NOODLES")),
     FAST_FOOD(Set.of("SNACK")),
+    WESTERN(Set.of("WESTERN")),
+    JAPANESE_KOREAN(Set.of("JAPANESE_KOREAN")),
     DESSERT_DRINK(Set.of("DESSERT", "COFFEE", "TEA", "DRINKS")),
     ANY(Set.of());
 

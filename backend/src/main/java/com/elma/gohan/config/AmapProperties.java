@@ -1,5 +1,6 @@
 package com.elma.gohan.config;
 
+import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -19,6 +20,8 @@ public class AmapProperties {
     private int readTimeoutMs = 5000;
     /** 高德 typecode -> ELMA 内部品类(code 遵循 ^[A-Z][A-Z0-9_]{0,31}$)。未命中走 OTHER 兜底。 */
     private Map<String, CategoryMapping> categoryMap = Map.of();
+    /** 按顺序匹配 POI 名称和 type 文本，用于在高德父分类内识别产品细品类。 */
+    private List<CategoryRule> categoryRules = List.of();
 
     public String getKey() { return key; }
     public void setKey(String key) { this.key = key; }
@@ -36,6 +39,8 @@ public class AmapProperties {
     public void setReadTimeoutMs(int readTimeoutMs) { this.readTimeoutMs = readTimeoutMs; }
     public Map<String, CategoryMapping> getCategoryMap() { return categoryMap; }
     public void setCategoryMap(Map<String, CategoryMapping> categoryMap) { this.categoryMap = categoryMap; }
+    public List<CategoryRule> getCategoryRules() { return categoryRules; }
+    public void setCategoryRules(List<CategoryRule> categoryRules) { this.categoryRules = categoryRules; }
 
     public static class CategoryMapping {
         private String code;
@@ -45,5 +50,12 @@ public class AmapProperties {
         public void setCode(String code) { this.code = code; }
         public String getLabel() { return label; }
         public void setLabel(String label) { this.label = label; }
+    }
+
+    public static class CategoryRule extends CategoryMapping {
+        private List<String> keywords = List.of();
+
+        public List<String> getKeywords() { return keywords; }
+        public void setKeywords(List<String> keywords) { this.keywords = keywords; }
     }
 }

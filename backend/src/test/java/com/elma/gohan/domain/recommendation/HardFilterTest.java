@@ -39,7 +39,7 @@ class HardFilterTest {
     }
 
     @Test
-    @DisplayName("品类:缺省正餐;四个产品大类按细品类映射")
+    @DisplayName("品类:缺省正餐;大类和细分类均可过滤")
     void categoryFilter() {
         var chinese = TestRestaurants.full("a", 4.5, 300);
         var snack = new Restaurant(null, "AMAP", "b", "快餐", 28.0, 112.0, 300,
@@ -48,18 +48,30 @@ class HardFilterTest {
         var dessert = new Restaurant(null, "AMAP", "c", "甜品", 28.0, 112.0, 300,
                 "DESSERT", "蛋糕甜品", 4.5, 100, 30,
                 BusinessStatus.UNKNOWN, "09:00-21:00", "地址", com.elma.gohan.domain.restaurant.DataCompleteness.FULL);
-        var restaurants = List.of(chinese, snack, dessert);
+        var hotPot = new Restaurant(null, "AMAP", "d", "火锅", 28.0, 112.0, 300,
+                "HOT_POT", "火锅", 4.5, 100, 30,
+                BusinessStatus.UNKNOWN, "09:00-21:00", "地址", com.elma.gohan.domain.restaurant.DataCompleteness.FULL);
+        var western = new Restaurant(null, "AMAP", "e", "西餐", 28.0, 112.0, 300,
+                "WESTERN", "西餐", 4.5, 100, 30,
+                BusinessStatus.UNKNOWN, "09:00-21:00", "地址", com.elma.gohan.domain.restaurant.DataCompleteness.FULL);
+        var restaurants = List.of(chinese, snack, dessert, hotPot, western);
 
         assertThat(filter.filter(restaurants, condition(1000, null, null, List.of())))
-                .extracting(Restaurant::sourcePoiId).containsExactly("a");
+                .extracting(Restaurant::sourcePoiId).containsExactly("a", "d", "e");
         assertThat(filter.filter(restaurants, condition(1000, null, "MEAL", List.of())))
-                .extracting(Restaurant::sourcePoiId).containsExactly("a");
+                .extracting(Restaurant::sourcePoiId).containsExactly("a", "d", "e");
+        assertThat(filter.filter(restaurants, condition(1000, null, "CHINESE", List.of())))
+                .extracting(Restaurant::sourcePoiId).containsExactly("a", "d");
+        assertThat(filter.filter(restaurants, condition(1000, null, "HOT_POT", List.of())))
+                .extracting(Restaurant::sourcePoiId).containsExactly("d");
+        assertThat(filter.filter(restaurants, condition(1000, null, "WESTERN", List.of())))
+                .extracting(Restaurant::sourcePoiId).containsExactly("e");
         assertThat(filter.filter(restaurants, condition(1000, null, "FAST_FOOD", List.of())))
                 .extracting(Restaurant::sourcePoiId).containsExactly("b");
         assertThat(filter.filter(restaurants, condition(1000, null, "DESSERT_DRINK", List.of())))
                 .extracting(Restaurant::sourcePoiId).containsExactly("c");
         assertThat(filter.filter(restaurants, condition(1000, null, "ANY", List.of())))
-                .hasSize(3);
+                .hasSize(5);
     }
 
     @Test

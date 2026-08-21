@@ -7,7 +7,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 
 /** 严格对齐 contracts/openapi.yaml 的 CreateRecommendationRequest。 */
 public record CreateRecommendationRequest(
@@ -29,8 +31,8 @@ public record CreateRecommendationRequest(
         @Max(value = 10000, message = "必须小于等于 10000")
         Integer maxBudget,
 
-        @Pattern(regexp = "^(MEAL|FAST_FOOD|DESSERT_DRINK|ANY)$",
-                message = "只能是 MEAL、FAST_FOOD、DESSERT_DRINK 或 ANY")
+        @Pattern(regexp = "^(MEAL|CHINESE|HOT_POT|BARBECUE|NOODLES|FAST_FOOD|WESTERN|JAPANESE_KOREAN|DESSERT_DRINK|ANY)$",
+                message = "品类值不受支持")
         String category,
 
         @Size(max = 10, message = "最多 10 个")
@@ -38,9 +40,28 @@ public record CreateRecommendationRequest(
         @Size(max = 30, message = "长度不能超过 30") String> dislikes
 ) {
     public CreateRecommendationRequest {
-        if (dislikes == null) {
-            dislikes = List.of();
+        dislikes = normalizeDislikes(dislikes);
+    }
+
+    private static List<String> normalizeDislikes(List<String> rawValues) {
+        if (rawValues == null || rawValues.isEmpty()) return List.of();
+        var unique = new LinkedHashMap<String, String>();
+        for (String rawValue : rawValues) {
+            if (rawValue == null || rawValue.isBlank()) {
+                unique.putIfAbsent("", "");
+                continue;
+            }
+            boolean producedValue = false;
+            for (String segment : rawValue.split("[,，\\s]+")) {
+                String value = segment.trim();
+                if (!value.isEmpty()) {
+                    unique.putIfAbsent(value.toLowerCase(Locale.ROOT), value);
+                    producedValue = true;
+                }
+            }
+            if (!producedValue) unique.putIfAbsent("", "");
         }
+        return List.copyOf(unique.values());
     }
 
     @JsonProperty("maxBudget")

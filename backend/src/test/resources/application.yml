@@ -34,6 +34,22 @@ elma:
     category-map:
       "050100": { code: CHINESE, label: 中餐厅 }
       "050300": { code: SNACK, label: 小吃快餐 }
+    category-rules:
+      - code: HOT_POT
+        label: 火锅
+        keywords: [火锅, 麻辣烫, 麻辣香锅, 串串香]
+      - code: BARBECUE
+        label: 烧烤
+        keywords: [烧烤, 烤肉]
+      - code: NOODLES
+        label: 粉面
+        keywords: [粉面, 米粉, 米线, 面馆, 拉面]
+      - code: JAPANESE_KOREAN
+        label: 日韩料理
+        keywords: [日本料理, 韩国料理, 日式, 韩式]
+      - code: WESTERN
+        label: 西餐
+        keywords: [西餐, 牛排, 披萨]
   baidu:
     enabled: false
     ak: ""

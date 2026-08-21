@@ -66,7 +66,7 @@ describe('home page acceptance states', () => {
     ])
     expect(wrapper.find('.category-value').text()).toContain('正餐')
 
-    await wrapper.find('input').setValue('香菜，内脏, 香菜,肥肉')
+    await wrapper.find('input').setValue('香菜 内脏, 香菜,肥肉')
     await wrapper.find('.decision-button').trigger('click')
     await flushPromises()
 
@@ -81,7 +81,7 @@ describe('home page acceptance states', () => {
     expect(uni.navigateTo).toHaveBeenCalledWith({ url: '/pages/result/index' })
   })
 
-  it('allows an optional four-category correction before deciding', async () => {
+  it('allows an optional detailed category correction before deciding', async () => {
     vi.spyOn(LocationService, 'getCurrentLocation').mockResolvedValue({
       latitude: 28.2282,
       longitude: 112.9388,
@@ -91,14 +91,14 @@ describe('home page acceptance states', () => {
     await flushPromises()
 
     wrapper.find('picker').element.dispatchEvent(
-      new CustomEvent('change', { detail: { value: 2 } }),
+      new CustomEvent('change', { detail: { value: 1 } }),
     )
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.category-value').text()).toContain('饮品甜品')
+    expect(wrapper.find('.category-value').text()).toContain('中餐（Chinese）')
 
     await wrapper.find('.decision-button').trigger('click')
     await flushPromises()
-    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ category: 'DESSERT_DRINK' }))
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ category: 'CHINESE' }))
   })
 
   it('shows location denial and blocks recommendation without coordinates', async () => {

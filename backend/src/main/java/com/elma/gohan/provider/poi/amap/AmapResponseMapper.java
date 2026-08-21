@@ -64,7 +64,14 @@ public class AmapResponseMapper {
 
     private Category resolveCategory(JsonNode poi) {
         String typecode = poi.path("typecode").asText("");
-        AmapProperties.CategoryMapping mapping = props.getCategoryMap().get(typecode);
+        String searchable = poi.path("name").asText("") + ";" + poi.path("type").asText("");
+        AmapProperties.CategoryMapping mapping = props.getCategoryRules().stream()
+                .filter(rule -> rule.getKeywords().stream()
+                        .filter(keyword -> keyword != null && !keyword.isBlank())
+                        .anyMatch(searchable::contains))
+                .findFirst()
+                .orElse(null);
+        if (mapping == null) mapping = props.getCategoryMap().get(typecode);
         if (mapping == null && typecode.length() >= 6) {
             // 高德常返回 050101 等叶子编码;产品映射配置使用 050100 级父编码。
             String parentTypecode = typecode.substring(0, 4) + "00";

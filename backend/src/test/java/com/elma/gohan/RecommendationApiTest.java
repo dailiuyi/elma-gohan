@@ -284,7 +284,7 @@ class RecommendationApiTest {
     @Test
     void unknownCategoryReturns400WithFieldError() throws Exception {
         ResponseEntity<String> response = create(USER, """
-                {"latitude": 28.2282, "longitude": 112.9388, "category": "HOT_POT"}
+                {"latitude": 28.2282, "longitude": 112.9388, "category": "UNSUPPORTED"}
                 """);
         assertThat(response.getStatusCode().value()).isEqualTo(400);
         JsonNode body = JSON.readTree(response.getBody());

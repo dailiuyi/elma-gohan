@@ -3,15 +3,19 @@ import { describe, expect, it } from 'vitest'
 import { DislikesValidationError, parseDislikes } from '@/utils/dislikes'
 
 describe('dislikes parser', () => {
-  it('splits Chinese commas, English commas, and line breaks', () => {
-    expect(parseDislikes('香菜，内脏\n太辣, 榴莲')).toEqual(['香菜', '内脏', '太辣', '榴莲'])
+  it('splits Chinese commas, English commas, line breaks, and spaces', () => {
+    expect(parseDislikes('香菜，内脏\n太辣 榴莲,肥肉')).toEqual([
+      '香菜',
+      '内脏',
+      '太辣',
+      '榴莲',
+      '肥肉',
+    ])
   })
 
-  it('trims blanks and deduplicates without splitting normal spaces', () => {
-    expect(parseDislikes('  香菜，香菜,SPICY, spicy, 牛肉 面  ')).toEqual([
-      '香菜',
-      'SPICY',
-      '牛肉 面',
+  it('trims blanks, deduplicates, and treats consecutive spaces as one separator', () => {
+    expect(parseDislikes('  香菜，香菜,SPICY, spicy, 牛肉   面  ')).toEqual([
+      '香菜', 'SPICY', '牛肉', '面',
     ])
   })
 

@@ -25,7 +25,7 @@ V0.3.1 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本�
 
 ## 品类筛选
 
-`category` 只接受 `MEAL`、`FAST_FOOD`、`DESSERT_DRINK`、`ANY`。缺省为 `MEAL`，用户无需先配置筛选条件；前端只提供可选纠偏。餐厅响应继续返回更细的品类 code 与 label，映射和多样化重排由服务端负责。
+`category` 接受 `MEAL`、`CHINESE`、`HOT_POT`、`BARBECUE`、`NOODLES`、`FAST_FOOD`、`WESTERN`、`JAPANESE_KOREAN`、`DESSERT_DRINK`、`ANY`。缺省仍为 `MEAL`，用户无需先配置筛选条件；前端只提供可选纠偏。餐厅响应继续返回细品类 code 与 label，映射和多样化重排由服务端负责。
 
 ## DTO 摘要
 
@@ -33,6 +33,7 @@ V0.3.1 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本�
 
 - 必填：`latitude`、`longitude`。
 - 默认：`radius=1000`、`maxBudget=null`、`category=MEAL`、`dislikes=[]`。
+- “不想吃”输入支持空格、中英文逗号和换行分隔，最多形成 10 个去重关键词。
 - `radius` 只允许 500、1000、2000、3000 米。
 - `maxBudget` 单位为人民币元，`null` 表示不限。
 
