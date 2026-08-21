@@ -39,7 +39,7 @@ class DefaultRecommendationEngineTest {
         assertThat(result.pool()).hasSize(6);
         assertThat(result.pool()).extracting(c -> c.restaurant().sourcePoiId())
                 .doesNotHaveDuplicates();
-        assertThat(result.algorithmVersion()).isEqualTo("recommendation-v0.3");
+        assertThat(result.algorithmVersion()).isEqualTo("recommendation-v0.3.2");
     }
 
     @Test

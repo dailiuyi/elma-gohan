@@ -1,6 +1,6 @@
-# ELMA 家今天的饭 V0.3.1 后端
+# ELMA 今天吃什么 V0.3.2 后端
 
-Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德提供主 POI，百度 Place 提供第二平台 Evidence；Brave Web Search 只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，深挖数据流见 [`../docs/V0.3.1-on-demand-deep-evidence.md`](../docs/V0.3.1-on-demand-deep-evidence.md)。
+Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德提供主 POI，并先验证餐饮身份、记录分类可信度；百度 Place 提供第二平台 Evidence；Brave Web Search 只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，V0.3.2 增量见 [`../docs/V0.3.2-product-polish.md`](../docs/V0.3.2-product-polish.md)。
 
 ## 构建与测试
 

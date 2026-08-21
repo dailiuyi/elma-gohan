@@ -48,7 +48,7 @@ describe('home page acceptance states', () => {
     vi.unstubAllGlobals()
   })
 
-  it('uses the V0.12 defaults and submits normalized dislikes', async () => {
+  it('uses the V0.3.2 range defaults and submits normalized dislikes', async () => {
     vi.spyOn(LocationService, 'getCurrentLocation').mockResolvedValue({
       latitude: 28.2282,
       longitude: 112.9388,
@@ -58,11 +58,25 @@ describe('home page acceptance states', () => {
     const wrapper = mount(HomePage)
 
     await flushPromises()
+    expect(wrapper.find('.product-name').text()).toBe('ELMA 今天吃什么')
+    expect(wrapper.findAll('.product-name')).toHaveLength(1)
+    expect(wrapper.find('.brand').exists()).toBe(false)
+    expect(wrapper.find('.edition').text()).toBe('elma-gohan / 0.3.2')
+    expect(wrapper.find('.header-rail').exists()).toBe(true)
+    expect(wrapper.findAll('.decision-flow__step').map((item) => item.text())).toEqual([
+      '定位附近',
+      '过滤风险',
+      '只给一家',
+    ])
     expect(wrapper.text()).toContain('已获取当前位置')
     expect(wrapper.find('.location-accuracy').text()).toContain('12 米')
     expect(wrapper.findAll('.choice-button--active').map((item) => item.text())).toEqual([
-      '1km',
-      '不限',
+      '500m',
+      '¥40',
+    ])
+    expect(wrapper.findAll('.range-caption').map((item) => item.text())).toEqual([
+      '当前范围：500m 以内',
+      '当前范围：人均 ¥20 以上至 ¥40',
     ])
     expect(wrapper.find('.category-value').text()).toContain('正餐')
 
@@ -73,12 +87,60 @@ describe('home page acceptance states', () => {
     expect(createSpy).toHaveBeenCalledWith({
       latitude: 28.2282,
       longitude: 112.9388,
-      radius: 1000,
-      maxBudget: null,
+      minDistance: null,
+      radius: 500,
+      minBudget: 20,
+      maxBudget: 40,
       category: 'MEAL',
       dislikes: ['香菜', '内脏', '肥肉'],
     })
     expect(uni.navigateTo).toHaveBeenCalledWith({ url: '/pages/result/index' })
+  })
+
+  it('maps every distance and budget button to a non-overlapping request range', async () => {
+    vi.spyOn(LocationService, 'getCurrentLocation').mockResolvedValue({
+      latitude: 28.2282,
+      longitude: 112.9388,
+    })
+    const createSpy = vi.spyOn(recommendationApi, 'createRecommendation').mockResolvedValue(response)
+    const wrapper = mount(HomePage)
+    await flushPromises()
+
+    const expectedDistances = [
+      { minDistance: null, radius: 500, caption: '当前范围：500m 以内' },
+      { minDistance: 500, radius: 1000, caption: '当前范围：500m 以上至 1km' },
+      { minDistance: 1000, radius: 2000, caption: '当前范围：1km 以上至 2km' },
+      { minDistance: 2000, radius: 3000, caption: '当前范围：2km 以上至 3km' },
+    ]
+    const distanceButtons = wrapper.findAll('.choice-section')[0].findAll('.choice-button')
+    for (const [index, expected] of expectedDistances.entries()) {
+      await distanceButtons[index].trigger('click')
+      expect(wrapper.findAll('.range-caption')[0].text()).toBe(expected.caption)
+      await wrapper.find('.decision-button').trigger('click')
+      await flushPromises()
+      expect(createSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+        minDistance: expected.minDistance,
+        radius: expected.radius,
+      }))
+    }
+
+    const expectedBudgets = [
+      { minBudget: null, maxBudget: 20, caption: '当前范围：人均 ¥20 以内' },
+      { minBudget: 20, maxBudget: 40, caption: '当前范围：人均 ¥20 以上至 ¥40' },
+      { minBudget: 40, maxBudget: 70, caption: '当前范围：人均 ¥40 以上至 ¥70' },
+      { minBudget: 70, maxBudget: null, caption: '当前范围：人均高于 ¥70' },
+    ]
+    const budgetButtons = wrapper.findAll('.choice-section')[1].findAll('.choice-button')
+    for (const [index, expected] of expectedBudgets.entries()) {
+      await budgetButtons[index].trigger('click')
+      expect(wrapper.findAll('.range-caption')[1].text()).toBe(expected.caption)
+      await wrapper.find('.decision-button').trigger('click')
+      await flushPromises()
+      expect(createSpy.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+        minBudget: expected.minBudget,
+        maxBudget: expected.maxBudget,
+      }))
+    }
   })
 
   it('allows an optional detailed category correction before deciding', async () => {

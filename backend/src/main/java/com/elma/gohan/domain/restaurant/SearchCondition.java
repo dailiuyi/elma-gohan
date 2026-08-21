@@ -3,11 +3,13 @@ package com.elma.gohan.domain.restaurant;
 import java.util.List;
 
 /**
- * 一次推荐请求的搜索条件(radius 已在入口校验为 500/1000/2000/3000;
- * maxBudget 为 null 表示不限;category 缺省为 MEAL;dislikes 为关键词短语)。
+ * 一次推荐请求的搜索条件。minDistance/minBudget 为不包含的下界，
+ * radius/maxBudget 为包含的上界；省略下界时兼容旧客户端的累计上限语义。
  */
 public record SearchCondition(
+        Integer minDistance,
         int radius,
+        Integer minBudget,
         Integer maxBudget,
         String category,
         List<String> dislikes
@@ -18,6 +20,10 @@ public record SearchCondition(
     public SearchCondition {
         category = CategoryFilter.fromRequest(category).name();
         dislikes = dislikes == null ? List.of() : List.copyOf(dislikes);
+    }
+
+    public SearchCondition(int radius, Integer maxBudget, String category, List<String> dislikes) {
+        this(null, radius, null, maxBudget, category, dislikes);
     }
 
     public boolean categoryUnlimited() {

@@ -22,6 +22,16 @@ public class AmapProperties {
     private Map<String, CategoryMapping> categoryMap = Map.of();
     /** 按顺序匹配 POI 名称和 type 文本，用于在高德父分类内识别产品细品类。 */
     private List<CategoryRule> categoryRules = List.of();
+    /** 餐饮身份判定；先验证大类，再允许名称关键词细分。 */
+    private String restaurantTypecodePrefix = "05";
+    private String restaurantTypeRoot = "餐饮服务";
+    private int inferenceMinSignals = 2;
+    private List<String> restaurantKeywords = List.of(
+            "餐厅", "饭店", "菜馆", "酒楼", "火锅", "烧烤", "粉面", "米粉",
+            "米线", "面馆", "小吃", "快餐", "咖啡", "茶饮", "甜品");
+    private List<String> nonRestaurantTypeKeywords = List.of(
+            "购物服务", "服装", "鞋帽", "商场", "购物中心", "超市", "便利店",
+            "生活服务", "汽车服务", "住宿服务", "医疗保健", "公司企业");
 
     public String getKey() { return key; }
     public void setKey(String key) { this.key = key; }
@@ -41,6 +51,18 @@ public class AmapProperties {
     public void setCategoryMap(Map<String, CategoryMapping> categoryMap) { this.categoryMap = categoryMap; }
     public List<CategoryRule> getCategoryRules() { return categoryRules; }
     public void setCategoryRules(List<CategoryRule> categoryRules) { this.categoryRules = categoryRules; }
+    public String getRestaurantTypecodePrefix() { return restaurantTypecodePrefix; }
+    public void setRestaurantTypecodePrefix(String value) { restaurantTypecodePrefix = value; }
+    public String getRestaurantTypeRoot() { return restaurantTypeRoot; }
+    public void setRestaurantTypeRoot(String value) { restaurantTypeRoot = value; }
+    public int getInferenceMinSignals() { return inferenceMinSignals; }
+    public void setInferenceMinSignals(int value) { inferenceMinSignals = value; }
+    public List<String> getRestaurantKeywords() { return restaurantKeywords; }
+    public void setRestaurantKeywords(List<String> value) { restaurantKeywords = value; }
+    public List<String> getNonRestaurantTypeKeywords() { return nonRestaurantTypeKeywords; }
+    public void setNonRestaurantTypeKeywords(List<String> value) {
+        nonRestaurantTypeKeywords = value;
+    }
 
     public static class CategoryMapping {
         private String code;

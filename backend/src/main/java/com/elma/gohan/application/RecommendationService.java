@@ -44,6 +44,8 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 推荐编排:POI -> 硬过滤 -> Evidence -> 风险 -> 排序 -> 候选池落库 -> reroll -> 反馈画像。
@@ -51,6 +53,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RecommendationService {
 
+    private static final Logger log = LoggerFactory.getLogger(RecommendationService.class);
     private static final Set<Integer> ALLOWED_RADIUS = Set.of(500, 1000, 2000, 3000);
     private static final int MAX_ALTERNATIVES = 5;
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
@@ -100,18 +103,27 @@ public class RecommendationService {
             throw new ValidationFailedException("radius", "只能是 500、1000、2000 或 3000");
         }
         int radius = request.radius() == null ? 1000 : request.radius();
+        if (request.minDistance() != null && request.minDistance() >= radius) {
+            throw new ValidationFailedException("minDistance", "必须小于搜索半径");
+        }
+        if (request.minBudget() != null && request.maxBudget() != null
+                && request.minBudget() >= request.maxBudget()) {
+            throw new ValidationFailedException("minBudget", "必须小于最高预算");
+        }
         if (request.dislikes() != null && request.dislikes().stream().distinct().count()
                 != request.dislikes().size()) {
             throw new ValidationFailedException("dislikes", "不能有重复项");
         }
         SearchCondition condition = new SearchCondition(
-                radius, request.maxBudget(),
+                request.minDistance(), radius, request.minBudget(), request.maxBudget(),
                 request.category() == null ? SearchCondition.CATEGORY_MEAL : request.category(),
                 request.dislikes() == null ? List.of() : request.dislikes());
 
         List<Restaurant> pois = poiProvider.nearby(
                 new Location(request.latitude(), request.longitude()), condition);
         List<Restaurant> eligible = hardFilter.filter(pois, condition);
+        log.info("POI 推荐过滤汇总: mappedCount={}, hardEligibleCount={}, requestedCategory={}",
+                pois.size(), eligible.size(), condition.category());
         if (eligible.isEmpty()) {
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
@@ -153,7 +165,9 @@ public class RecommendationService {
         Map<String, Object> conditionSnapshot = new java.util.LinkedHashMap<>();
         conditionSnapshot.put("latitude", request.latitude());
         conditionSnapshot.put("longitude", request.longitude());
+        conditionSnapshot.put("minDistance", request.minDistance());
         conditionSnapshot.put("radius", radius);
+        conditionSnapshot.put("minBudget", request.minBudget());
         conditionSnapshot.put("maxBudget", request.maxBudget());
         conditionSnapshot.put("category", condition.category());
         conditionSnapshot.put("dislikes", condition.dislikes());
@@ -240,12 +254,14 @@ public class RecommendationService {
                 .orElseGet(() -> new RestaurantEntity(UUID.randomUUID(), r.source(), r.sourcePoiId(),
                         r.name(), r.latitude(), r.longitude(), r.categoryCode(), r.categoryLabel(),
                         r.rating(), r.reviewCount(), r.averagePrice(), r.businessStatus(),
-                        r.openingHours(), r.address(), r.telephone(), r.dataCompleteness(), now, now));
+                        r.openingHours(), r.address(), r.telephone(), r.dataCompleteness(),
+                        r.categoryConfidence(), now, now));
         RestaurantEntity updated = new RestaurantEntity(
                 entity.getId(), entity.getSource(), entity.getSourcePoiId(),
                 r.name(), r.latitude(), r.longitude(), r.categoryCode(), r.categoryLabel(),
                 r.rating(), r.reviewCount(), r.averagePrice(), r.businessStatus(),
                 r.openingHours(), r.address(), r.telephone(), r.dataCompleteness(),
+                r.categoryConfidence(),
                 entity.getCreatedAt(), now);
         return toDomain(restaurantRepository.save(updated), r.distanceMeters());
     }
@@ -255,7 +271,8 @@ public class RecommendationService {
                 e.getLatitude(), e.getLongitude(), distanceMeters, e.getCategoryCode(),
                 e.getCategoryLabel(), e.getRating(), e.getReviewCount(), e.getAveragePrice(),
                 e.getBusinessStatus(), e.getOpeningHours(), e.getAddress(), e.getTelephone(),
-                e.getDataCompleteness() == null ? DataCompleteness.MINIMAL : e.getDataCompleteness());
+                e.getDataCompleteness() == null ? DataCompleteness.MINIMAL : e.getDataCompleteness(),
+                e.getCategoryConfidence());
     }
 
     /** reroll 时从候选快照 + restaurant 表重建候选视图。 */

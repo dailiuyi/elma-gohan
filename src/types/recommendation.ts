@@ -23,7 +23,9 @@ export type DeepCacheStatus = 'HIT' | 'PARTIAL_HIT' | 'MISS'
 export interface CreateRecommendationRequest {
   latitude: number
   longitude: number
+  minDistance?: number | null
   radius: Radius
+  minBudget?: number | null
   maxBudget: number | null
   category: CategoryFilterCode
   dislikes: string[]

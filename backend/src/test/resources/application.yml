@@ -85,7 +85,7 @@ elma:
       medium-low-max-inclusive: 40
       medium-max-inclusive: 60
   recommendation:
-    algorithm-version: recommendation-v0.3
+    algorithm-version: recommendation-v0.3.2
     top-k: 10
     pool-size: 6
     walking-speed-meters-per-minute: 80

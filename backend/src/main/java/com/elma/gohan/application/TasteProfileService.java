@@ -95,7 +95,9 @@ public class TasteProfileService {
                 entity.getName(), entity.getLatitude(), entity.getLongitude(), 0,
                 entity.getCategoryCode(), entity.getCategoryLabel(), entity.getRating(),
                 entity.getReviewCount(), entity.getAveragePrice(), entity.getBusinessStatus(),
-                entity.getOpeningHours(), entity.getAddress(), entity.getDataCompleteness() == null
-                ? DataCompleteness.MINIMAL : entity.getDataCompleteness());
+                entity.getOpeningHours(), entity.getAddress(), entity.getTelephone(),
+                entity.getDataCompleteness() == null
+                ? DataCompleteness.MINIMAL : entity.getDataCompleteness(),
+                entity.getCategoryConfidence());
     }
 }

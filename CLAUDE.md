@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 仓库现状
 
-这是「ELMA 家今天的饭」前后端仓库。当前版本为 V0.3.1：默认推荐保持高德 + 百度与 `risk-v0.3`；用户点击“深挖一下这家”后才通过正规 Web Search API 查询公开索引线索，并生成不参与排序的 `deep-risk-v0.1`。接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，当前增量规则见 [docs/V0.3.1-on-demand-deep-evidence.md](docs/V0.3.1-on-demand-deep-evidence.md)。
+这是「ELMA 今天吃什么」前后端仓库。当前版本为 V0.3.2：默认推荐保持高德 + 百度与 `risk-v0.3`，并在进入细品类映射前验证高德 POI 的餐饮身份；用户点击“深挖一下这家”后才通过正规 Web Search API 查询公开索引线索，并生成不参与排序的 `deep-risk-v0.1`。接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，当前增量规则见 [docs/V0.3.2-product-polish.md](docs/V0.3.2-product-polish.md)。
 
 两份方案文档（`elma-gohan_V0.1_Demo_技术与产品方案.md`、`elma-gohan产品介绍.md`）是项目起点，不得覆盖或重写。
 

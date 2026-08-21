@@ -20,11 +20,19 @@ public class HardFilter {
     }
 
     private boolean passes(Restaurant r, SearchCondition c) {
+        if (c.minDistance() != null && r.distanceMeters() <= c.minDistance()) {
+            return false;
+        }
         if (r.distanceMeters() > c.radius()) {
             return false;
         }
-        if (c.maxBudget() != null && r.averagePrice() != null && r.averagePrice() > c.maxBudget()) {
-            return false;
+        if (r.averagePrice() != null) {
+            if (c.minBudget() != null && r.averagePrice() <= c.minBudget()) {
+                return false;
+            }
+            if (c.maxBudget() != null && r.averagePrice() > c.maxBudget()) {
+                return false;
+            }
         }
         if (!c.categoryFilter().matches(r.categoryCode())) {
             return false;

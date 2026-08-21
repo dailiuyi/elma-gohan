@@ -3,6 +3,7 @@ package com.elma.gohan.domain.recommendation;
 import com.elma.gohan.config.RecommendationProperties;
 import com.elma.gohan.config.TasteProperties;
 import com.elma.gohan.domain.restaurant.DataCompleteness;
+import com.elma.gohan.domain.restaurant.CategoryConfidence;
 import com.elma.gohan.domain.restaurant.Restaurant;
 import com.elma.gohan.domain.restaurant.SearchCondition;
 import com.elma.gohan.domain.risk.RiskResult;
@@ -45,7 +46,8 @@ public class LowRegretScorer {
                 + w.getCompleteness() * completenessFactor(r)
                 + w.getRisk() * riskFactor(risk);
         return Math.max(0.0, Math.min(100.0,
-                base + tasteAdjustment(r, preference.tasteProfile())));
+                base + tasteAdjustment(r, preference.tasteProfile())
+                        - categoryConfidencePenalty(r.categoryConfidence())));
     }
 
     public List<String> reasons(Restaurant r, RiskResult risk, SearchCondition condition) {
@@ -58,8 +60,11 @@ public class LowRegretScorer {
         if (distanceFactor(r, condition) >= 0.6) {
             reasons.add("距离近");
         }
-        if (budgetFactor(r, condition) >= 0.8) {
+        if (r.averagePrice() != null && budgetFactor(r, condition) > 0.0) {
             reasons.add("预算合适");
+        }
+        if (r.categoryConfidence() == CategoryConfidence.INFERRED) {
+            reasons.add("餐饮信息相对有限");
         }
         if (r.rating() != null && r.rating() >= 4.2) {
             reasons.add("评分稳定");
@@ -84,24 +89,36 @@ public class LowRegretScorer {
     }
 
     private double distanceFactor(Restaurant r, SearchCondition c) {
-        if (c.radius() <= 0) {
+        int lowerBound = c.minDistance() == null ? 0 : c.minDistance();
+        int interval = c.radius() - lowerBound;
+        if (interval <= 0) {
             return 0.5;
         }
-        return Math.max(0, Math.min(1, 1.0 - (double) r.distanceMeters() / c.radius()));
+        return Math.max(0, Math.min(1,
+                1.0 - (double) (r.distanceMeters() - lowerBound) / interval));
     }
 
     private double budgetFactor(Restaurant r, SearchCondition c) {
-        if (c.maxBudget() == null) {
-            return 0.8;
-        }
         if (r.averagePrice() == null) {
             return 0.5;
         }
-        if (r.averagePrice() > c.maxBudget()) {
+        if ((c.minBudget() != null && r.averagePrice() <= c.minBudget())
+                || (c.maxBudget() != null && r.averagePrice() > c.maxBudget())) {
             return 0.0;
         }
+        if (c.minBudget() != null && c.maxBudget() == null) {
+            return 1.0;
+        }
+        if (c.maxBudget() == null) {
+            return 0.8;
+        }
+        int lowerBound = c.minBudget() == null ? 0 : c.minBudget();
+        int interval = c.maxBudget() - lowerBound;
+        if (interval <= 0) {
+            return 0.5;
+        }
         // 预算内越便宜越好:留一半分给"接近预算"的餐厅,避免只推最便宜。
-        return 1.0 - 0.5 * r.averagePrice() / c.maxBudget();
+        return 1.0 - 0.5 * (r.averagePrice() - lowerBound) / interval;
     }
 
     private double categoryFactor(Restaurant r, SearchCondition c) {
@@ -134,5 +151,15 @@ public class LowRegretScorer {
                 * profile.distanceWeight(restaurant, tasteProperties) / maxWeight;
         normalized = Math.max(-1.0, Math.min(1.0, normalized));
         return normalized * taste.getMaxAdjustment();
+    }
+
+    double categoryConfidencePenalty(CategoryConfidence confidence) {
+        RecommendationProperties.CategoryConfidencePenalty penalty =
+                props.getCategoryConfidencePenalty();
+        return switch (confidence == null ? CategoryConfidence.SUPPORTED : confidence) {
+            case VERIFIED -> penalty.getVerified();
+            case SUPPORTED -> penalty.getSupported();
+            case INFERRED -> penalty.getInferred();
+        };
     }
 }

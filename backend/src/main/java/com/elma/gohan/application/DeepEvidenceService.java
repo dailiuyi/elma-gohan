@@ -323,7 +323,8 @@ public class DeepEvidenceService {
                 entity.getReviewCount(), entity.getAveragePrice(), entity.getBusinessStatus(),
                 entity.getOpeningHours(), entity.getAddress(), entity.getTelephone(),
                 entity.getDataCompleteness() == null
-                        ? DataCompleteness.MINIMAL : entity.getDataCompleteness());
+                        ? DataCompleteness.MINIMAL : entity.getDataCompleteness(),
+                entity.getCategoryConfidence());
     }
 
     private RiskAssessment toAssessment(BaseRiskSnapshot risk) {

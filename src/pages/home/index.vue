@@ -1,17 +1,28 @@
 <template>
-  <view class="home-page">
-    <view class="pixel-spark pixel-spark--one" aria-hidden="true" />
-    <view class="pixel-spark pixel-spark--two" aria-hidden="true" />
+    <view class="home-page">
+      <view class="pixel-spark pixel-spark--one" aria-hidden="true" />
 
-    <view class="brand-row">
-      <text class="brand">ELMA</text>
-      <text class="edition">MEAL DECISION / 0.12</text>
+      <view class="brand-row">
+        <text class="product-name">ELMA 今天吃什么</text>
+        <text class="edition">elma-gohan / 0.3.2</text>
+      </view>
+      <view class="header-rail" aria-hidden="true">
+        <view class="header-rail__lead" />
+        <view class="header-rail__body" />
+        <view class="header-rail__end" />
+      </view>
+
+      <view class="hero">
+        <text class="hero-copy">别选了，\n今天吃这个。</text>
+      <text class="hero-note">只给你一个认真筛过的答案。</text>
     </view>
 
-    <view class="hero">
-      <text class="product-name">家今天的饭</text>
-      <text class="hero-copy">别选了，\n今天吃这个。</text>
-      <text class="hero-note">只给你一个认真筛过的答案。</text>
+    <view class="decision-flow" aria-label="决策流程">
+      <view class="decision-flow__line" aria-hidden="true" />
+      <view v-for="item in decisionFlow" :key="item" class="decision-flow__step">
+        <view class="decision-flow__dot" aria-hidden="true" />
+        <text>{{ item }}</text>
+      </view>
     </view>
 
     <view class="location-row">
@@ -47,18 +58,20 @@
       <view class="choice-row">
         <button
           v-for="option in radiusOptions"
-          :key="option.value"
+          :key="option.label"
           class="choice-button"
           :class="{
-            'choice-button--active': radius === option.value,
+            'choice-button--active':
+              radius === option.radius && minDistance === option.minDistance,
             'choice-button--disabled': submitting,
           }"
           :disabled="submitting"
-          @click="radius = option.value"
+          @click="selectRadius(option)"
         >
           {{ option.label }}
         </button>
       </view>
+      <text class="range-caption">当前范围：{{ selectedRadiusDescription }}</text>
     </view>
 
     <view class="choice-section">
@@ -69,18 +82,20 @@
       <view class="choice-row">
         <button
           v-for="option in budgetOptions"
-          :key="String(option.value)"
+          :key="option.label"
           class="choice-button"
           :class="{
-            'choice-button--active': budget === option.value,
+            'choice-button--active':
+              maxBudget === option.maxBudget && minBudget === option.minBudget,
             'choice-button--disabled': submitting,
           }"
           :disabled="submitting"
-          @click="budget = option.value"
+          @click="selectBudget(option)"
         >
           {{ option.label }}
         </button>
       </view>
+      <text class="range-caption">当前范围：{{ selectedBudgetDescription }}</text>
     </view>
 
     <view class="preference-grid">
@@ -146,19 +161,35 @@ import type {
 } from '@/types/recommendation'
 import { DislikesValidationError, parseDislikes } from '@/utils/dislikes'
 
-const radiusOptions: Array<{ label: string; value: Radius }> = [
-  { label: '500m', value: 500 },
-  { label: '1km', value: 1000 },
-  { label: '2km', value: 2000 },
-  { label: '3km', value: 3000 },
+interface RadiusOption {
+  label: string
+  minDistance: number | null
+  radius: Radius
+  description: string
+}
+
+interface BudgetOption {
+  label: string
+  minBudget: number | null
+  maxBudget: number | null
+  description: string
+}
+
+const radiusOptions: RadiusOption[] = [
+  { label: '500m', minDistance: null, radius: 500, description: '500m 以内' },
+  { label: '1km', minDistance: 500, radius: 1000, description: '500m 以上至 1km' },
+  { label: '2km', minDistance: 1000, radius: 2000, description: '1km 以上至 2km' },
+  { label: '3km', minDistance: 2000, radius: 3000, description: '2km 以上至 3km' },
 ]
 
-const budgetOptions: Array<{ label: string; value: number | null }> = [
-  { label: '¥20', value: 20 },
-  { label: '¥40', value: 40 },
-  { label: '¥70', value: 70 },
-  { label: '不限', value: null },
+const budgetOptions: BudgetOption[] = [
+  { label: '¥20', minBudget: null, maxBudget: 20, description: '人均 ¥20 以内' },
+  { label: '¥40', minBudget: 20, maxBudget: 40, description: '人均 ¥20 以上至 ¥40' },
+  { label: '¥70', minBudget: 40, maxBudget: 70, description: '人均 ¥40 以上至 ¥70' },
+  { label: '¥70+', minBudget: 70, maxBudget: null, description: '人均高于 ¥70' },
 ]
+
+const decisionFlow = ['定位附近', '过滤风险', '只给一家']
 
 const categoryOptions: Array<{ label: string; value: CategoryFilterCode }> = [
   { label: '正餐', value: 'MEAL' },
@@ -173,8 +204,10 @@ const categoryOptions: Array<{ label: string; value: CategoryFilterCode }> = [
   { label: '随便', value: 'ANY' },
 ]
 
-const radius = ref<Radius>(1000)
-const budget = ref<number | null>(null)
+const minDistance = ref<number | null>(null)
+const radius = ref<Radius>(500)
+const minBudget = ref<number | null>(20)
+const maxBudget = ref<number | null>(40)
 const category = ref<CategoryFilterCode>('MEAL')
 const dislikesInput = ref('')
 const locationStatus = ref<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle')
@@ -191,6 +224,16 @@ const categoryIndex = computed(() =>
   ),
 )
 const selectedCategory = computed(() => categoryOptions[categoryIndex.value])
+const selectedRadiusDescription = computed(
+  () => radiusOptions.find(
+    (option) => option.radius === radius.value && option.minDistance === minDistance.value,
+  )?.description ?? '',
+)
+const selectedBudgetDescription = computed(
+  () => budgetOptions.find(
+    (option) => option.maxBudget === maxBudget.value && option.minBudget === minBudget.value,
+  )?.description ?? '',
+)
 
 const locationMessage = computed(() => {
   switch (locationStatus.value) {
@@ -255,6 +298,16 @@ function handleCategoryChange(event: { detail: { value: string | number } }) {
   }
 }
 
+function selectRadius(option: RadiusOption) {
+  minDistance.value = option.minDistance
+  radius.value = option.radius
+}
+
+function selectBudget(option: BudgetOption) {
+  minBudget.value = option.minBudget
+  maxBudget.value = option.maxBudget
+}
+
 async function submitRecommendation() {
   if (submitting.value) return
 
@@ -279,8 +332,10 @@ async function submitRecommendation() {
   const request: CreateRecommendationRequest = {
     latitude: currentLocation.value.latitude,
     longitude: currentLocation.value.longitude,
+    minDistance: minDistance.value,
     radius: radius.value,
-    maxBudget: budget.value,
+    minBudget: minBudget.value,
+    maxBudget: maxBudget.value,
     category: category.value,
     dislikes,
   }
@@ -330,12 +385,6 @@ onMounted(locate)
   right: 68rpx;
 }
 
-.pixel-spark--two {
-  top: 470rpx;
-  right: 102rpx;
-  transform: rotate(45deg) scale(0.75);
-}
-
 .brand-row,
 .section-heading,
 .location-row,
@@ -348,32 +397,58 @@ onMounted(locate)
 }
 
 .brand-row {
+  min-width: 0;
   justify-content: space-between;
-}
-
-.brand {
-  font-size: 28rpx;
-  font-weight: 700;
-  letter-spacing: 6rpx;
+  gap: 20rpx;
 }
 
 .edition {
+  flex: 0 0 auto;
   color: #747d97;
-  font-size: 18rpx;
-  letter-spacing: 2rpx;
+  font-size: 16rpx;
+  letter-spacing: 1rpx;
+  white-space: nowrap;
+}
+
+.header-rail {
+  display: flex;
+  height: 10rpx;
+  align-items: center;
+  margin-top: 18rpx;
+}
+
+.header-rail__lead {
+  width: 56rpx;
+  height: 3rpx;
+  background: #5b61d6;
+}
+
+.header-rail__body {
+  height: 2rpx;
+  flex: 1;
+  background: #d9ddea;
+}
+
+.header-rail__end {
+  width: 8rpx;
+  height: 8rpx;
+  background: #9bd8c5;
 }
 
 .hero {
   display: flex;
   flex-direction: column;
-  margin-top: 54rpx;
+  margin-top: 32rpx;
 }
 
 .product-name {
+  min-width: 0;
   color: #5b61d6;
-  font-size: 24rpx;
-  font-weight: 600;
-  letter-spacing: 3rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .hero-copy {
@@ -392,9 +467,51 @@ onMounted(locate)
   letter-spacing: 1rpx;
 }
 
+.decision-flow {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 34rpx;
+  padding: 0 4rpx;
+  color: #66708a;
+}
+
+.decision-flow__line {
+  position: absolute;
+  top: 8rpx;
+  right: 10rpx;
+  left: 10rpx;
+  height: 2rpx;
+  background: #d9ddea;
+}
+
+.decision-flow__step {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 112rpx;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+  background: #f8f8fb;
+  font-size: 20rpx;
+  letter-spacing: 1rpx;
+  white-space: nowrap;
+}
+
+.decision-flow__dot {
+  box-sizing: border-box;
+  width: 18rpx;
+  height: 18rpx;
+  border: 4rpx solid #f8f8fb;
+  border-radius: 50%;
+  background: #5b61d6;
+  box-shadow: 0 0 0 2rpx #bfc4da;
+}
+
 .location-row {
   justify-content: space-between;
-  margin-top: 52rpx;
+  margin-top: 34rpx;
   padding: 24rpx 0;
   border-top: 2rpx solid #dde1ec;
   border-bottom: 2rpx solid #dde1ec;
@@ -464,7 +581,17 @@ onMounted(locate)
 }
 
 .section-heading {
+  width: 100%;
   gap: 14rpx;
+}
+
+.section-heading::after {
+  height: 2rpx;
+  flex: 1;
+  margin-left: 8rpx;
+  background: #dde1ec;
+  box-shadow: 8rpx 0 0 #bfe8db;
+  content: '';
 }
 
 .section-index {
@@ -507,6 +634,18 @@ onMounted(locate)
 
 .choice-button--disabled {
   opacity: 0.7;
+}
+
+.range-caption {
+  display: block;
+  overflow: hidden;
+  margin-top: 12rpx;
+  color: #747d97;
+  font-size: 19rpx;
+  letter-spacing: 1rpx;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .preference-grid {

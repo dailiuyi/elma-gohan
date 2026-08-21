@@ -151,8 +151,10 @@ class RecommendationApiTest {
     @Test
     void createReturns201WithContractShape() throws Exception {
         ResponseEntity<String> response = create(USER, """
-                {"latitude": 28.2282, "longitude": 112.9388, "radius": 1000,
-                 "maxBudget": 40, "category": "ANY", "dislikes": []}
+                {"latitude": 28.2282, "longitude": 112.9388,
+                 "minDistance": 500, "radius": 1000,
+                 "minBudget": 20, "maxBudget": 40,
+                 "category": "ANY", "dislikes": []}
                 """);
         assertThat(response.getStatusCode().value()).isEqualTo(201);
         JsonNode body = JSON.readTree(response.getBody());
@@ -162,7 +164,8 @@ class RecommendationApiTest {
         assertThat(restaurant.get("name").asText()).isNotBlank();
         assertThat(restaurant.get("category").get("code")).isNotNull();
         assertThat(restaurant.get("category").get("label")).isNotNull();
-        assertThat(restaurant.get("distanceMeters").asInt()).isGreaterThanOrEqualTo(0);
+        assertThat(restaurant.get("distanceMeters").asInt()).isBetween(501, 1000);
+        assertThat(restaurant.get("averagePrice").asInt()).isBetween(21, 40);
         assertThat(restaurant.get("walkingMinutes").asInt()).isGreaterThanOrEqualTo(1);
         assertThat(restaurant.get("businessStatus").asText()).isIn("OPEN", "CLOSED", "UNKNOWN");
         JsonNode risk = body.get("risk");
@@ -183,8 +186,16 @@ class RecommendationApiTest {
                 "SELECT count(*) FROM recommendation_log WHERE request_condition_json IS NOT NULL "
                         + "AND recommended_restaurant_id = current_restaurant_id "
                         + "AND risk_algorithm_version = 'risk-v0.3' "
-                        + "AND recommendation_algorithm_version = 'recommendation-v0.3'", Integer.class);
+                        + "AND recommendation_algorithm_version = 'recommendation-v0.3.2'", Integer.class);
         assertThat(logs).isEqualTo(1);
+        String requestSnapshot = jdbc.queryForObject(
+                "SELECT request_condition_json::text FROM recommendation_log WHERE id = ?::uuid",
+                String.class, body.get("recommendationId").asText());
+        JsonNode snapshot = JSON.readTree(requestSnapshot);
+        assertThat(snapshot.get("minDistance").asInt()).isEqualTo(500);
+        assertThat(snapshot.get("radius").asInt()).isEqualTo(1000);
+        assertThat(snapshot.get("minBudget").asInt()).isEqualTo(20);
+        assertThat(snapshot.get("maxBudget").asInt()).isEqualTo(40);
         assertThat(deepEvidenceCalls).hasValue(0);
     }
 
@@ -279,6 +290,25 @@ class RecommendationApiTest {
         assertThat(body.get("code").asText()).isEqualTo("VALIDATION_FAILED");
         assertThat(body.get("fieldErrors").get(0).get("field").asText()).isEqualTo("radius");
         assertThat(body.get("traceId")).isNotNull();
+    }
+
+    @Test
+    void invalidRangeLowerBoundsReturn400WithFieldError() throws Exception {
+        ResponseEntity<String> distanceResponse = create(USER, """
+                {"latitude": 28.2282, "longitude": 112.9388,
+                 "minDistance": 1000, "radius": 1000}
+                """);
+        assertThat(distanceResponse.getStatusCode().value()).isEqualTo(400);
+        assertThat(JSON.readTree(distanceResponse.getBody()).get("fieldErrors").get(0)
+                .get("field").asText()).isEqualTo("minDistance");
+
+        ResponseEntity<String> budgetResponse = create(USER, """
+                {"latitude": 28.2282, "longitude": 112.9388,
+                 "minBudget": 40, "maxBudget": 40}
+                """);
+        assertThat(budgetResponse.getStatusCode().value()).isEqualTo(400);
+        assertThat(JSON.readTree(budgetResponse.getBody()).get("fieldErrors").get(0)
+                .get("field").asText()).isEqualTo("minBudget");
     }
 
     @Test

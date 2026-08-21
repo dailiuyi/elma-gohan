@@ -3,6 +3,7 @@ package com.elma.gohan.provider.poi.amap;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.elma.gohan.config.AmapProperties;
+import com.elma.gohan.domain.restaurant.CategoryConfidence;
 import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -66,6 +67,7 @@ class AmapResponseMapperTest {
         assertThat(r.distanceMeters()).isEqualTo(620);
         assertThat(r.categoryCode()).isEqualTo("NOODLES");
         assertThat(r.categoryLabel()).isEqualTo("粉面");
+        assertThat(r.categoryConfidence()).isEqualTo(CategoryConfidence.VERIFIED);
         assertThat(r.rating()).isEqualTo(4.5);
         assertThat(r.averagePrice()).isEqualTo(26);
         assertThat(r.openingHours()).isEqualTo("09:00-21:00");
@@ -120,7 +122,55 @@ class AmapResponseMapperTest {
         var pois = List.of(
                 objectMapper.readTree("{\"id\":\"\",\"name\":\"x\",\"location\":\"1,1\"}"),
                 objectMapper.readTree("{\"id\":\"y\",\"name\":\"\",\"location\":\"1,1\"}"),
-                objectMapper.readTree("{\"id\":\"z\",\"name\":\"ok\",\"location\":\"1,1\",\"distance\":\"5\"}"));
+                objectMapper.readTree("{\"id\":\"z\",\"name\":\"ok\",\"typecode\":\"050100\","
+                        + "\"location\":\"1,1\",\"distance\":\"5\"}"));
         assertThat(mapper.toRestaurants(pois)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("只有一项官方餐饮分类时标记 SUPPORTED")
+    void supportsSingleOfficialRestaurantSignal() throws Exception {
+        var poi = objectMapper.readTree("""
+                {"id":"S1","name":"老街饭店","typecode":"050101",
+                 "location":"112.9,28.2","distance":"80"}
+                """);
+
+        assertThat(mapper.toRestaurant(poi).categoryConfidence())
+                .isEqualTo(CategoryConfidence.SUPPORTED);
+    }
+
+    @Test
+    @DisplayName("官方分类缺失但两个餐饮信号成立时标记 INFERRED")
+    void infersRestaurantFromTwoSoftSignals() throws Exception {
+        var poi = objectMapper.readTree("""
+                {"id":"I1","name":"老街火锅","type":"火锅店",
+                 "location":"112.9,28.2","distance":"80",
+                 "biz_ext":{"opening_time":"10:00-22:00"}}
+                """);
+
+        assertThat(mapper.toRestaurant(poi).categoryConfidence())
+                .isEqualTo(CategoryConfidence.INFERRED);
+        assertThat(mapper.toRestaurant(poi).categoryCode()).isEqualTo("HOT_POT");
+    }
+
+    @Test
+    @DisplayName("明确非餐饮 typecode 不得被名称中的烧烤关键词覆盖")
+    void rejectsNonRestaurantBeforeKeywordMapping() throws Exception {
+        var clothing = objectMapper.readTree("""
+                {"id":"C1","name":"火锅少年服装店","type":"购物服务;服装鞋帽皮具店;服装店",
+                 "typecode":"061200","location":"112.9,28.2","distance":"30",
+                 "biz_ext":{"rating":"4.9","cost":"49"}}
+                """);
+        var mall = objectMapper.readTree("""
+                {"id":"M1","name":"烧烤主题商场","type":"购物服务;商场;购物中心",
+                 "typecode":"060100","location":"112.9,28.2","distance":"40"}
+                """);
+        var sparseClothing = objectMapper.readTree("""
+                {"id":"C2","name":"火锅少年服装店","type":"服装店",
+                 "location":"112.9,28.2","distance":"35",
+                 "biz_ext":{"cost":"49","opening_time":"10:00-22:00"}}
+                """);
+
+        assertThat(mapper.toRestaurants(List.of(clothing, mall, sparseClothing))).isEmpty();
     }
 }

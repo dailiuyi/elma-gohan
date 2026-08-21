@@ -1,6 +1,6 @@
-# ELMA 家今天的饭 V0.3.1
+# ELMA 今天吃什么 V0.3.2
 
-LowRegret V0.3.1 是 Java 模块化单体后端与 uni-app 微信小程序前端。默认推荐仍只使用高德、百度与 `risk-v0.3`；用户对当前餐厅感兴趣时，可点击“深挖一下这家”，按需读取 B站、小红书和大众点评的公开 Web 搜索线索，生成独立 `deep-risk-v0.1`。接口事实源是 [`contracts/openapi.yaml`](contracts/openapi.yaml)，增量设计见 [`docs/V0.3.1-on-demand-deep-evidence.md`](docs/V0.3.1-on-demand-deep-evidence.md)。
+LowRegret V0.3.2 是 Java 模块化单体后端与 uni-app 微信小程序前端。默认推荐使用高德、百度与 `risk-v0.3`；高德 POI 会先验证餐饮身份，再按分类可信度参与 `recommendation-v0.3.2` 排序。用户对当前餐厅感兴趣时，可点击“深挖一下这家”，按需读取 B站、小红书和大众点评的公开 Web 搜索线索，生成独立 `deep-risk-v0.1`。接口事实源是 [`contracts/openapi.yaml`](contracts/openapi.yaml)，本次增量见 [`docs/V0.3.2-product-polish.md`](docs/V0.3.2-product-polish.md)。
 
 ## 环境
 

@@ -1,9 +1,9 @@
 {
-  "name": "ELMA 家今天的饭",
+  "name": "ELMA 今天吃什么",
   "appid": "",
   "description": "直接替你决定今天吃什么",
-  "versionName": "0.3.1",
-  "versionCode": "301",
+  "versionName": "0.3.2",
+  "versionCode": "302",
   "transformPx": false,
   "app-plus": {
     "usingComponents": true,

@@ -19,6 +19,11 @@ class HardFilterTest {
         return new SearchCondition(radius, budget, category, dislikes);
     }
 
+    private SearchCondition rangeCondition(Integer minDistance, int radius,
+                                           Integer minBudget, Integer maxBudget) {
+        return new SearchCondition(minDistance, radius, minBudget, maxBudget, "ANY", List.of());
+    }
+
     @Test
     @DisplayName("距离超过半径剔除")
     void distanceFilter() {
@@ -29,6 +34,28 @@ class HardFilterTest {
     }
 
     @Test
+    @DisplayName("距离区间下界不包含、上界包含且相邻区间不重叠")
+    void distanceBandBoundaries() {
+        var restaurants = List.of(
+                TestRestaurants.full("d500", 4.5, 500),
+                TestRestaurants.full("d501", 4.5, 501),
+                TestRestaurants.full("d1000", 4.5, 1000),
+                TestRestaurants.full("d1001", 4.5, 1001),
+                TestRestaurants.full("d2000", 4.5, 2000),
+                TestRestaurants.full("d2001", 4.5, 2001),
+                TestRestaurants.full("d3000", 4.5, 3000));
+
+        assertThat(filter.filter(restaurants, rangeCondition(null, 500, null, null)))
+                .extracting(Restaurant::sourcePoiId).containsExactly("d500");
+        assertThat(filter.filter(restaurants, rangeCondition(500, 1000, null, null)))
+                .extracting(Restaurant::sourcePoiId).containsExactly("d501", "d1000");
+        assertThat(filter.filter(restaurants, rangeCondition(1000, 2000, null, null)))
+                .extracting(Restaurant::sourcePoiId).containsExactly("d1001", "d2000");
+        assertThat(filter.filter(restaurants, rangeCondition(2000, 3000, null, null)))
+                .extracting(Restaurant::sourcePoiId).containsExactly("d2001", "d3000");
+    }
+
+    @Test
     @DisplayName("人均价高于预算剔除;价格缺失且预算非空时保留")
     void budgetFilter() {
         var expensive = TestRestaurants.full("a", 4.5, 300, 50);
@@ -36,6 +63,28 @@ class HardFilterTest {
         var cheap = TestRestaurants.full("c", 4.5, 300, 20);
         var result = filter.filter(List.of(expensive, noPrice, cheap), condition(1000, 40, "ANY", List.of()));
         assertThat(result).extracting(Restaurant::sourcePoiId).containsExactlyInAnyOrder("b", "c");
+    }
+
+    @Test
+    @DisplayName("预算区间下界不包含、上界包含且价格缺失继续保留")
+    void budgetBandBoundaries() {
+        var restaurants = List.of(
+                TestRestaurants.full("p20", 4.5, 300, 20),
+                TestRestaurants.full("p21", 4.5, 300, 21),
+                TestRestaurants.full("p40", 4.5, 300, 40),
+                TestRestaurants.full("p41", 4.5, 300, 41),
+                TestRestaurants.full("p70", 4.5, 300, 70),
+                TestRestaurants.full("p71", 4.5, 300, 71),
+                TestRestaurants.full("unknown", 4.5, 300, null));
+
+        assertThat(filter.filter(restaurants, rangeCondition(null, 1000, null, 20)))
+                .extracting(Restaurant::sourcePoiId).containsExactly("p20", "unknown");
+        assertThat(filter.filter(restaurants, rangeCondition(null, 1000, 20, 40)))
+                .extracting(Restaurant::sourcePoiId).containsExactly("p21", "p40", "unknown");
+        assertThat(filter.filter(restaurants, rangeCondition(null, 1000, 40, 70)))
+                .extracting(Restaurant::sourcePoiId).containsExactly("p41", "p70", "unknown");
+        assertThat(filter.filter(restaurants, rangeCondition(null, 1000, 70, null)))
+                .extracting(Restaurant::sourcePoiId).containsExactly("p71", "unknown");
     }
 
     @Test

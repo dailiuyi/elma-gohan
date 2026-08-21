@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import com.elma.gohan.domain.restaurant.BusinessStatus;
 import com.elma.gohan.domain.restaurant.DataCompleteness;
+import com.elma.gohan.domain.restaurant.CategoryConfidence;
 
 @Entity
 @Table(name = "restaurant")
@@ -66,6 +67,10 @@ public class RestaurantEntity {
     @Enumerated(EnumType.STRING)
     private DataCompleteness dataCompleteness;
 
+    @Column(name = "category_confidence", length = 16, nullable = false)
+    @Enumerated(EnumType.STRING)
+    private CategoryConfidence categoryConfidence;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -79,7 +84,7 @@ public class RestaurantEntity {
                             double longitude, String categoryCode, String categoryLabel, Double rating,
                             Integer reviewCount, Integer averagePrice, BusinessStatus businessStatus,
                             String openingHours, String address, String telephone,
-                            DataCompleteness dataCompleteness,
+                            DataCompleteness dataCompleteness, CategoryConfidence categoryConfidence,
                             LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.source = source;
@@ -97,6 +102,7 @@ public class RestaurantEntity {
         this.address = address;
         this.telephone = telephone;
         this.dataCompleteness = dataCompleteness;
+        this.categoryConfidence = categoryConfidence;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -117,6 +123,7 @@ public class RestaurantEntity {
     public String getAddress() { return address; }
     public String getTelephone() { return telephone; }
     public DataCompleteness getDataCompleteness() { return dataCompleteness; }
+    public CategoryConfidence getCategoryConfidence() { return categoryConfidence; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

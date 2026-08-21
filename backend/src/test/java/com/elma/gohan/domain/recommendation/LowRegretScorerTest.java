@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.time.LocalDateTime;
 import com.elma.gohan.domain.restaurant.BusinessStatus;
+import com.elma.gohan.domain.restaurant.CategoryConfidence;
 import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.elma.gohan.domain.restaurant.Restaurant;
 import org.junit.jupiter.api.DisplayName;
@@ -59,6 +60,40 @@ class LowRegretScorerTest {
     }
 
     @Test
+    @DisplayName("距离在所选区间内按下界到上界归一化")
+    void distanceBandIsNormalizedWithinSelectedRange() {
+        var condition = new SearchCondition(500, 1000, null, null, "ANY", List.of());
+        double nearLowerBound = scorer.score(
+                TestRestaurants.full("a", 4.5, 501, 30), risk(10), condition);
+        double nearUpperBound = scorer.score(
+                TestRestaurants.full("b", 4.5, 1000, 30), risk(10), condition);
+
+        assertThat(nearLowerBound).isGreaterThan(nearUpperBound);
+    }
+
+    @Test
+    @DisplayName("价格缺失候选保留中性偏低预算分且不声称预算合适")
+    void missingPriceIsDownWeightedWithoutBudgetReason() {
+        var condition = new SearchCondition(null, 500, 20, 40, "ANY", List.of());
+        Restaurant known = TestRestaurants.full("known", 4.5, 300, 21);
+        Restaurant unknown = TestRestaurants.full("unknown", 4.5, 300, null);
+
+        assertThat(scorer.score(known, risk(10), condition))
+                .isGreaterThan(scorer.score(unknown, risk(10), condition));
+        assertThat(scorer.reasons(known, risk(10), condition)).contains("预算合适");
+        assertThat(scorer.reasons(unknown, risk(10), condition)).doesNotContain("预算合适");
+    }
+
+    @Test
+    @DisplayName("无预算上界时 ¥70+ 已知价格视为匹配")
+    void openEndedHighBudgetBandMatchesKnownPrice() {
+        var condition = new SearchCondition(null, 500, 70, null, "ANY", List.of());
+        Restaurant restaurant = TestRestaurants.full("high", 4.5, 300, 71);
+
+        assertThat(scorer.reasons(restaurant, risk(10), condition)).contains("预算合适");
+    }
+
+    @Test
     @DisplayName("新用户排序中性，老用户历史品类偏好改变分数")
     void tasteProfileChangesOldUserRanking() {
         Restaurant chinese = category("c", "CHINESE");
@@ -89,9 +124,32 @@ class LowRegretScorerTest {
                 .isGreaterThan(scorer.score(restaurant, uncertain, condition));
     }
 
+    @Test
+    @DisplayName("餐饮分类可信度按 0/6/18 降权且分数保持在范围内")
+    void categoryConfidenceChangesScore() {
+        var condition = new SearchCondition(1000, null, "ANY", List.of());
+        Restaurant verified = category("v", "CHINESE", CategoryConfidence.VERIFIED);
+        Restaurant supported = category("s", "CHINESE", CategoryConfidence.SUPPORTED);
+        Restaurant inferred = category("i", "CHINESE", CategoryConfidence.INFERRED);
+
+        double verifiedScore = scorer.score(verified, risk(10), condition);
+        double supportedScore = scorer.score(supported, risk(10), condition);
+        double inferredScore = scorer.score(inferred, risk(10), condition);
+
+        assertThat(verifiedScore - supportedScore).isCloseTo(6.0, within(0.001));
+        assertThat(verifiedScore - inferredScore).isCloseTo(18.0, within(0.001));
+        assertThat(inferredScore).isBetween(0.0, 100.0);
+        assertThat(scorer.reasons(inferred, risk(10), condition))
+                .contains("餐饮信息相对有限");
+    }
+
     private Restaurant category(String id, String category) {
+        return category(id, category, CategoryConfidence.SUPPORTED);
+    }
+
+    private Restaurant category(String id, String category, CategoryConfidence confidence) {
         return new Restaurant(null, "AMAP", id, "餐厅" + id, 28, 112, 300,
                 category, category, 4.5, 100, 50, BusinessStatus.OPEN,
-                "09:00-21:00", "地址", DataCompleteness.FULL);
+                "09:00-21:00", "地址", null, DataCompleteness.FULL, confidence);
     }
 }

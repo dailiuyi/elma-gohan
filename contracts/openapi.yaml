@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: ELMA 家今天的饭 API
-  version: 0.3.1
+  title: ELMA 今天吃什么 API
+  version: 0.3.2
   description: |
     V0.3 测试版的前后端接口契约。服务端负责高德 POI、百度 Evidence、实体匹配、跨平台一致性、风险过滤、TasteProfile、
     Low Regret 排序、多样化重排、候选池管理与按需公开 Web Evidence 深挖；客户端不得自行重算风险或排序。
@@ -32,7 +32,9 @@ paths:
             example:
               latitude: 28.2282
               longitude: 112.9388
+              minDistance: 500
               radius: 1000
+              minBudget: 20
               maxBudget: 40
               category: MEAL
               dislikes: [香菜]
@@ -212,14 +214,28 @@ components:
           type: integer
           enum: [500, 1000, 2000, 3000]
           default: 1000
-          description: 搜索半径，单位米。
+          description: 包含的距离上界，单位米。
+        minDistance:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 2999
+          default: null
+          description: 不包含的距离下界，单位米；省略时兼容旧客户端并从 0 米开始。
         maxBudget:
           type: integer
           nullable: true
           minimum: 1
           maximum: 10000
           default: null
-          description: 人均最高预算，单位人民币元；null 表示不限。
+          description: 包含的人均预算上界，单位人民币元；null 表示无上界。
+        minBudget:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 9999
+          default: null
+          description: 不包含的人均预算下界；省略时兼容旧客户端并从 0 元开始。
         category:
           $ref: '#/components/schemas/CategoryFilterCode'
         dislikes:

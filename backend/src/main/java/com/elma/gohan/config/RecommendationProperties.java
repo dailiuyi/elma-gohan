@@ -8,13 +8,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "elma.recommendation")
 public class RecommendationProperties {
 
-    private String algorithmVersion = "recommendation-v0.3";
+    private String algorithmVersion = "recommendation-v0.3.2";
     private int topK = 10;
     /** 会话候选池大小:首次推荐 + 最多 5 次重新选择。 */
     private int poolSize = 6;
     private int walkingSpeedMetersPerMinute = 80;
     private Weights weights = new Weights();
     private Taste taste = new Taste();
+    private CategoryConfidencePenalty categoryConfidencePenalty = new CategoryConfidencePenalty();
     private double uncertaintyRisk = 50.0;
 
     public String getAlgorithmVersion() { return algorithmVersion; }
@@ -31,6 +32,10 @@ public class RecommendationProperties {
     public void setWeights(Weights weights) { this.weights = weights; }
     public Taste getTaste() { return taste; }
     public void setTaste(Taste taste) { this.taste = taste; }
+    public CategoryConfidencePenalty getCategoryConfidencePenalty() { return categoryConfidencePenalty; }
+    public void setCategoryConfidencePenalty(CategoryConfidencePenalty value) {
+        categoryConfidencePenalty = value;
+    }
     public double getUncertaintyRisk() { return uncertaintyRisk; }
     public void setUncertaintyRisk(double value) { uncertaintyRisk = value; }
 
@@ -69,5 +74,18 @@ public class RecommendationProperties {
         public void setPriceWeight(double v) { priceWeight = v; }
         public double getDistanceWeight() { return distanceWeight; }
         public void setDistanceWeight(double v) { distanceWeight = v; }
+    }
+
+    public static class CategoryConfidencePenalty {
+        private double verified = 0;
+        private double supported = 6;
+        private double inferred = 18;
+
+        public double getVerified() { return verified; }
+        public void setVerified(double value) { verified = value; }
+        public double getSupported() { return supported; }
+        public void setSupported(double value) { supported = value; }
+        public double getInferred() { return inferred; }
+        public void setInferred(double value) { inferred = value; }
     }
 }

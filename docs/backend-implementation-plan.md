@@ -1,4 +1,4 @@
-# ELMA 家今天的饭 V0.1 后端实施计划
+# ELMA 今天吃什么 V0.1 后端实施计划
 
 > 本文件是后端实现的唯一执行计划,自包含、不依赖会话上下文。任何一次开发会话开始前先读本文件与 [CLAUDE.md](../CLAUDE.md)、[contracts/openapi.yaml](../contracts/openapi.yaml),即可继续工作而无需回忆之前的过程。
 

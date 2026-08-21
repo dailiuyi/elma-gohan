@@ -14,7 +14,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
- * recommendation-v0.3 默认推荐引擎:
+ * recommendation-v0.3.2 默认推荐引擎:
  * 硬过滤 -> 高风险剔除 -> LowRegretScore 排序 -> Top-K 多样化 -> 加权有限随机候选池。
  */
 @Component

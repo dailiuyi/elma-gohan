@@ -1,6 +1,6 @@
 # ELMA API 契约说明
 
-V0.3.1 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本文只解释已确定的跨端规则，不定义第二套 DTO。
+V0.3.2 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本文只解释已确定的跨端规则，不定义第二套 DTO。
 
 ## 接口范围
 
@@ -32,10 +32,12 @@ V0.3.1 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本�
 ### CreateRecommendationRequest
 
 - 必填：`latitude`、`longitude`。
-- 默认：`radius=1000`、`maxBudget=null`、`category=MEAL`、`dislikes=[]`。
+- 服务端兼容默认：`radius=1000`、`minDistance=null`、`maxBudget=null`、`minBudget=null`、`category=MEAL`、`dislikes=[]`。
+- V0.3.2 首页默认请求：`minDistance=null`、`radius=500`、`minBudget=20`、`maxBudget=40`。
 - “不想吃”输入支持空格、中英文逗号和换行分隔，最多形成 10 个去重关键词。
-- `radius` 只允许 500、1000、2000、3000 米。
-- `maxBudget` 单位为人民币元，`null` 表示不限。
+- `minDistance` 是不包含的距离下界，`radius` 是包含的距离上界；`radius` 只允许 500、1000、2000、3000 米。
+- `minBudget` 是不包含的人均预算下界，`maxBudget` 是包含的预算上界；任一字段为 `null` 表示该方向不限。
+- 省略新增下界字段时保持旧客户端的累计上限行为；下界必须严格小于对应上界。
 
 ### RecommendationResponse
 

@@ -30,6 +30,11 @@ elma:
     max-pages: 2
     connect-timeout-ms: 3000
     read-timeout-ms: 5000
+    restaurant-typecode-prefix: "05"
+    restaurant-type-root: 餐饮服务
+    inference-min-signals: 2
+    restaurant-keywords: [餐厅, 饭店, 菜馆, 酒楼, 中餐, 火锅, 烧烤, 粉面, 米粉, 米线, 面馆, 小吃, 快餐, 咖啡, 茶饮, 甜品]
+    non-restaurant-type-keywords: [购物服务, 服装, 鞋帽, 商场, 购物中心, 超市, 便利店, 生活服务, 汽车服务, 住宿服务, 医疗保健, 公司企业]
     category-map:
       "050100": { code: CHINESE, label: 中餐厅 }
       "050200": { code: FOREIGN, label: 外国餐厅 }
@@ -185,7 +190,7 @@ elma:
       medium-low-max-inclusive: 40
       medium-max-inclusive: 60
   recommendation:
-    algorithm-version: recommendation-v0.3
+    algorithm-version: recommendation-v0.3.2
     top-k: 10
     pool-size: 6
     walking-speed-meters-per-minute: 80
@@ -202,6 +207,10 @@ elma:
       category-weight: 0.50
       price-weight: 0.25
       distance-weight: 0.25
+    category-confidence-penalty:
+      verified: 0
+      supported: 6
+      inferred: 18
   taste:
     decay: 0.95
     max-absolute-weight: 3.0

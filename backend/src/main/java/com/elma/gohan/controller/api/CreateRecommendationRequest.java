@@ -27,9 +27,17 @@ public record CreateRecommendationRequest(
         @Max(value = 3000, message = "只能是 500、1000、2000 或 3000")
         Integer radius,
 
+        @Min(value = 0, message = "必须大于等于 0")
+        @Max(value = 2999, message = "必须小于 3000")
+        Integer minDistance,
+
         @Min(value = 1, message = "必须大于等于 1")
         @Max(value = 10000, message = "必须小于等于 10000")
         Integer maxBudget,
+
+        @Min(value = 1, message = "必须大于等于 1")
+        @Max(value = 9999, message = "必须小于 10000")
+        Integer minBudget,
 
         @Pattern(regexp = "^(MEAL|CHINESE|HOT_POT|BARBECUE|NOODLES|FAST_FOOD|WESTERN|JAPANESE_KOREAN|DESSERT_DRINK|ANY)$",
                 message = "品类值不受支持")
@@ -41,6 +49,11 @@ public record CreateRecommendationRequest(
 ) {
     public CreateRecommendationRequest {
         dislikes = normalizeDislikes(dislikes);
+    }
+
+    public CreateRecommendationRequest(Double latitude, Double longitude, Integer radius,
+                                       Integer maxBudget, String category, List<String> dislikes) {
+        this(latitude, longitude, radius, null, maxBudget, null, category, dislikes);
     }
 
     private static List<String> normalizeDislikes(List<String> rawValues) {
@@ -67,5 +80,15 @@ public record CreateRecommendationRequest(
     @JsonProperty("maxBudget")
     public Integer maxBudget() {
         return maxBudget;
+    }
+
+    @JsonProperty("minDistance")
+    public Integer minDistance() {
+        return minDistance;
+    }
+
+    @JsonProperty("minBudget")
+    public Integer minBudget() {
+        return minBudget;
     }
 }
