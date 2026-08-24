@@ -51,6 +51,13 @@ public class RecommendationLogEntity {
     @Column(name = "selection_mode", length = 16, nullable = false)
     private String selectionMode;
 
+    @Column(name = "random_seed", nullable = false)
+    private long randomSeed;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "selection_snapshot_json", columnDefinition = "jsonb", nullable = false)
+    private String selectionSnapshotJson;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -64,7 +71,20 @@ public class RecommendationLogEntity {
                                    String recommendationAlgorithmVersion, LocalDateTime createdAt) {
         this(id, anonymousUserId, requestConditionJson, candidateCount, currentRestaurantId,
                 recommendedRestaurantId, riskScore, lowRegretScore, riskAlgorithmVersion,
-                recommendationAlgorithmVersion, "taste-v0.1", "DEFAULT", createdAt);
+                recommendationAlgorithmVersion, "taste-v0.1", "DEFAULT", 0L, "[]", createdAt);
+    }
+
+    public RecommendationLogEntity(UUID id, UUID anonymousUserId, String requestConditionJson,
+                                   int candidateCount, UUID currentRestaurantId,
+                                   UUID recommendedRestaurantId, int riskScore,
+                                   double lowRegretScore, String riskAlgorithmVersion,
+                                   String recommendationAlgorithmVersion,
+                                   long randomSeed, String selectionSnapshotJson,
+                                   LocalDateTime createdAt) {
+        this(id, anonymousUserId, requestConditionJson, candidateCount, currentRestaurantId,
+                recommendedRestaurantId, riskScore, lowRegretScore, riskAlgorithmVersion,
+                recommendationAlgorithmVersion, "taste-v0.1", "DEFAULT", randomSeed,
+                selectionSnapshotJson, createdAt);
     }
 
     public RecommendationLogEntity(UUID id, UUID anonymousUserId, String requestConditionJson,
@@ -73,6 +93,20 @@ public class RecommendationLogEntity {
                                    double lowRegretScore, String riskAlgorithmVersion,
                                    String recommendationAlgorithmVersion,
                                    String tasteAlgorithmVersion, String selectionMode,
+                                   LocalDateTime createdAt) {
+        this(id, anonymousUserId, requestConditionJson, candidateCount, currentRestaurantId,
+                recommendedRestaurantId, riskScore, lowRegretScore, riskAlgorithmVersion,
+                recommendationAlgorithmVersion, tasteAlgorithmVersion, selectionMode,
+                0L, "[]", createdAt);
+    }
+
+    public RecommendationLogEntity(UUID id, UUID anonymousUserId, String requestConditionJson,
+                                   int candidateCount, UUID currentRestaurantId,
+                                   UUID recommendedRestaurantId, int riskScore,
+                                   double lowRegretScore, String riskAlgorithmVersion,
+                                   String recommendationAlgorithmVersion,
+                                   String tasteAlgorithmVersion, String selectionMode,
+                                   long randomSeed, String selectionSnapshotJson,
                                    LocalDateTime createdAt) {
         this.id = id;
         this.anonymousUserId = anonymousUserId;
@@ -86,6 +120,8 @@ public class RecommendationLogEntity {
         this.recommendationAlgorithmVersion = recommendationAlgorithmVersion;
         this.tasteAlgorithmVersion = tasteAlgorithmVersion;
         this.selectionMode = selectionMode;
+        this.randomSeed = randomSeed;
+        this.selectionSnapshotJson = selectionSnapshotJson;
         this.createdAt = createdAt;
     }
 
@@ -101,6 +137,8 @@ public class RecommendationLogEntity {
     public String getRecommendationAlgorithmVersion() { return recommendationAlgorithmVersion; }
     public String getTasteAlgorithmVersion() { return tasteAlgorithmVersion; }
     public String getSelectionMode() { return selectionMode; }
+    public long getRandomSeed() { return randomSeed; }
+    public String getSelectionSnapshotJson() { return selectionSnapshotJson; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     public void updateCurrent(UUID currentRestaurantId) {

@@ -1,6 +1,6 @@
 # ELMA 今天吃什么 V0.4 后端
 
-Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德与百度提供结构化 Evidence，`risk-v0.3` 只表达客观风险；`taste-v0.1` 和 `recommendation-v0.4` 负责匿名用户画像、近期历史、有限探索与个性化排序。Brave Web Search 仍只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，V0.4 增量见 [`../docs/V0.4-personalized-decision-loop.md`](../docs/V0.4-personalized-decision-loop.md)。
+Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德与百度提供结构化 Evidence，`risk-v0.3.1` 只表达客观风险；`taste-v0.1` 和 `recommendation-v0.4.1` 负责匿名用户画像、近期历史、有限探索、个性化排序与确定性选择重放。Brave Web Search 仍只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，V0.4 增量见 [`../docs/V0.4-personalized-decision-loop.md`](../docs/V0.4-personalized-decision-loop.md)。
 
 ## 构建与测试
 
@@ -39,7 +39,7 @@ controller/        五个 POST 接口,DTO 严格对齐 openapi.yaml
 application/       推荐、反馈、行为、画像、近期历史 + 按需 DeepEvidenceService
 domain/
   restaurant/      Restaurant 标准模型(第三方数据必须先转此模型)
-  risk/            risk-v0.3:评分/模板/burst/趋势/数据不足/跨平台冲突
+  risk/            risk-v0.3.1:评分/模板/burst/连续趋势/数据不足/跨平台冲突
   recommendation/  高风险剔除 -> 个性化 LowRegretScore -> 有限探索 -> 6 家冻结候选池
   deep/            公开线索分析与 deep-risk-v0.1
 provider/

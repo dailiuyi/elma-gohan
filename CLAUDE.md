@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 仓库现状
 
-这是「ELMA 今天吃什么」前后端仓库。当前版本为 V0.4：默认推荐保持高德 + 百度与 `risk-v0.3`，新增 `taste-v0.1`、行为闭环、近期饮食历史、有限探索和 `recommendation-v0.4`；用户主动深挖仍生成不参与排序的 `deep-risk-v0.1`。接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，当前增量规则见 [docs/V0.4-personalized-decision-loop.md](docs/V0.4-personalized-decision-loop.md)。
+这是「ELMA 今天吃什么」前后端仓库。当前版本为 V0.4：默认推荐保持高德 + 百度与 `risk-v0.3.1`，使用 `taste-v0.1`、行为闭环、近期饮食历史、有限探索和可重放的 `recommendation-v0.4.1`；用户主动深挖仍生成不参与排序的 `deep-risk-v0.1`。接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，当前增量规则见 [docs/V0.4-personalized-decision-loop.md](docs/V0.4-personalized-decision-loop.md)。
 
 两份方案文档（`elma-gohan_V0.1_Demo_技术与产品方案.md`、`elma-gohan产品介绍.md`）是项目起点，不得覆盖或重写。
 
@@ -62,12 +62,12 @@ cd backend && mvn test
 - `PoiProvider`（V0.1 实现 `AmapPoiProvider`）— 附近餐厅查询；第三方数据必须先转成内部 `Restaurant` 标准模型（含 `sourcePoiId`、`dataCompleteness` 等），原始结构不得进入业务核心。
 - `EvidenceProvider` — File 评论 Evidence 扩展点继续保留；`PlatformEvidenceProvider` 使用批量检索并统一映射成 `PlatformEvidence`。百度失败、无匹配与字段缺失均须降级，不能中断高德主推荐。
 - `EntityResolver` — 使用名称、GCJ-02 坐标、地址、电话执行确定性一对一匹配；模糊匹配不得自动绑定。
-- `RiskEngine` — `risk-v0.3` 可配置规则模型（非 ML），输出六项 factors（含跨平台评分冲突）、`riskScore`(0~100)、`riskLevel`、`confidence`、`reasons[]` 和版本；高风险项（61+）不主动推荐。
+- `RiskEngine` — `risk-v0.3.1` 可配置规则模型（非 ML），输出六项 factors（含跨平台评分冲突）、`riskScore`(0~100)、`riskLevel`、`confidence`、`reasons[]` 和版本；高风险项（61+）不主动推荐。
 - `RecommendationEngine` — 硬过滤 → Evidence/Risk → 高风险剔除 → 个性化 LowRegretScore → 低风险有限探索 → 最多 6 家冻结候选池。
 - `TasteProfileService` — 90 天半衰期画像，只处理用户喜好与行为；不得写入或改变 RiskScore。
 - `RecentFoodHistoryService` — 只把显式反馈视作吃过，计算短期重复惩罚和多样性。
 
-推荐流程：定位 → 高德 POI → 硬过滤 → 百度批量检索 → Entity Resolution → 客观 Risk → 高风险过滤 → Taste/预算/距离/近期历史 → LowRegretScore → 有限探索 → 推荐一家 → 显式与隐式反馈更新画像。候选快照必须保存 Risk、Taste、分项、惩罚、解释和选择模式；reroll 不重新读取画像、Evidence 或 Risk。
+推荐流程：定位 → 高德 POI → 硬过滤 → 百度批量检索 → Entity Resolution → 客观 Risk → 高风险过滤 → Taste/预算/距离/近期历史 → LowRegretScore → 有限探索 → 推荐一家 → 显式与隐式反馈更新画像。候选快照必须保存 Risk、Taste、分项、惩罚、解释和选择模式；随机前选择快照与 seed 必须落库以支持重放；reroll 不重新读取画像、Evidence 或 Risk。
 
 ## V0.3.1 明确边界
 

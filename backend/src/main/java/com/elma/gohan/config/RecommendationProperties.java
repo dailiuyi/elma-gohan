@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "elma.recommendation")
 public class RecommendationProperties {
-    private String algorithmVersion = "recommendation-v0.4";
+    private String algorithmVersion = "recommendation-v0.4.1";
     private int topK = 10;
     private int poolSize = 6;
     private int walkingSpeedMetersPerMinute = 80;

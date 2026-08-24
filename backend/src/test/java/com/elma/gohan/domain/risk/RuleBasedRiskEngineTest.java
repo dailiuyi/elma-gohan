@@ -28,7 +28,7 @@ class RuleBasedRiskEngineTest {
         assertThat(result.factors().dataInsufficientRisk()).isEqualTo(25);
         assertThat(result.factors().crossPlatformConflictRisk()).isZero();
         assertThat(result.reasons()).anyMatch(reason -> reason.contains("百度暂未匹配"));
-        assertThat(result.algorithmVersion()).isEqualTo("risk-v0.3");
+        assertThat(result.algorithmVersion()).isEqualTo("risk-v0.3.1");
     }
 
     @Test
@@ -58,5 +58,50 @@ class RuleBasedRiskEngineTest {
         assertThat(result.riskScore()).isEqualTo(100);
         assertThat(result.confidence()).isBetween(0.0, 1.0);
         assertThat(result.factors().ratingRisk()).isEqualTo(100);
+    }
+
+    @Test
+    void staleReviewEvidenceCannotReduceStructuredConfidence() {
+        var restaurant = TestRestaurants.full("p1", 4.6, 300);
+        RiskResult structuredOnly = engine.evaluate(restaurant, RestaurantEvidence.empty());
+        Instant old = Instant.now().minus(400, ChronoUnit.DAYS);
+        List<ReviewEvidence> reviews = java.util.stream.IntStream.range(0, 30)
+                .mapToObj(i -> new ReviewEvidence("old" + i, "历史到店记录" + i, 4.5,
+                        old.minus(i, ChronoUnit.DAYS)))
+                .toList();
+
+        RiskResult stale = engine.evaluate(restaurant,
+                RestaurantEvidence.available("TEST", reviews, old));
+
+        assertThat(stale.confidence()).isEqualTo(structuredOnly.confidence());
+    }
+
+    @Test
+    void trendRiskGrowsContinuouslyWithSeverityAndSampleShrinkage() {
+        var restaurant = TestRestaurants.full("p1", 4.6, 300);
+        Instant now = Instant.now();
+        RiskResult mild = engine.evaluate(restaurant,
+                RestaurantEvidence.available("TEST", trendReviews(now, 4.6, 4.0), now));
+        RiskResult severe = engine.evaluate(restaurant,
+                RestaurantEvidence.available("TEST", trendReviews(now, 4.8, 2.0), now));
+
+        assertThat(mild.factors().trendRisk())
+                .isBetween(properties.getTrend().getStableRisk(),
+                        properties.getTrend().getDownRisk());
+        assertThat(severe.factors().trendRisk()).isGreaterThan(mild.factors().trendRisk());
+        assertThat(severe.factors().trendRisk()).isLessThan(properties.getTrend().getDownRisk());
+    }
+
+    private List<ReviewEvidence> trendReviews(Instant now, double historical, double recent) {
+        List<ReviewEvidence> reviews = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            reviews.add(new ReviewEvidence("h" + i, "历史到店体验" + i, historical,
+                    now.minus(40L + i, ChronoUnit.DAYS)));
+        }
+        for (int i = 0; i < 6; i++) {
+            reviews.add(new ReviewEvidence("r" + i, "近期到店体验" + i, recent,
+                    now.minus(i + 1L, ChronoUnit.DAYS)));
+        }
+        return reviews;
     }
 }

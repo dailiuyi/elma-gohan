@@ -26,7 +26,7 @@ public class RuleBasedRecentTrendDetector implements RecentTrendDetector {
     }
 
     @Override
-    public RecentTrend detect(List<ReviewEvidence> reviews) {
+    public TrendResult detect(List<ReviewEvidence> reviews) {
         Instant now = clock.instant();
         Instant recentStart = now.minus(properties.getRecentDays(), ChronoUnit.DAYS);
         Instant baselineStart = recentStart.minus(properties.getBaselineDays(), ChronoUnit.DAYS);
@@ -39,21 +39,34 @@ public class RuleBasedRecentTrendDetector implements RecentTrendDetector {
                 .toList();
         if (recent.size() < properties.getMinRecentReviews()
                 || baseline.size() < properties.getMinBaselineReviews()) {
-            return RecentTrend.UNKNOWN;
+            return TrendResult.unknown(recent.size(), baseline.size());
         }
         double recentAverage = average(recent);
         double baselineAverage = average(baseline);
         double recentNegative = negativeRatio(recent);
         double baselineNegative = negativeRatio(baseline);
-        if (baselineAverage - recentAverage >= properties.getRatingDelta()
-                || recentNegative - baselineNegative >= properties.getNegativeRatioDelta()) {
-            return RecentTrend.DOWN;
+        double downMargin = margin(baselineAverage - recentAverage, properties.getRatingDelta(),
+                recentNegative - baselineNegative, properties.getNegativeRatioDelta());
+        double upMargin = margin(recentAverage - baselineAverage, properties.getRatingDelta(),
+                baselineNegative - recentNegative, properties.getNegativeRatioDelta());
+        if (downMargin > 0) {
+            return new TrendResult(RecentTrend.DOWN, downMargin,
+                    recent.size(), baseline.size());
         }
-        if (recentAverage - baselineAverage >= properties.getRatingDelta()
-                || baselineNegative - recentNegative >= properties.getNegativeRatioDelta()) {
-            return RecentTrend.UP;
+        if (upMargin > 0) {
+            return new TrendResult(RecentTrend.UP, upMargin,
+                    recent.size(), baseline.size());
         }
-        return RecentTrend.STABLE;
+        return new TrendResult(RecentTrend.STABLE, 0.0, recent.size(), baseline.size());
+    }
+
+    private double margin(double ratingDelta, double ratingThreshold,
+                          double negativeDelta, double negativeThreshold) {
+        double ratingMargin = ratingThreshold > 0
+                ? ratingDelta / ratingThreshold - 1.0 : 0.0;
+        double negativeMargin = negativeThreshold > 0
+                ? negativeDelta / negativeThreshold - 1.0 : 0.0;
+        return Math.max(0.0, Math.min(1.0, Math.max(ratingMargin, negativeMargin)));
     }
 
     private List<ReviewEvidence> valid(List<ReviewEvidence> reviews) {

@@ -3,6 +3,7 @@ package com.elma.gohan.domain.recommendation;
 import com.elma.gohan.domain.restaurant.BusinessStatus;
 import com.elma.gohan.domain.restaurant.Restaurant;
 import com.elma.gohan.domain.restaurant.SearchCondition;
+import com.elma.gohan.domain.restaurant.TextNormalizer;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -43,13 +44,22 @@ public class HardFilter {
         return !hitsDislike(r, c.dislikes());
     }
 
-    /** V0.1 简单词匹配:关键词命中名称或品类 label 即剔除。 */
+    /**
+     * 用户明确填写的“不想吃”仍是硬排除。文本先做 NFKC 归一化；单字仅允许
+     * 精确命中品类，避免“面”误伤“面对面餐厅”之类的店名。
+     */
     private boolean hitsDislike(Restaurant r, List<String> dislikes) {
         if (dislikes == null || dislikes.isEmpty()) {
             return false;
         }
-        String name = r.name() == null ? "" : r.name();
-        String label = r.categoryLabel() == null ? "" : r.categoryLabel();
-        return dislikes.stream().anyMatch(d -> name.contains(d) || label.contains(d));
+        String name = TextNormalizer.normalize(r.name());
+        String label = TextNormalizer.normalize(r.categoryLabel());
+        String code = TextNormalizer.normalize(r.categoryCode());
+        return dislikes.stream()
+                .map(TextNormalizer::normalize)
+                .filter(d -> !d.isEmpty())
+                .anyMatch(d -> d.equals(label) || d.equals(code)
+                        || (d.codePointCount(0, d.length()) >= 2
+                        && (name.contains(d) || label.contains(d))));
     }
 }

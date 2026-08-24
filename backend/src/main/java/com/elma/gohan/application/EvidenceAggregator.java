@@ -74,6 +74,18 @@ public class EvidenceAggregator {
 
     public Map<String, EvidenceBundle> collect(List<Restaurant> restaurants, Location center,
                                                 int radiusMeters, double poolAveragePrice) {
+        Map<String, Double> priceBaselines = new HashMap<>();
+        if (poolAveragePrice > 0) {
+            for (Restaurant restaurant : restaurants) {
+                priceBaselines.put(PriceBaselineCalculator.groupKey(restaurant), poolAveragePrice);
+            }
+        }
+        return collect(restaurants, center, radiusMeters, priceBaselines);
+    }
+
+    public Map<String, EvidenceBundle> collect(List<Restaurant> restaurants, Location center,
+                                                int radiusMeters,
+                                                Map<String, Double> priceBaselines) {
         Instant observedAt = Instant.now();
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         Map<String, PlatformEvidence> amap = new LinkedHashMap<>();
@@ -178,7 +190,11 @@ public class EvidenceAggregator {
         Map<String, EvidenceBundle> bundles = new LinkedHashMap<>();
         for (Restaurant restaurant : restaurants) {
             RestaurantEvidence review = safeReviewEvidence(restaurant);
-            if (poolAveragePrice > 0) review = review.withPoolAveragePrice(poolAveragePrice);
+            Double categoryBaseline = priceBaselines == null ? null
+                    : priceBaselines.get(PriceBaselineCalculator.groupKey(restaurant));
+            if (categoryBaseline != null && categoryBaseline > 0) {
+                review = review.withPoolAveragePrice(categoryBaseline);
+            }
             EntityMatchResult match = matches.getOrDefault(restaurant.sourcePoiId(),
                     EntityMatchResult.noMatch());
             PlatformEvidence baidu = match.status() == EntityMatchStatus.UNAVAILABLE

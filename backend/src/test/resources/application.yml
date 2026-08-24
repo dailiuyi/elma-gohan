@@ -74,18 +74,22 @@ elma:
     location: classpath:evidence/test-evidence.json
     max-reviews-per-restaurant: 200
   risk:
-    algorithm-version: risk-v0.3
+    algorithm-version: risk-v0.3.1
     rating:
       fair-min: 4.0
       good-min: 4.2
       excellent-min: 4.5
     price-anomaly-ratio: 1.5
+    price-anomaly-min-pool-size: 5
+    trend-target-sample: 30
+    confidence:
+      freshness-window-days: 120
     levels:
       low-max-inclusive: 20
       medium-low-max-inclusive: 40
       medium-max-inclusive: 60
   recommendation:
-    algorithm-version: recommendation-v0.4
+    algorithm-version: recommendation-v0.4.1
     top-k: 10
     pool-size: 6
     walking-speed-meters-per-minute: 80

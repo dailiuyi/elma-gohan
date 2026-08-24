@@ -7,6 +7,16 @@ import java.util.List;
  */
 public record RecommendationResult(
         List<RestaurantCandidate> pool,
-        String algorithmVersion
+        String algorithmVersion,
+        long randomSeed,
+        List<SelectionCandidate> selectionSnapshot
 ) {
+    public RecommendationResult {
+        pool = pool == null ? List.of() : List.copyOf(pool);
+        selectionSnapshot = selectionSnapshot == null ? List.of() : List.copyOf(selectionSnapshot);
+    }
+
+    public RecommendationResult(List<RestaurantCandidate> pool, String algorithmVersion) {
+        this(pool, algorithmVersion, 0L, List.of());
+    }
 }

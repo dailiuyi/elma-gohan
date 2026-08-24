@@ -10,6 +10,9 @@ import com.elma.gohan.provider.evidence.PlatformEvidence;
 import com.elma.gohan.provider.evidence.CrossPlatformConsistency;
 import com.elma.gohan.provider.evidence.RestaurantEvidence;
 import com.elma.gohan.provider.evidence.ReviewEvidence;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -17,7 +20,7 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-/** risk-v0.3：多源评分、评论异常、数据不足和跨平台冲突的透明规则模型。 */
+/** risk-v0.3.1：多源评分、连续趋势、数据不足和跨平台冲突的透明规则模型。 */
 @Component
 public class RuleBasedRiskEngine implements RiskEngine {
 
@@ -25,16 +28,26 @@ public class RuleBasedRiskEngine implements RiskEngine {
     private final TemplateCommentDetector templateDetector;
     private final ReviewBurstDetector burstDetector;
     private final RecentTrendDetector trendDetector;
+    private final Clock clock;
 
     @Autowired
     public RuleBasedRiskEngine(RiskProperties properties,
                                TemplateCommentDetector templateDetector,
                                ReviewBurstDetector burstDetector,
                                RecentTrendDetector trendDetector) {
+        this(properties, templateDetector, burstDetector, trendDetector, Clock.systemUTC());
+    }
+
+    public RuleBasedRiskEngine(RiskProperties properties,
+                               TemplateCommentDetector templateDetector,
+                               ReviewBurstDetector burstDetector,
+                               RecentTrendDetector trendDetector,
+                               Clock clock) {
         this.properties = properties;
         this.templateDetector = templateDetector;
         this.burstDetector = burstDetector;
         this.trendDetector = trendDetector;
+        this.clock = clock;
     }
 
     /** 便于纯单元测试使用默认轻量分析器。 */
@@ -71,15 +84,10 @@ public class RuleBasedRiskEngine implements RiskEngine {
         BurstDetectionResult burst = burstDetector.detect(evidence.reviews());
         if (burst.burstRisk() > 0) reasons.add("评论在少数日期异常集中");
 
-        RecentTrend trend = trendDetector.detect(evidence.reviews());
-        int trendRisk = switch (trend) {
-            case UP -> properties.getTrend().getUpRisk();
-            case STABLE -> properties.getTrend().getStableRisk();
-            case DOWN -> properties.getTrend().getDownRisk();
-            case UNKNOWN -> properties.getTrend().getUnknownRisk();
-        };
-        if (trend == RecentTrend.DOWN) reasons.add("近期口碑较历史明显下降");
-        if (trend == RecentTrend.UP) reasons.add("近期口碑有所改善");
+        TrendResult trend = trendDetector.detect(evidence.reviews());
+        int trendRisk = trendRisk(trend);
+        if (trend.trend() == RecentTrend.DOWN) reasons.add("近期口碑较历史明显下降");
+        if (trend.trend() == RecentTrend.UP) reasons.add("近期口碑有所改善");
 
         int insufficientRisk = dataInsufficientRisk(bundle, reasons);
         int conflictRisk = bundle.consistency().crossPlatformConflictRisk();
@@ -90,7 +98,7 @@ public class RuleBasedRiskEngine implements RiskEngine {
         double confidence = confidence(bundle);
 
         if (evidence.status() == EvidenceStatus.AVAILABLE && templateRisk == 0
-                && burst.burstRisk() == 0 && trend != RecentTrend.DOWN) {
+                && burst.burstRisk() == 0 && trend.trend() != RecentTrend.DOWN) {
             reasons.add("未发现明显评论异常");
         }
         if (reasons.isEmpty()) reasons.add("现有数据未发现明显风险");
@@ -99,6 +107,21 @@ public class RuleBasedRiskEngine implements RiskEngine {
 
         return new RiskResult(score, levelOf(score), confidence, factors,
                 visibleReasons, properties.getAlgorithmVersion(), bundle.summary());
+    }
+
+    private int trendRisk(TrendResult trend) {
+        RiskProperties.Trend config = properties.getTrend();
+        int target = Math.max(1, properties.getTrendTargetSample());
+        double sampleRatio = Math.min(1.0,
+                Math.min(trend.recentCount(), trend.baselineCount()) / (double) target);
+        return switch (trend.trend()) {
+            case UP -> config.getUpRisk();
+            case STABLE -> config.getStableRisk();
+            case DOWN -> clamp((int) Math.round(config.getStableRisk()
+                    + (config.getDownRisk() - config.getStableRisk())
+                    * trend.severity() * sampleRatio));
+            case UNKNOWN -> config.getUnknownRisk();
+        };
     }
 
     private int ratingRisk(Double effectiveRating, Set<String> reasons) {
@@ -200,7 +223,8 @@ public class RuleBasedRiskEngine implements RiskEngine {
             double text = coverage(reviews, r -> r.text() != null && !r.text().isBlank());
             double rating = coverage(reviews, r -> r.rating() != null);
             double time = coverage(reviews, r -> r.createdAt() != null);
-            double reviewConfidence = volume * (text + rating + time) / 3.0;
+            double reviewConfidence = volume * (text + rating + time) / 3.0
+                    * freshness(evidence, config.getFreshnessWindowDays());
             value = Math.max(value, config.getPoiWeight() * amapCompleteness
                     + config.getEvidenceWeight() * reviewConfidence);
         }
@@ -227,6 +251,24 @@ public class RuleBasedRiskEngine implements RiskEngine {
         if (evidence.tasteRating() != null || evidence.serviceRating() != null
                 || evidence.environmentRating() != null) score += 0.15;
         return score;
+    }
+
+    /** 仅修正可选评论 Evidence 的增量可信度，不降低高德/百度结构化基础值。 */
+    private double freshness(RestaurantEvidence evidence, int windowDays) {
+        if (windowDays <= 0) return 1.0;
+        Instant now = clock.instant();
+        Instant windowStart = now.minus(windowDays, ChronoUnit.DAYS);
+        long freshReviews = evidence.reviews().stream()
+                .filter(review -> isFreshTimestamp(review.createdAt(), windowStart, now))
+                .count();
+        double reviewFreshness = (double) freshReviews / evidence.reviews().size();
+        double fetchFreshness = isFreshTimestamp(evidence.fetchedAt(), windowStart, now)
+                ? 1.0 : 0.0;
+        return reviewFreshness * fetchFreshness;
+    }
+
+    private boolean isFreshTimestamp(Instant value, Instant windowStart, Instant now) {
+        return value != null && !value.isBefore(windowStart) && !value.isAfter(now);
     }
 
     private Double consensusRating(EvidenceBundle bundle) {

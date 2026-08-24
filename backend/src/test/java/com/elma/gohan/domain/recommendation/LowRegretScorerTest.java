@@ -57,6 +57,7 @@ class LowRegretScorerTest {
         var reasons = scorer.reasons(TestRestaurants.full("a", 4.6, 100), risk(0), condition);
         assertThat(reasons).isNotEmpty();
         assertThat(reasons).hasSizeLessThanOrEqualTo(5);
+        assertThat(reasons).doesNotContain("预算合适");
     }
 
     @Test

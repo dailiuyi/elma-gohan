@@ -1,6 +1,6 @@
 # ELMA 今天吃什么 V0.4
 
-LowRegret V0.4 是 Java 模块化单体后端与 uni-app 微信小程序前端。`risk-v0.3` 继续判断餐厅的客观风险；`taste-v0.1` 从显式反馈、轻量行为与近期饮食历史形成匿名用户画像；`recommendation-v0.4` 将两者保持隔离后组合成个性化 LowRegretScore。接口事实源是 [`contracts/openapi.yaml`](contracts/openapi.yaml)，本次增量见 [`docs/V0.4-personalized-decision-loop.md`](docs/V0.4-personalized-decision-loop.md)。
+LowRegret V0.4 是 Java 模块化单体后端与 uni-app 微信小程序前端。`risk-v0.3.1` 继续只判断餐厅的客观风险；`taste-v0.1` 从显式反馈、轻量行为与近期饮食历史形成匿名用户画像；`recommendation-v0.4.1` 将两者保持隔离后组合成个性化 LowRegretScore，并保存可确定性重放的随机种子与候选快照。接口事实源是 [`contracts/openapi.yaml`](contracts/openapi.yaml)，当前规则见 [`docs/V0.4-personalized-decision-loop.md`](docs/V0.4-personalized-decision-loop.md)。
 
 ## 环境
 

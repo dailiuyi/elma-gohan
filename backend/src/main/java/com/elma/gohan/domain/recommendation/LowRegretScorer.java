@@ -63,7 +63,10 @@ public class LowRegretScorer {
                 distance, recentPenalty);
         List<String> reasons = new ArrayList<>();
         if (risk.riskLevel() == RiskLevel.LOW) reasons.add("客观风险较低");
-        if (currentBudget(r, condition) >= 60 && r.averagePrice() != null) reasons.add("预算合适");
+        boolean budgetSpecified = condition.minBudget() != null || condition.maxBudget() != null;
+        if (budgetSpecified && currentBudget(r, condition) >= 60 && r.averagePrice() != null) {
+            reasons.add("预算合适");
+        }
         if (currentDistance(r, condition) >= 60) reasons.add("距离符合当前选择");
         if (r.categoryConfidence() == CategoryConfidence.INFERRED) reasons.add("餐饮信息相对有限");
         for (String reason : personal) {

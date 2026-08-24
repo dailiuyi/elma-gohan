@@ -144,4 +144,15 @@ class HardFilterTest {
         assertThat(filter.filter(List.of(beefNoodle, dessert), condition(1000, null, "ANY", List.of("牛肉", "香菜"))))
                 .extracting(Restaurant::sourcePoiId).containsExactly("b");
     }
+
+    @Test
+    void dislikeUsesNfkcButSingleCharacterDoesNotMatchRestaurantNameSubstring() {
+        var restaurant = TestRestaurants.full("a", "面对面餐厅", 4.5, 300, 30);
+        assertThat(filter.filter(List.of(restaurant),
+                condition(1000, null, "ANY", List.of("面"))))
+                .extracting(Restaurant::sourcePoiId).containsExactly("a");
+        assertThat(filter.filter(List.of(restaurant),
+                condition(1000, null, "ANY", List.of("ＣＨＩＮＥＳＥ"))))
+                .isEmpty();
+    }
 }

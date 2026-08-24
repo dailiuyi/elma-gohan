@@ -2,11 +2,11 @@ package com.elma.gohan.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/** risk-v0.3 的全部阈值与权重，规则实现中不保留业务数字。 */
+/** risk-v0.3.1 的全部阈值与权重，规则实现中不保留业务数字。 */
 @ConfigurationProperties(prefix = "elma.risk")
 public class RiskProperties {
 
-    private String algorithmVersion = "risk-v0.3";
+    private String algorithmVersion = "risk-v0.3.1";
     private Rating rating = new Rating();
     private Template template = new Template();
     private Burst burst = new Burst();
@@ -17,6 +17,8 @@ public class RiskProperties {
     private CrossPlatform crossPlatform = new CrossPlatform();
     private Levels levels = new Levels();
     private double priceAnomalyRatio = 1.5;
+    private int priceAnomalyMinPoolSize = 5;
+    private int trendTargetSample = 30;
 
     public String getAlgorithmVersion() { return algorithmVersion; }
     public void setAlgorithmVersion(String v) { algorithmVersion = v; }
@@ -40,6 +42,10 @@ public class RiskProperties {
     public void setLevels(Levels v) { levels = v; }
     public double getPriceAnomalyRatio() { return priceAnomalyRatio; }
     public void setPriceAnomalyRatio(double v) { priceAnomalyRatio = v; }
+    public int getPriceAnomalyMinPoolSize() { return priceAnomalyMinPoolSize; }
+    public void setPriceAnomalyMinPoolSize(int v) { priceAnomalyMinPoolSize = v; }
+    public int getTrendTargetSample() { return trendTargetSample; }
+    public void setTrendTargetSample(int v) { trendTargetSample = v; }
 
     public static class Rating {
         private double fairMin = 4.0;
@@ -206,6 +212,7 @@ public class RiskProperties {
         private double matchWeight = 0.30;
         private double singleSourceWeight = 0.50;
         private double singleSourceCap = 0.50;
+        private int freshnessWindowDays = 120;
         public double getPoiWeight() { return poiWeight; }
         public void setPoiWeight(double v) { poiWeight = v; }
         public double getEvidenceWeight() { return evidenceWeight; }
@@ -222,6 +229,8 @@ public class RiskProperties {
         public void setSingleSourceWeight(double v) { singleSourceWeight = v; }
         public double getSingleSourceCap() { return singleSourceCap; }
         public void setSingleSourceCap(double v) { singleSourceCap = v; }
+        public int getFreshnessWindowDays() { return freshnessWindowDays; }
+        public void setFreshnessWindowDays(int v) { freshnessWindowDays = v; }
     }
 
     public static class Weights {

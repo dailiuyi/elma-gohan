@@ -19,9 +19,15 @@ import org.junit.jupiter.api.Test;
 
 class DefaultRecommendationEngineTest {
 
-    private final RecommendationProperties props = new RecommendationProperties();
+    private final RecommendationProperties props = recommendationProperties();
     private final DefaultRecommendationEngine engine = new DefaultRecommendationEngine(
             new HardFilter(), new LowRegretScorer(props), props);
+
+    private static RecommendationProperties recommendationProperties() {
+        RecommendationProperties properties = new RecommendationProperties();
+        properties.setExplorationRate(0.0);
+        return properties;
+    }
 
     private Map<String, RiskResult> risks(List<Restaurant> restaurants) {
         return restaurants.stream().collect(Collectors.toMap(
@@ -40,7 +46,8 @@ class DefaultRecommendationEngineTest {
         assertThat(result.pool()).hasSize(6);
         assertThat(result.pool()).extracting(c -> c.restaurant().sourcePoiId())
                 .doesNotHaveDuplicates();
-        assertThat(result.algorithmVersion()).isEqualTo("recommendation-v0.4");
+        assertThat(result.algorithmVersion()).isEqualTo("recommendation-v0.4.1");
+        assertThat(result.randomSeed()).isNotZero();
     }
 
     @Test
@@ -106,7 +113,7 @@ class DefaultRecommendationEngineTest {
         RecommendationProperties explorationProps = new RecommendationProperties();
         explorationProps.setExplorationRate(1.0);
         DefaultRecommendationEngine explorationEngine = new DefaultRecommendationEngine(
-                new HardFilter(), new LowRegretScorer(explorationProps), explorationProps, () -> 0.0);
+                new HardFilter(), new LowRegretScorer(explorationProps), explorationProps);
         Restaurant familiar = categoryRestaurant("c", "CHINESE", 4.9);
         Restaurant novel = categoryRestaurant("f", "FOREIGN", 4.2);
         LocalDateTime now = LocalDateTime.of(2026, 8, 21, 12, 0);
@@ -117,12 +124,49 @@ class DefaultRecommendationEngineTest {
                 Map.of(), history);
 
         var result = explorationEngine.recommend(List.of(familiar, novel),
-                risks(List.of(familiar, novel)), preference);
+                risks(List.of(familiar, novel)), preference, 42L);
 
         assertThat(result.pool().get(0).restaurant().sourcePoiId()).isEqualTo("f");
         assertThat(result.pool().get(0).personalization().selectionMode())
                 .isEqualTo(SelectionMode.EXPLORATION);
         assertThat(result.pool().get(0).reasons()).contains("低风险的新类型尝试");
+    }
+
+    @Test
+    void sameSeedAndSnapshotReplayTheExactPool() {
+        List<Restaurant> restaurants = java.util.stream.IntStream.rangeClosed(1, 8)
+                .mapToObj(i -> categoryRestaurant("p" + i,
+                        i % 2 == 0 ? "CHINESE" : "SNACK", 4.0 + i * 0.05))
+                .toList();
+
+        var result = engine.recommend(restaurants, risks(restaurants),
+                new UserPreference(new SearchCondition(1000, null, "ANY", List.of())), 987654L);
+        var replayed = engine.replaySelection(result.selectionSnapshot(),
+                result.pool().size(), result.randomSeed());
+
+        assertThat(replayed).extracting(SelectionCandidate::candidateKey)
+                .containsExactlyElementsOf(result.pool().stream()
+                        .map(candidate -> candidate.restaurant().source() + "\u0000"
+                                + candidate.restaurant().sourcePoiId())
+                        .toList());
+    }
+
+    @Test
+    void tieOrderingIsStableAcrossInputOrder() {
+        Restaurant a = categoryRestaurant("a", "CHINESE", 4.5);
+        Restaurant b = categoryRestaurant("b", "CHINESE", 4.5);
+        UserPreference preference = new UserPreference(
+                new SearchCondition(1000, null, "ANY", List.of()));
+
+        var first = engine.recommend(List.of(a, b), risks(List.of(a, b)), preference, 77L);
+        var reversed = engine.recommend(List.of(b, a), risks(List.of(a, b)), preference, 77L);
+
+        assertThat(first.selectionSnapshot()).extracting(SelectionCandidate::candidateKey)
+                .containsExactlyElementsOf(reversed.selectionSnapshot().stream()
+                        .map(SelectionCandidate::candidateKey).toList());
+        assertThat(first.pool()).extracting(candidate -> candidate.restaurant().sourcePoiId())
+                .containsExactlyElementsOf(reversed.pool().stream()
+                        .map(candidate -> candidate.restaurant().sourcePoiId()).toList());
     }
 
     private Restaurant categoryRestaurant(String id, String categoryCode, double rating) {

@@ -345,7 +345,7 @@ components:
           riskLevel: LOW
           confidence: 0.82
           reasons: [评分稳定, 店铺信息完整, 价格位于正常范围]
-          algorithmVersion: risk-v0.3
+          algorithmVersion: risk-v0.3.1
         evidenceSummary:
           matchStatus: MATCHED
           matchConfidence: 0.91
@@ -483,7 +483,7 @@ components:
             type: string
         algorithmVersion:
           type: string
-          example: risk-v0.3
+          example: risk-v0.3.1
 
     EvidenceSummary:
       type: object

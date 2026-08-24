@@ -177,7 +177,7 @@ class RecommendationApiTest {
         assertThat(risk.get("riskLevel").asText()).isIn("LOW", "MEDIUM_LOW", "MEDIUM", "HIGH");
         assertThat(risk.get("confidence").asDouble()).isBetween(0.0, 1.0);
         assertThat(risk.get("reasons").size()).isGreaterThanOrEqualTo(1);
-        assertThat(risk.get("algorithmVersion").asText()).isEqualTo("risk-v0.3");
+        assertThat(risk.get("algorithmVersion").asText()).isEqualTo("risk-v0.3.1");
         JsonNode evidenceSummary = body.get("evidenceSummary");
         assertThat(evidenceSummary).isNotNull();
         assertThat(evidenceSummary.get("matchStatus").asText()).isEqualTo("UNAVAILABLE");
@@ -193,9 +193,11 @@ class RecommendationApiTest {
         Integer logs = jdbc.queryForObject(
                 "SELECT count(*) FROM recommendation_log WHERE request_condition_json IS NOT NULL "
                         + "AND recommended_restaurant_id = current_restaurant_id "
-                        + "AND risk_algorithm_version = 'risk-v0.3' "
-                        + "AND recommendation_algorithm_version = 'recommendation-v0.4' "
-                        + "AND taste_algorithm_version = 'taste-v0.1'", Integer.class);
+                        + "AND risk_algorithm_version = 'risk-v0.3.1' "
+                        + "AND recommendation_algorithm_version = 'recommendation-v0.4.1' "
+                        + "AND taste_algorithm_version = 'taste-v0.1' "
+                        + "AND random_seed <> 0 "
+                        + "AND jsonb_array_length(selection_snapshot_json) > 0", Integer.class);
         assertThat(logs).isEqualTo(1);
         String requestSnapshot = jdbc.queryForObject(
                 "SELECT request_condition_json::text FROM recommendation_log WHERE id = ?::uuid",
@@ -486,7 +488,7 @@ class RecommendationApiTest {
         assertThat(firstResponse.getStatusCode().value()).isEqualTo(200);
         JsonNode first = JSON.readTree(firstResponse.getBody());
         assertThat(first.get("restaurantId").asText()).isEqualTo(restaurantId);
-        assertThat(first.get("baseRisk").get("algorithmVersion").asText()).isEqualTo("risk-v0.3");
+        assertThat(first.get("baseRisk").get("algorithmVersion").asText()).isEqualTo("risk-v0.3.1");
         assertThat(first.get("deepRisk").get("algorithmVersion").asText())
                 .isEqualTo("deep-risk-v0.1");
         assertThat(first.get("sourceCoverage")).hasSize(5);
@@ -537,7 +539,7 @@ class RecommendationApiTest {
                 .isGreaterThan(0);
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM v_recommendation_metrics "
-                        + "WHERE recommendation_algorithm_version = 'recommendation-v0.4' "
+                        + "WHERE recommendation_algorithm_version = 'recommendation-v0.4.1' "
                         + "AND taste_algorithm_version = 'taste-v0.1'",
                 Integer.class)).isGreaterThan(0);
     }

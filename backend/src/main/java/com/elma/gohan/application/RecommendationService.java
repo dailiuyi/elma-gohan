@@ -1,6 +1,7 @@
 package com.elma.gohan.application;
 
 import com.elma.gohan.config.RecommendationProperties;
+import com.elma.gohan.config.RiskProperties;
 import com.elma.gohan.controller.api.CreateRecommendationRequest;
 import com.elma.gohan.controller.api.FeedbackResponse;
 import com.elma.gohan.controller.api.RecommendationResponse;
@@ -47,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
@@ -73,6 +75,7 @@ public class RecommendationService {
     private final UserFoodHistoryService foodHistoryService;
     private final BehaviorService behaviorService;
     private final RecommendationProperties recommendationProperties;
+    private final RiskProperties riskProperties;
     private final RestaurantRepository restaurantRepository;
     private final RiskResultRepository riskResultRepository;
     private final RecommendationLogRepository logRepository;
@@ -87,6 +90,7 @@ public class RecommendationService {
                                  UserFoodHistoryService foodHistoryService,
                                  BehaviorService behaviorService,
                                  RecommendationProperties recommendationProperties,
+                                 RiskProperties riskProperties,
                                  RestaurantRepository restaurantRepository,
                                  RiskResultRepository riskResultRepository,
                                  RecommendationLogRepository logRepository,
@@ -103,6 +107,7 @@ public class RecommendationService {
         this.foodHistoryService = foodHistoryService;
         this.behaviorService = behaviorService;
         this.recommendationProperties = recommendationProperties;
+        this.riskProperties = riskProperties;
         this.restaurantRepository = restaurantRepository;
         this.riskResultRepository = riskResultRepository;
         this.logRepository = logRepository;
@@ -142,21 +147,23 @@ public class RecommendationService {
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
 
-        double poolAvgPrice = eligible.stream()
-                .filter(r -> r.averagePrice() != null)
-                .mapToInt(Restaurant::averagePrice)
-                .average().orElse(0);
+        Map<String, Double> priceBaselines = PriceBaselineCalculator.byCategoryGroup(
+                eligible, riskProperties.getPriceAnomalyMinPoolSize());
         Map<String, EvidenceBundle> evidence = evidenceAggregator.collect(eligible,
-                new Location(request.latitude(), request.longitude()), radius, poolAvgPrice);
+                new Location(request.latitude(), request.longitude()), radius, priceBaselines);
         Map<String, RiskResult> risks = riskEngine.evaluateAllBundles(eligible, evidence);
 
         LocalDateTime now = LocalDateTime.now(ZONE);
         var tasteProfile = tasteProfileService.load(anonymousUserId);
         var flavorFeatures = flavorFeatureService.loadForCandidates(anonymousUserId, eligible);
         var foodHistory = foodHistoryService.load(anonymousUserId, now);
+        long randomSeed;
+        do {
+            randomSeed = ThreadLocalRandom.current().nextLong();
+        } while (randomSeed == 0L);
         RecommendationResult result = recommendationEngine.recommend(
                 eligible, risks, new com.elma.gohan.domain.recommendation.UserPreference(
-                        condition, tasteProfile, flavorFeatures, foodHistory));
+                        condition, tasteProfile, flavorFeatures, foodHistory), randomSeed);
         if (result.pool().isEmpty()) {
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
@@ -194,7 +201,8 @@ public class RecommendationService {
                 first.risk().riskScore(), first.lowRegretScore(),
                 first.risk().algorithmVersion(), result.algorithmVersion(),
                 first.personalization().algorithmVersion(),
-                first.personalization().selectionMode().name(), now));
+                first.personalization().selectionMode().name(), result.randomSeed(),
+                toJson(result.selectionSnapshot()), now));
 
         RecommendationCandidateEntity firstEntity = null;
         for (int i = 0; i < persisted.size(); i++) {
