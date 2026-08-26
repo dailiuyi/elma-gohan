@@ -39,6 +39,8 @@ import com.elma.gohan.infrastructure.persistence.UserFeedbackRepository;
 import com.elma.gohan.provider.evidence.EvidenceBundle;
 import com.elma.gohan.provider.evidence.EvidenceSummary;
 import com.elma.gohan.provider.poi.PoiProvider;
+import com.elma.gohan.provider.poi.PoiSearchDiagnostics;
+import com.elma.gohan.provider.poi.PoiSearchResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -117,6 +119,7 @@ public class RecommendationService {
     }
 
     @Transactional
+    /** 创建并冻结一个最多六家餐厅的推荐会话。 */
     public RecommendationResponse create(UUID anonymousUserId, CreateRecommendationRequest request) {
         if (request.radius() != null && !ALLOWED_RADIUS.contains(request.radius())) {
             throw new ValidationFailedException("radius", "只能是 500、1000、2000 或 3000");
@@ -138,12 +141,24 @@ public class RecommendationService {
                 request.category() == null ? SearchCondition.CATEGORY_MEAL : request.category(),
                 request.dislikes() == null ? List.of() : request.dislikes());
 
-        List<Restaurant> pois = poiProvider.nearby(
+        PoiSearchResult recall = poiProvider.nearby(
                 new Location(request.latitude(), request.longitude()), condition);
+        List<Restaurant> pois = recall.restaurants();
         List<Restaurant> eligible = hardFilter.filter(pois, condition);
-        log.info("POI 推荐过滤汇总: mappedCount={}, hardEligibleCount={}, requestedCategory={}",
-                pois.size(), eligible.size(), condition.category());
+        PoiSearchDiagnostics diagnostics = recall.diagnostics();
+        log.info("POI 推荐过滤汇总: providerTotalCount={}, fetchedCount={}, pagesFetched={}, "
+                        + "deduplicatedCount={}, mappedCount={}, hardEligibleCount={}, truncated={}, "
+                        + "lastFetchedDistanceMeters={}, requestedCategory={}, queryTypes={}",
+                diagnostics.providerTotalCount(), diagnostics.fetchedCount(),
+                diagnostics.pagesFetched(), diagnostics.deduplicatedCount(),
+                diagnostics.mappedCount(), eligible.size(), diagnostics.truncated(),
+                diagnostics.lastFetchedDistanceMeters(), condition.category(),
+                diagnostics.queryTypes());
         if (eligible.isEmpty()) {
+            if (diagnostics.truncated()) {
+                throw new PoiSearchIncompleteException(
+                        "附近餐厅较多，本次尚未完成全部检索，请缩小距离或选择具体品类后重试");
+            }
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
 
@@ -231,6 +246,7 @@ public class RecommendationService {
     }
 
     @Transactional
+    /** 从冻结候选池切换到下一家，不重新计算风险和画像。 */
     public RecommendationResponse reroll(UUID anonymousUserId, UUID recommendationId) {
         RecommendationLogEntity log = findLog(anonymousUserId, recommendationId);
         List<RecommendationCandidateEntity> candidates =
@@ -267,6 +283,7 @@ public class RecommendationService {
     }
 
     @Transactional
+    /** 保存显式反馈，并更新下一次推荐使用的画像与饮食历史。 */
     public FeedbackResponse submitFeedback(UUID anonymousUserId, UUID recommendationId,
                                            SubmitFeedbackRequest request) {
         RecommendationLogEntity log = findLog(anonymousUserId, recommendationId);

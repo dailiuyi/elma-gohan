@@ -3,6 +3,7 @@ import type { ErrorResponse, RequestFailureKind } from '@/types/api'
 const BACKEND_ERROR_CODES = new Set([
   'VALIDATION_FAILED',
   'NO_RECOMMENDATION_AVAILABLE',
+  'POI_SEARCH_INCOMPLETE',
   'RECOMMENDATION_NOT_FOUND',
   'POI_PROVIDER_UNAVAILABLE',
 ])

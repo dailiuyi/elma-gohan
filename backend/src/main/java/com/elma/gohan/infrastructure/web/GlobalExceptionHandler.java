@@ -1,6 +1,7 @@
 package com.elma.gohan.infrastructure.web;
 
 import com.elma.gohan.application.NoRecommendationAvailableException;
+import com.elma.gohan.application.PoiSearchIncompleteException;
 import com.elma.gohan.application.RecommendationNotFoundException;
 import com.elma.gohan.application.ValidationFailedException;
 import com.elma.gohan.application.FeedbackAlreadyRecordedException;
@@ -68,6 +69,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoRecommendationAvailableException.class)
     public ResponseEntity<ErrorResponse> handleNoRecommendation(NoRecommendationAvailableException e) {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, "NO_RECOMMENDATION_AVAILABLE",
+                e.getMessage(), null);
+    }
+
+    @ExceptionHandler(PoiSearchIncompleteException.class)
+    public ResponseEntity<ErrorResponse> handlePoiSearchIncomplete(PoiSearchIncompleteException e) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, "POI_SEARCH_INCOMPLETE",
                 e.getMessage(), null);
     }
 

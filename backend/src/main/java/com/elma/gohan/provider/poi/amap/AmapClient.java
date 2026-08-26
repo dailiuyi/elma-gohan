@@ -1,12 +1,15 @@
 package com.elma.gohan.provider.poi.amap;
 
 import com.elma.gohan.config.AmapProperties;
+import com.elma.gohan.domain.restaurant.SearchCondition;
 import com.elma.gohan.provider.poi.PoiProviderException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -42,36 +45,84 @@ public class AmapClient {
                 .build();
     }
 
-    /** 返回原始 poi 节点列表(未转换);分页最多 maxPages。 */
-    public List<JsonNode> searchAround(double latitude, double longitude, int radiusMeters) {
+    /**
+     * 按用户品类召回，并在距离排序下穿过环带下限；达到候选目标、结果耗尽或 maxPages 后停止。
+     */
+    public AmapSearchResult searchAround(double latitude, double longitude,
+                                         SearchCondition condition) {
         if (props.getKey() == null || props.getKey().isBlank()) {
             throw new PoiProviderException("AMAP key 未配置");
         }
+        String queryTypes = props.searchTypesFor(condition.category());
+        String queryKeyword = props.searchKeywordFor(condition.category());
         List<JsonNode> pois = new ArrayList<>();
+        Set<String> seenPoiIds = new HashSet<>();
+        Integer providerTotalCount = null;
+        Integer lastFetchedDistance = null;
+        int fetchedCount = 0;
+        int pagesFetched = 0;
+        int inBandCandidateCount = 0;
+        boolean exhausted = false;
         try {
             for (int page = 1; page <= props.getMaxPages(); page++) {
                 final int currentPage = page;
                 JsonNode body = restClient.get()
-                        .uri(uriBuilder -> uriBuilder.path("/v3/place/around")
-                                .queryParam("key", props.getKey())
-                                .queryParam("location", longitude + "," + latitude)
-                                .queryParam("radius", radiusMeters)
-                                .queryParam("types", props.getTypes())
-                                .queryParam("extensions", "all")
-                                .queryParam("offset", props.getPageSize())
-                                .queryParam("page", currentPage)
-                                .build())
+                        .uri(uriBuilder -> {
+                            var builder = uriBuilder.path("/v3/place/around")
+                                    .queryParam("key", props.getKey())
+                                    .queryParam("location", longitude + "," + latitude)
+                                    .queryParam("radius", condition.radius())
+                                    .queryParam("types", queryTypes)
+                                    .queryParam("sortrule", "distance")
+                                    .queryParam("extensions", "all")
+                                    .queryParam("offset", props.getPageSize())
+                                    .queryParam("page", currentPage);
+                            if (queryKeyword != null) {
+                                builder.queryParam("keywords", queryKeyword);
+                            }
+                            return builder.build();
+                        })
                         .retrieve()
                         .body(JsonNode.class);
                 if (body == null || !"1".equals(body.path("status").asText())) {
                     throw new PoiProviderException("高德周边搜索返回失败状态");
                 }
+                pagesFetched++;
+                Integer pageTotalCount = parseNullableInt(body.path("count").asText(null));
+                if (pageTotalCount != null) {
+                    providerTotalCount = providerTotalCount == null
+                            ? pageTotalCount : Math.max(providerTotalCount, pageTotalCount);
+                }
                 JsonNode pagePois = body.path("pois");
                 if (!pagePois.isArray()) {
+                    exhausted = true;
                     break;
                 }
-                pagePois.forEach(pois::add);
-                if (pagePois.size() < props.getPageSize()) {
+                for (JsonNode poi : pagePois) {
+                    fetchedCount++;
+                    Integer distance = parseNullableInt(poi.path("distance").asText(null));
+                    if (distance != null) {
+                        lastFetchedDistance = distance;
+                    }
+                    String poiId = poi.path("id").asText("").trim();
+                    if (!poiId.isBlank() && !seenPoiIds.add(poiId)) {
+                        continue;
+                    }
+                    pois.add(poi);
+                    if (distance != null && (condition.minDistance() == null
+                            || distance > condition.minDistance())) {
+                        inBandCandidateCount++;
+                    }
+                }
+                if (pagePois.size() < props.getPageSize()
+                        || (providerTotalCount != null && fetchedCount >= providerTotalCount)) {
+                    exhausted = true;
+                    break;
+                }
+                boolean crossedLowerBound = condition.minDistance() == null
+                        || (lastFetchedDistance != null
+                        && lastFetchedDistance > condition.minDistance());
+                if (crossedLowerBound && inBandCandidateCount >= props.getTargetCandidates()) {
                     break;
                 }
             }
@@ -79,7 +130,19 @@ public class AmapClient {
             log.warn("高德周边搜索请求失败: {}", e.getMessage());
             throw new PoiProviderException("高德周边搜索请求失败", e);
         }
-        return pois;
+        boolean truncated = !exhausted
+                && (providerTotalCount == null || fetchedCount < providerTotalCount);
+        return new AmapSearchResult(pois, providerTotalCount, fetchedCount, pagesFetched,
+                truncated, lastFetchedDistance, queryTypes, queryKeyword);
+    }
+
+    private static Integer parseNullableInt(String value) {
+        if (value == null || value.isBlank() || "[]".equals(value)) return null;
+        try {
+            return (int) Math.round(Double.parseDouble(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public ObjectMapper getObjectMapper() {

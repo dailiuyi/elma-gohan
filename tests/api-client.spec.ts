@@ -57,6 +57,35 @@ describe('api client', () => {
     expect(getUserFacingError(error)).toBe('请求参数不合法')
   })
 
+  it('recognizes an incomplete POI search as a backend error with its own message', async () => {
+    vi.stubGlobal('uni', {
+      getStorageSync: vi.fn(() => USER_ID),
+      setStorageSync: vi.fn(),
+      request: vi.fn((options: UniApp.RequestOptions) => {
+        options.success?.({
+          statusCode: 422,
+          header: {},
+          cookies: [],
+          data: {
+            code: 'POI_SEARCH_INCOMPLETE',
+            message: '附近餐厅较多，本次尚未完成全部检索，请缩小距离或选择具体品类后重试',
+            traceId: 'trace-recall',
+          },
+        })
+      }),
+    })
+
+    const error = await apiRequest({ path: '/recommendations' }).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ApiError)
+    if (!(error instanceof ApiError)) throw new Error('Expected ApiError')
+    expect(error.response).toMatchObject({
+      code: 'POI_SEARCH_INCOMPLETE',
+      traceId: 'trace-recall',
+    })
+    expect(getUserFacingError(error)).toContain('尚未完成全部检索')
+  })
+
   it('normalizes request failures as network errors', async () => {
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => USER_ID),

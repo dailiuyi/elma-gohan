@@ -31,6 +31,9 @@ public class AmapResponseMapper {
     }
 
     public Restaurant toRestaurant(JsonNode poi) {
+        if (!hasValidGeoFields(poi)) {
+            throw new IllegalArgumentException("POI 缺少合法的坐标或距离");
+        }
         CategoryConfidence categoryConfidence = classifyRestaurant(poi);
         if (categoryConfidence == null) {
             throw new IllegalArgumentException("POI 不属于可确认的餐饮范围");
@@ -67,9 +70,14 @@ public class AmapResponseMapper {
         Map<CategoryConfidence, Integer> confidenceCounts = new EnumMap<>(CategoryConfidence.class);
         int invalidIdentity = 0;
         int invalidRequiredFields = 0;
+        int invalidGeoFields = 0;
         for (JsonNode poi : pois) {
             if (poi.path("id").asText("").isBlank() || poi.path("name").asText("").isBlank()) {
                 invalidRequiredFields++;
+                continue;
+            }
+            if (!hasValidGeoFields(poi)) {
+                invalidGeoFields++;
                 continue;
             }
             CategoryConfidence confidence = classifyRestaurant(poi);
@@ -82,12 +90,24 @@ public class AmapResponseMapper {
             confidenceCounts.merge(confidence, 1, Integer::sum);
         }
         log.info("高德 POI 分类汇总: rawCount={}, acceptedCount={}, nonRestaurantDropped={}, "
-                        + "invalidRequiredFields={}, verifiedCount={}, supportedCount={}, inferredCount={}",
-                pois.size(), result.size(), invalidIdentity, invalidRequiredFields,
+                        + "invalidRequiredFields={}, invalidGeoFields={}, verifiedCount={}, "
+                        + "supportedCount={}, inferredCount={}",
+                pois.size(), result.size(), invalidIdentity, invalidRequiredFields, invalidGeoFields,
                 confidenceCounts.getOrDefault(CategoryConfidence.VERIFIED, 0),
                 confidenceCounts.getOrDefault(CategoryConfidence.SUPPORTED, 0),
                 confidenceCounts.getOrDefault(CategoryConfidence.INFERRED, 0));
         return result;
+    }
+
+    private boolean hasValidGeoFields(JsonNode poi) {
+        String[] lngLat = poi.path("location").asText("").split(",");
+        if (lngLat.length != 2) return false;
+        Double longitude = parseNullableDouble(lngLat[0]);
+        Double latitude = parseNullableDouble(lngLat[1]);
+        Integer distance = parseNullableInt(poi.path("distance").asText(null));
+        return longitude != null && longitude >= -180 && longitude <= 180
+                && latitude != null && latitude >= -90 && latitude <= 90
+                && distance != null && distance >= 0;
     }
 
     private CategoryConfidence classifyRestaurant(JsonNode poi) {

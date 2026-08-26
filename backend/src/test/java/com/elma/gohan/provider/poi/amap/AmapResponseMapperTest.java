@@ -4,10 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.elma.gohan.config.AmapProperties;
 import com.elma.gohan.domain.restaurant.CategoryConfidence;
+import com.elma.gohan.domain.restaurant.CategoryFilter;
 import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.env.StandardEnvironment;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -172,5 +179,58 @@ class AmapResponseMapperTest {
                 """);
 
         assertThat(mapper.toRestaurants(List.of(clothing, mall, sparseClothing))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("生产分类配置正确映射 050400、050800 和 050900")
+    void productionCategoryMappingsMatchOfficialCodes() throws Exception {
+        AmapProperties productionProps = loadProductionProperties();
+        AmapResponseMapper productionMapper = new AmapResponseMapper(productionProps);
+
+        var leisure = productionMapper.toRestaurant(objectMapper.readTree(poiFor("050400")));
+        var bakery = productionMapper.toRestaurant(objectMapper.readTree(poiFor("050800")));
+        var dessert = productionMapper.toRestaurant(objectMapper.readTree(poiFor("050900")));
+
+        assertThat(leisure.categoryCode()).isEqualTo("LEISURE_DINING");
+        assertThat(CategoryFilter.MEAL.matches(leisure.categoryCode())).isTrue();
+        assertThat(bakery.categoryCode()).isEqualTo("DESSERT");
+        assertThat(dessert.categoryCode()).isEqualTo("DESSERT");
+        assertThat(CategoryFilter.DESSERT_DRINK.matches(bakery.categoryCode())).isTrue();
+        assertThat(CategoryFilter.DESSERT_DRINK.matches(dessert.categoryCode())).isTrue();
+        assertThat(CategoryFilter.MEAL.matches(dessert.categoryCode())).isFalse();
+    }
+
+    @Test
+    @DisplayName("异常坐标或距离不会被伪装成零米候选")
+    void dropsMalformedGeoFields() throws Exception {
+        var malformedDistance = objectMapper.readTree("""
+                {"id":"G1","name":"距离异常店","typecode":"050100",
+                 "location":"112.9,28.2","distance":"unknown"}
+                """);
+        var malformedLocation = objectMapper.readTree("""
+                {"id":"G2","name":"坐标异常店","typecode":"050100",
+                 "location":"not-a-location","distance":"100"}
+                """);
+
+        assertThat(mapper.toRestaurants(List.of(malformedDistance, malformedLocation))).isEmpty();
+    }
+
+    private static AmapProperties loadProductionProperties() throws Exception {
+        String basedir = System.getProperty("basedir", System.getProperty("user.dir"));
+        Resource resource = new FileSystemResource(
+                basedir + "/src/main/resources/application.yml");
+        var environment = new StandardEnvironment();
+        var loader = new YamlPropertySourceLoader();
+        loader.load("production-application", resource)
+                .forEach(environment.getPropertySources()::addLast);
+        return Binder.get(environment)
+                .bind("elma.amap", Bindable.of(AmapProperties.class))
+                .get();
+    }
+
+    private static String poiFor(String typecode) {
+        return "{\"id\":\"" + typecode + "\",\"name\":\"分类测试店\","
+                + "\"type\":\"餐饮服务;分类测试\",\"typecode\":\"" + typecode + "\","
+                + "\"location\":\"112.9,28.2\",\"distance\":\"100\"}";
     }
 }

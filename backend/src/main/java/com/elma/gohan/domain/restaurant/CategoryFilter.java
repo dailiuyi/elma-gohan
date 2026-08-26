@@ -8,7 +8,7 @@ import java.util.Set;
  */
 public enum CategoryFilter {
     MEAL(Set.of("CHINESE", "HOT_POT", "BARBECUE", "NOODLES", "WESTERN",
-            "JAPANESE_KOREAN", "FOREIGN", "FOOD_COURT")),
+            "JAPANESE_KOREAN", "FOREIGN", "FOOD_COURT", "LEISURE_DINING")),
     CHINESE(Set.of("CHINESE", "HOT_POT", "BARBECUE", "NOODLES")),
     HOT_POT(Set.of("HOT_POT")),
     BARBECUE(Set.of("BARBECUE")),

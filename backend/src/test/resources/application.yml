@@ -28,12 +28,32 @@ elma:
     base-url: http://localhost:1
     types: "050000"
     page-size: 25
-    max-pages: 2
+    max-pages: 8
+    target-candidates: 50
     connect-timeout-ms: 3000
     read-timeout-ms: 5000
+    search-types-by-category:
+      MEAL: "050100|050200|050300|050400"
+      CHINESE: "050100"
+      HOT_POT: "050117"
+      BARBECUE: "050100"
+      NOODLES: "050100"
+      FAST_FOOD: "050300"
+      WESTERN: "050201"
+      JAPANESE_KOREAN: "050202|050203"
+      DESSERT_DRINK: "050500|050600|050700|050800|050900"
+      ANY: "050000"
+    search-keywords-by-category:
+      BARBECUE: 烧烤
     category-map:
       "050100": { code: CHINESE, label: 中餐厅 }
       "050300": { code: SNACK, label: 小吃快餐 }
+      "050400": { code: LEISURE_DINING, label: 休闲餐饮场所 }
+      "050500": { code: COFFEE, label: 咖啡厅 }
+      "050600": { code: TEA, label: 茶座 }
+      "050700": { code: DRINKS, label: 冷饮店 }
+      "050800": { code: DESSERT, label: 糕饼店 }
+      "050900": { code: DESSERT, label: 甜品店 }
     category-rules:
       - code: HOT_POT
         label: 火锅

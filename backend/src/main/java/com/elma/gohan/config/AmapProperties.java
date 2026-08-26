@@ -1,6 +1,7 @@
 package com.elma.gohan.config;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -15,9 +16,15 @@ public class AmapProperties {
     /** 高德分类码:餐饮服务大类。 */
     private String types = "050000";
     private int pageSize = 25;
-    private int maxPages = 2;
+    private int maxPages = 8;
+    /** 穿过距离下限后至少保留的原始候选数，兼顾预算和不想吃等后置过滤。 */
+    private int targetCandidates = 50;
     private int connectTimeoutMs = 3000;
     private int readTimeoutMs = 5000;
+    /** 用户品类 -> 高德 types；未配置时回退到餐饮大类。 */
+    private Map<String, String> searchTypesByCategory = Map.of();
+    /** 用户品类 -> 高德单一关键词；只用于缺少稳定细分类码的品类。 */
+    private Map<String, String> searchKeywordsByCategory = Map.of();
     /** 高德 typecode -> ELMA 内部品类(code 遵循 ^[A-Z][A-Z0-9_]{0,31}$)。未命中走 OTHER 兜底。 */
     private Map<String, CategoryMapping> categoryMap = Map.of();
     /** 按顺序匹配 POI 名称和 type 文本，用于在高德父分类内识别产品细品类。 */
@@ -43,10 +50,29 @@ public class AmapProperties {
     public void setPageSize(int pageSize) { this.pageSize = pageSize; }
     public int getMaxPages() { return maxPages; }
     public void setMaxPages(int maxPages) { this.maxPages = maxPages; }
+    public int getTargetCandidates() { return targetCandidates; }
+    public void setTargetCandidates(int targetCandidates) { this.targetCandidates = targetCandidates; }
     public int getConnectTimeoutMs() { return connectTimeoutMs; }
     public void setConnectTimeoutMs(int connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
     public int getReadTimeoutMs() { return readTimeoutMs; }
     public void setReadTimeoutMs(int readTimeoutMs) { this.readTimeoutMs = readTimeoutMs; }
+    public Map<String, String> getSearchTypesByCategory() { return searchTypesByCategory; }
+    public void setSearchTypesByCategory(Map<String, String> value) {
+        searchTypesByCategory = value == null ? Map.of() : value;
+    }
+    public Map<String, String> getSearchKeywordsByCategory() { return searchKeywordsByCategory; }
+    public void setSearchKeywordsByCategory(Map<String, String> value) {
+        searchKeywordsByCategory = value == null ? Map.of() : value;
+    }
+    public String searchTypesFor(String category) {
+        if (category == null) return types;
+        return searchTypesByCategory.getOrDefault(category.toUpperCase(Locale.ROOT), types);
+    }
+    public String searchKeywordFor(String category) {
+        if (category == null) return null;
+        String value = searchKeywordsByCategory.get(category.toUpperCase(Locale.ROOT));
+        return value == null || value.isBlank() ? null : value;
+    }
     public Map<String, CategoryMapping> getCategoryMap() { return categoryMap; }
     public void setCategoryMap(Map<String, CategoryMapping> categoryMap) { this.categoryMap = categoryMap; }
     public List<CategoryRule> getCategoryRules() { return categoryRules; }

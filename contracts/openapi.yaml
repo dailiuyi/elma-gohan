@@ -48,15 +48,22 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '422':
-          description: 条件合法，但附近没有可推荐的餐厅
+          description: 条件合法但没有可推荐餐厅，或候选召回达到分页上限而无法得出空结果结论
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: NO_RECOMMENDATION_AVAILABLE
-                message: 附近暂时没有符合条件的餐厅，请放宽距离或预算
-                traceId: 01J5EXAMPLETRACE
+              examples:
+                noRecommendation:
+                  value:
+                    code: NO_RECOMMENDATION_AVAILABLE
+                    message: 附近暂时没有符合条件的餐厅，请放宽距离或预算
+                    traceId: 01J5EXAMPLETRACE
+                searchIncomplete:
+                  value:
+                    code: POI_SEARCH_INCOMPLETE
+                    message: 附近餐厅较多，本次尚未完成全部检索，请缩小距离或选择具体品类后重试
+                    traceId: 01J5EXAMPLETRACE
         '502':
           $ref: '#/components/responses/PoiProviderError'
 
@@ -815,6 +822,7 @@ components:
       enum:
         - VALIDATION_FAILED
         - NO_RECOMMENDATION_AVAILABLE
+        - POI_SEARCH_INCOMPLETE
         - RECOMMENDATION_NOT_FOUND
         - POI_PROVIDER_UNAVAILABLE
         - FEEDBACK_ALREADY_RECORDED
