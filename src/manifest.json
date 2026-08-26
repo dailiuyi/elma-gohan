@@ -1,6 +1,6 @@
 {
   "name": "ELMA 今天吃什么",
-  "appid": "",
+  "appid": "wxb47073815e6f5103",
   "description": "直接替你决定今天吃什么",
   "versionName": "0.4.0",
   "versionCode": "400",
@@ -23,9 +23,9 @@
     }
   },
   "mp-weixin": {
-    "appid": "",
+    "appid": "wxb47073815e6f5103",
     "setting": {
-      "urlCheck": false
+      "urlCheck": true
     },
     "usingComponents": true,
     "permission": {
