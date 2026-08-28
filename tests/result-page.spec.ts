@@ -85,6 +85,20 @@ describe('result page acceptance states', () => {
     expect(wrapper.text()).toContain('备选已用完')
   })
 
+  it('renders incomplete recall as a non-error notice', () => {
+    recommendationStore.setCurrent(recommendation({
+      searchNotice: {
+        code: 'SEARCH_INCOMPLETE',
+        message: '这一区间的餐厅还没搜完，先从已经找到的合适选项里为你选了一家。',
+      },
+    }), request)
+    const wrapper = mount(ResultPage)
+
+    expect(wrapper.find('.search-notice').exists()).toBe(true)
+    expect(wrapper.find('.search-notice-message').text()).toContain('先从已经找到的合适选项里')
+    expect(wrapper.find('.operation-error').exists()).toBe(false)
+  })
+
   it('renders matched platform ratings and the consistency explanation', () => {
     recommendationStore.setCurrent(recommendation({
       evidenceSummary: {

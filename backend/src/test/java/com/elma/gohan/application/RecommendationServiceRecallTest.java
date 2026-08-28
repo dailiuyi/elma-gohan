@@ -36,7 +36,7 @@ class RecommendationServiceRecallTest {
 
         assertThatThrownBy(() -> service.create(UUID.randomUUID(), request()))
                 .isInstanceOf(PoiSearchIncompleteException.class)
-                .hasMessageContaining("尚未完成全部检索");
+                .hasMessage("附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。");
     }
 
     @Test

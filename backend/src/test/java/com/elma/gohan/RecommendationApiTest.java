@@ -41,6 +41,7 @@ import com.elma.gohan.provider.deep.DeepEvidenceBatch;
 import com.elma.gohan.provider.deep.DeepEvidenceProvider;
 import com.elma.gohan.provider.deep.DeepEvidenceSource;
 import com.elma.gohan.provider.deep.WebEvidenceItem;
+import com.elma.gohan.provider.poi.PoiRecallCache;
 
 /**
  * 接口集成测试:连本机 elma_test 库,用本地 HTTP stub 替代高德(不依赖真实 Key)。
@@ -60,6 +61,9 @@ class RecommendationApiTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private PoiRecallCache recallCache;
 
     private static final HttpServer amapStub;
     private static final AtomicReference<String> amapResponse = new AtomicReference<>("{}");
@@ -134,6 +138,7 @@ class RecommendationApiTest {
 
     @AfterEach
     void cleanDb() {
+        recallCache.invalidateAll();
         evidenceFailure.set(false);
         deepEvidenceCalls.set(0);
         deepEvidenceFailure.set(null);
@@ -208,6 +213,41 @@ class RecommendationApiTest {
         assertThat(snapshot.get("minBudget").asInt()).isEqualTo(20);
         assertThat(snapshot.get("maxBudget").asInt()).isEqualTo(40);
         assertThat(deepEvidenceCalls).hasValue(0);
+    }
+
+    @Test
+    void incompleteRecallWithAnInBandCandidateReturnsNoticeAndRerollKeepsIt() throws Exception {
+        amapResponse.set(partialRingPois());
+        try {
+            ResponseEntity<String> response = create(USER, """
+                    {"latitude": 28.5, "longitude": 113.2,
+                     "minDistance": 500, "radius": 1000,
+                     "category": "ANY", "dislikes": []}
+                    """);
+            assertThat(response.getStatusCode().value()).isEqualTo(201);
+            JsonNode created = JSON.readTree(response.getBody());
+            assertThat(created.path("restaurant").path("distanceMeters").asInt())
+                    .isBetween(501, 1000);
+            assertThat(created.path("searchNotice").path("code").asText())
+                    .isEqualTo("SEARCH_INCOMPLETE");
+            assertThat(created.path("searchNotice").path("message").asText())
+                    .isEqualTo("这一区间的餐厅还没搜完，先从已经找到的合适选项里为你选了一家。");
+
+            String recommendationId = created.path("recommendationId").asText();
+            String diagnostics = jdbc.queryForObject(
+                    "SELECT recall_diagnostics_json::text FROM recommendation_log WHERE id = ?::uuid",
+                    String.class, recommendationId);
+            assertThat(JSON.readTree(diagnostics).path("completionReason").asText())
+                    .isEqualTo("MAX_PAGES_REACHED");
+
+            JsonNode rerolled = reroll(USER, recommendationId);
+            assertThat(rerolled.path("searchNotice").path("code").asText())
+                    .isEqualTo("SEARCH_INCOMPLETE");
+            assertThat(rerolled.path("searchNotice").path("message").asText())
+                    .isEqualTo(created.path("searchNotice").path("message").asText());
+        } finally {
+            amapResponse.set(eightPois());
+        }
     }
 
     @Test
@@ -572,12 +612,30 @@ class RecommendationApiTest {
             pois.append("""
                     {"id": "POI-%d", "name": "测试餐厅%d", "type": "餐饮服务;中餐厅;家常菜",
                      "typecode": "050100", "address": "麓山南路 %d 号",
-                     "location": "112.9412,28.2291", "distance": "%d",
+                     "location": "112.9445,28.2291", "distance": "%d",
                      "pname": "湖南省", "cityname": "长沙市", "adname": "岳麓区",
                      "biz_ext": {"rating": "4.%d", "cost": "%d", "opening_time": "09:00-21:00"}}
                     """.formatted(i, i, i, 200 + i * 80, 9 - i, 20 + i));
         }
         pois.append(']');
         return "{\"status\":\"1\",\"info\":\"OK\",\"pois\":" + pois + "}";
+    }
+
+    private static String partialRingPois() {
+        StringBuilder pois = new StringBuilder("[");
+        for (int i = 1; i <= 25; i++) {
+            if (i > 1) pois.append(',');
+            boolean inBand = i == 25;
+            pois.append("""
+                    {"id": "PARTIAL-%d", "name": "环带测试餐厅%d", "type": "餐饮服务;中餐厅",
+                     "typecode": "050100", "address": "测试路 %d 号",
+                     "location": "%s", "distance": "%d",
+                     "biz_ext": {"rating": "4.2", "cost": "35", "opening_time": "09:00-21:00"}}
+                    """.formatted(i, i, i, inBand ? "113.2,28.5054" : "113.2,28.5",
+                    inBand ? 600 : 100));
+        }
+        pois.append(']');
+        return "{\"status\":\"1\",\"info\":\"OK\",\"count\":\"999\",\"pois\":"
+                + pois + "}";
     }
 }

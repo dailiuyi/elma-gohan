@@ -11,6 +11,11 @@
       <text class="pick-kicker">别选了，今天吃这个。</text>
     </view>
 
+    <view v-if="recommendation.searchNotice" class="search-notice" role="status">
+      <text class="search-notice-code">SEARCH STATUS</text>
+      <text class="search-notice-message">{{ recommendation.searchNotice.message }}</text>
+    </view>
+
     <view class="restaurant-section">
       <text class="category-label">{{ recommendation.restaurant.category.label }}</text>
       <text class="restaurant-name">{{ recommendation.restaurant.name }}</text>
@@ -502,6 +507,33 @@ function reportSkipBestEffort() {
 .pick-kicker {
   color: #747d97;
   font-size: 20rpx;
+}
+
+.search-notice {
+  margin-top: 28rpx;
+  padding: 22rpx 24rpx;
+  border: 2rpx solid #d8d9f2;
+  border-radius: 14rpx;
+  background: #f0f0ff;
+}
+
+.search-notice-code,
+.search-notice-message {
+  display: block;
+}
+
+.search-notice-code {
+  color: #5b61d6;
+  font-size: 17rpx;
+  font-weight: 600;
+  letter-spacing: 2rpx;
+}
+
+.search-notice-message {
+  margin-top: 8rpx;
+  color: #505a77;
+  font-size: 22rpx;
+  line-height: 1.55;
 }
 
 .restaurant-section {

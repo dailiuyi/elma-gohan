@@ -18,9 +18,20 @@ public class AmapProperties {
     private int pageSize = 25;
     private int maxPages = 8;
     /** 穿过距离下限后至少保留的原始候选数，兼顾预算和不想吃等后置过滤。 */
-    private int targetCandidates = 50;
-    private int connectTimeoutMs = 3000;
-    private int readTimeoutMs = 5000;
+    private int targetCandidates = 25;
+    private int connectTimeoutMs = 1500;
+    private int readTimeoutMs = 2500;
+    private int rateLimitPerSecond = 3;
+    private int maxRetries = 2;
+    private int recallDeadlineMs = 6000;
+    private int retryInitialBackoffMs = 350;
+    private int retryBackoffJitterMs = 100;
+    private int cacheTtlSeconds = 60;
+    private long cacheMaxWeightBytes = 32L * 1024 * 1024;
+    private int cacheMinEntryWeightBytes = 512 * 1024;
+    private int cacheCoordinateDecimals = 4;
+    private String categoryMappingVersion = "category-map-v1";
+    private String cacheVersion = "recall-v1";
     /** 用户品类 -> 高德 types；未配置时回退到餐饮大类。 */
     private Map<String, String> searchTypesByCategory = Map.of();
     /** 用户品类 -> 高德单一关键词；只用于缺少稳定细分类码的品类。 */
@@ -56,6 +67,28 @@ public class AmapProperties {
     public void setConnectTimeoutMs(int connectTimeoutMs) { this.connectTimeoutMs = connectTimeoutMs; }
     public int getReadTimeoutMs() { return readTimeoutMs; }
     public void setReadTimeoutMs(int readTimeoutMs) { this.readTimeoutMs = readTimeoutMs; }
+    public int getRateLimitPerSecond() { return rateLimitPerSecond; }
+    public void setRateLimitPerSecond(int value) { rateLimitPerSecond = value; }
+    public int getMaxRetries() { return maxRetries; }
+    public void setMaxRetries(int value) { maxRetries = value; }
+    public int getRecallDeadlineMs() { return recallDeadlineMs; }
+    public void setRecallDeadlineMs(int value) { recallDeadlineMs = value; }
+    public int getRetryInitialBackoffMs() { return retryInitialBackoffMs; }
+    public void setRetryInitialBackoffMs(int value) { retryInitialBackoffMs = value; }
+    public int getRetryBackoffJitterMs() { return retryBackoffJitterMs; }
+    public void setRetryBackoffJitterMs(int value) { retryBackoffJitterMs = value; }
+    public int getCacheTtlSeconds() { return cacheTtlSeconds; }
+    public void setCacheTtlSeconds(int value) { cacheTtlSeconds = value; }
+    public long getCacheMaxWeightBytes() { return cacheMaxWeightBytes; }
+    public void setCacheMaxWeightBytes(long value) { cacheMaxWeightBytes = value; }
+    public int getCacheMinEntryWeightBytes() { return cacheMinEntryWeightBytes; }
+    public void setCacheMinEntryWeightBytes(int value) { cacheMinEntryWeightBytes = value; }
+    public int getCacheCoordinateDecimals() { return cacheCoordinateDecimals; }
+    public void setCacheCoordinateDecimals(int value) { cacheCoordinateDecimals = value; }
+    public String getCategoryMappingVersion() { return categoryMappingVersion; }
+    public void setCategoryMappingVersion(String value) { categoryMappingVersion = value; }
+    public String getCacheVersion() { return cacheVersion; }
+    public void setCacheVersion(String value) { cacheVersion = value; }
     public Map<String, String> getSearchTypesByCategory() { return searchTypesByCategory; }
     public void setSearchTypesByCategory(Map<String, String> value) {
         searchTypesByCategory = value == null ? Map.of() : value;

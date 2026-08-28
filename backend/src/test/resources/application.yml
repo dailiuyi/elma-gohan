@@ -29,7 +29,7 @@ elma:
     types: "050000"
     page-size: 25
     max-pages: 8
-    target-candidates: 50
+    target-candidates: 25
     connect-timeout-ms: 3000
     read-timeout-ms: 5000
     search-types-by-category:
@@ -63,7 +63,7 @@ elma:
         keywords: [烧烤, 烤肉]
       - code: NOODLES
         label: 粉面
-        keywords: [粉面, 米粉, 米线, 面馆, 拉面]
+        keywords: [粉面, 米粉, 米线, 河粉, 肠粉, 螺蛳粉, 牛肉粉, 酸辣粉, 土豆粉, 粉店, 粉馆, 面馆, 面店, 拉面, 牛肉面, 板面, 烩面, 刀削面]
       - code: JAPANESE_KOREAN
         label: 日韩料理
         keywords: [日本料理, 韩国料理, 日式, 韩式]

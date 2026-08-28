@@ -201,6 +201,20 @@ class AmapResponseMapperTest {
     }
 
     @Test
+    @DisplayName("生产分类词典能从常见粉面店名识别细品类")
+    void productionCategoryRulesRecognizeCommonNoodleNames() throws Exception {
+        AmapResponseMapper productionMapper = new AmapResponseMapper(loadProductionProperties());
+
+        var beefRiceNoodles = productionMapper.toRestaurant(objectMapper.readTree(
+                poiForName("N1", "老街牛肉粉")));
+        var slicedNoodles = productionMapper.toRestaurant(objectMapper.readTree(
+                poiForName("N2", "山西刀削面")));
+
+        assertThat(beefRiceNoodles.categoryCode()).isEqualTo("NOODLES");
+        assertThat(slicedNoodles.categoryCode()).isEqualTo("NOODLES");
+    }
+
+    @Test
     @DisplayName("异常坐标或距离不会被伪装成零米候选")
     void dropsMalformedGeoFields() throws Exception {
         var malformedDistance = objectMapper.readTree("""
@@ -231,6 +245,12 @@ class AmapResponseMapperTest {
     private static String poiFor(String typecode) {
         return "{\"id\":\"" + typecode + "\",\"name\":\"分类测试店\","
                 + "\"type\":\"餐饮服务;分类测试\",\"typecode\":\"" + typecode + "\","
+                + "\"location\":\"112.9,28.2\",\"distance\":\"100\"}";
+    }
+
+    private static String poiForName(String id, String name) {
+        return "{\"id\":\"" + id + "\",\"name\":\"" + name + "\","
+                + "\"type\":\"餐饮服务;中餐厅;特色餐厅\",\"typecode\":\"050101\","
                 + "\"location\":\"112.9,28.2\",\"distance\":\"100\"}";
     }
 }

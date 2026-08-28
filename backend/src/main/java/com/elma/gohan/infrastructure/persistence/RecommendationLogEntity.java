@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 推荐会话、当前展示项和算法版本日志。 */
 @Entity
 @Table(name = "recommendation_log")
 public class RecommendationLogEntity {
@@ -57,6 +58,10 @@ public class RecommendationLogEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "selection_snapshot_json", columnDefinition = "jsonb", nullable = false)
     private String selectionSnapshotJson;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "recall_diagnostics_json", columnDefinition = "jsonb", nullable = false)
+    private String recallDiagnosticsJson;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -108,6 +113,20 @@ public class RecommendationLogEntity {
                                    String tasteAlgorithmVersion, String selectionMode,
                                    long randomSeed, String selectionSnapshotJson,
                                    LocalDateTime createdAt) {
+        this(id, anonymousUserId, requestConditionJson, candidateCount, currentRestaurantId,
+                recommendedRestaurantId, riskScore, lowRegretScore, riskAlgorithmVersion,
+                recommendationAlgorithmVersion, tasteAlgorithmVersion, selectionMode,
+                randomSeed, selectionSnapshotJson, "{}", createdAt);
+    }
+
+    public RecommendationLogEntity(UUID id, UUID anonymousUserId, String requestConditionJson,
+                                   int candidateCount, UUID currentRestaurantId,
+                                   UUID recommendedRestaurantId, int riskScore,
+                                   double lowRegretScore, String riskAlgorithmVersion,
+                                   String recommendationAlgorithmVersion,
+                                   String tasteAlgorithmVersion, String selectionMode,
+                                   long randomSeed, String selectionSnapshotJson,
+                                   String recallDiagnosticsJson, LocalDateTime createdAt) {
         this.id = id;
         this.anonymousUserId = anonymousUserId;
         this.requestConditionJson = requestConditionJson;
@@ -122,6 +141,7 @@ public class RecommendationLogEntity {
         this.selectionMode = selectionMode;
         this.randomSeed = randomSeed;
         this.selectionSnapshotJson = selectionSnapshotJson;
+        this.recallDiagnosticsJson = recallDiagnosticsJson == null ? "{}" : recallDiagnosticsJson;
         this.createdAt = createdAt;
     }
 
@@ -139,6 +159,7 @@ public class RecommendationLogEntity {
     public String getSelectionMode() { return selectionMode; }
     public long getRandomSeed() { return randomSeed; }
     public String getSelectionSnapshotJson() { return selectionSnapshotJson; }
+    public String getRecallDiagnosticsJson() { return recallDiagnosticsJson; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     public void updateCurrent(UUID currentRestaurantId) {

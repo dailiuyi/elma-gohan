@@ -40,7 +40,7 @@ paths:
               dislikes: [香菜]
       responses:
         '201':
-          description: 推荐会话已建立
+          description: 推荐会话已建立；若召回未完整但已有环带内候选，会携带 searchNotice
           content:
             application/json:
               schema:
@@ -48,7 +48,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '422':
-          description: 条件合法但没有可推荐餐厅，或候选召回达到分页上限而无法得出空结果结论
+          description: 条件合法但没有可推荐餐厅，或召回未完整且所选环带内还没有候选
           content:
             application/json:
               schema:
@@ -62,7 +62,7 @@ paths:
                 searchIncomplete:
                   value:
                     code: POI_SEARCH_INCOMPLETE
-                    message: 附近餐厅较多，本次尚未完成全部检索，请缩小距离或选择具体品类后重试
+                    message: 附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。
                     traceId: 01J5EXAMPLETRACE
         '502':
           $ref: '#/components/responses/PoiProviderError'
@@ -326,6 +326,11 @@ components:
           description: 服务端生成的推荐理由，前端仅展示。
           items:
             type: string
+        searchNotice:
+          allOf:
+            - $ref: '#/components/schemas/SearchNotice'
+          nullable: true
+          description: 仅在召回未完整但已有所选环带内可用候选时返回；reroll 保持不变。
         alternativesRemaining:
           type: integer
           minimum: 0
@@ -376,7 +381,23 @@ components:
             averagePrice: 62
             commentCount: 2600
         reasons: [距离近, 预算合适, 基础评分稳定, 数据完整度较高]
+        searchNotice:
+          code: SEARCH_INCOMPLETE
+          message: 这一区间的餐厅还没搜完，先从已经找到的合适选项里为你选了一家。
         alternativesRemaining: 5
+
+    SearchNotice:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [SEARCH_INCOMPLETE]
+        message:
+          type: string
+          minLength: 1
+          maxLength: 200
 
     RestaurantSummary:
       type: object

@@ -5,6 +5,7 @@ import com.elma.gohan.domain.restaurant.Restaurant;
 import com.elma.gohan.domain.restaurant.SearchCondition;
 import com.elma.gohan.domain.restaurant.TextNormalizer;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,6 +14,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class HardFilter {
+
+    private static final String NOODLES_CATEGORY = "noodles";
+    private static final Set<String> NOODLES_DISLIKE_ALIASES = Set.of(
+            "粉", "面", "粉面", "粉面类", "面食", "面条", "米粉", "米线", "河粉",
+            "肠粉", "螺蛳粉", "酸辣粉", "土豆粉", "红薯粉", "凉粉", "拉面",
+            "牛肉面", "板面", "烩面", "刀削面", "担担面", "热干面", "炸酱面");
 
     public List<Restaurant> filter(List<Restaurant> restaurants, SearchCondition condition) {
         return restaurants.stream()
@@ -58,8 +65,13 @@ public class HardFilter {
         return dislikes.stream()
                 .map(TextNormalizer::normalize)
                 .filter(d -> !d.isEmpty())
-                .anyMatch(d -> d.equals(label) || d.equals(code)
+                .anyMatch(d -> d.equals(label) || d.equals(code) || matchesCategoryAlias(d, code)
                         || (d.codePointCount(0, d.length()) >= 2
                         && (name.contains(d) || label.contains(d))));
+    }
+
+    private boolean matchesCategoryAlias(String dislike, String categoryCode) {
+        return NOODLES_CATEGORY.equals(categoryCode)
+                && NOODLES_DISLIKE_ALIASES.contains(dislike);
     }
 }

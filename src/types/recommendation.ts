@@ -69,7 +69,13 @@ export interface RecommendationResponse {
   evidenceSummary?: EvidenceSummary | null
   personalization?: Personalization | null
   reasons: string[]
+  searchNotice?: SearchNotice | null
   alternativesRemaining: number
+}
+
+export interface SearchNotice {
+  code: 'SEARCH_INCOMPLETE'
+  message: string
 }
 
 export interface Personalization {

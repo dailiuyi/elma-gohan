@@ -27,4 +27,14 @@ class CreateRecommendationRequestTest {
         assertThat(request.minDistance()).isEqualTo(500);
         assertThat(request.minBudget()).isEqualTo(20);
     }
+
+    @Test
+    @DisplayName("粉面、粉、面可在同一个不想吃输入中分别保留")
+    void keepsNoodleDislikeAliases() {
+        var request = new CreateRecommendationRequest(
+                28.2282, 112.9388, 1000, null, null, null, "MEAL",
+                List.of("粉面，粉 面"));
+
+        assertThat(request.dislikes()).containsExactly("粉面", "粉", "面");
+    }
 }

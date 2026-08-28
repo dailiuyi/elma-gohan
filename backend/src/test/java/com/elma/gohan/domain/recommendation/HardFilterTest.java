@@ -155,4 +155,20 @@ class HardFilterTest {
                 condition(1000, null, "ANY", List.of("ＣＨＩＮＥＳＥ"))))
                 .isEmpty();
     }
+
+    @Test
+    @DisplayName("粉、面和粉面都能硬排除已识别的粉面候选")
+    void noodleAliasesExcludeNoodleCategory() {
+        var riceNoodles = new Restaurant(null, "AMAP", "rice-noodles", "老街牛肉粉",
+                28.0, 112.0, 300, "NOODLES", "粉面", 4.5, 100, 30,
+                BusinessStatus.UNKNOWN, "09:00-21:00", "地址",
+                com.elma.gohan.domain.restaurant.DataCompleteness.FULL);
+
+        for (String dislike : List.of("粉", "面", "粉面", "米粉", "面食")) {
+            assertThat(filter.filter(List.of(riceNoodles),
+                    condition(1000, null, "ANY", List.of(dislike))))
+                    .as("dislike=%s", dislike)
+                    .isEmpty();
+        }
+    }
 }

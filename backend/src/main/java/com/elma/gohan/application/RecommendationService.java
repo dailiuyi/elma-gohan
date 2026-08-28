@@ -7,6 +7,7 @@ import com.elma.gohan.controller.api.FeedbackResponse;
 import com.elma.gohan.controller.api.RecommendationResponse;
 import com.elma.gohan.controller.api.RestaurantSummary;
 import com.elma.gohan.controller.api.RiskAssessment;
+import com.elma.gohan.controller.api.SearchNotice;
 import com.elma.gohan.controller.api.EvidenceSummaryResponse;
 import com.elma.gohan.controller.api.SubmitFeedbackRequest;
 import com.elma.gohan.controller.api.PersonalizationResponse;
@@ -44,6 +45,7 @@ import com.elma.gohan.provider.poi.PoiSearchResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -66,6 +68,11 @@ public class RecommendationService {
     private static final Set<Integer> ALLOWED_RADIUS = Set.of(500, 1000, 2000, 3000);
     private static final int MAX_ALTERNATIVES = 5;
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    private static final String SEARCH_INCOMPLETE_CODE = "SEARCH_INCOMPLETE";
+    private static final String SEARCH_INCOMPLETE_ERROR =
+            "附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。";
+    private static final String SEARCH_INCOMPLETE_NOTICE =
+            "这一区间的餐厅还没搜完，先从已经找到的合适选项里为你选了一家。";
 
     private final PoiProvider poiProvider;
     private final EvidenceAggregator evidenceAggregator;
@@ -148,16 +155,20 @@ public class RecommendationService {
         PoiSearchDiagnostics diagnostics = recall.diagnostics();
         log.info("POI 推荐过滤汇总: providerTotalCount={}, fetchedCount={}, pagesFetched={}, "
                         + "deduplicatedCount={}, mappedCount={}, hardEligibleCount={}, truncated={}, "
+                        + "completionReason={}, retryCount={}, cacheStatus={}, cacheWeightBytes={}, "
                         + "lastFetchedDistanceMeters={}, requestedCategory={}, queryTypes={}",
                 diagnostics.providerTotalCount(), diagnostics.fetchedCount(),
                 diagnostics.pagesFetched(), diagnostics.deduplicatedCount(),
                 diagnostics.mappedCount(), eligible.size(), diagnostics.truncated(),
+                diagnostics.completionReason(), diagnostics.retryCount(), diagnostics.cacheStatus(),
+                diagnostics.estimatedCacheWeightBytes(),
                 diagnostics.lastFetchedDistanceMeters(), condition.category(),
                 diagnostics.queryTypes());
+        SearchNotice searchNotice = diagnostics.incomplete()
+                ? new SearchNotice(SEARCH_INCOMPLETE_CODE, SEARCH_INCOMPLETE_NOTICE) : null;
         if (eligible.isEmpty()) {
-            if (diagnostics.truncated()) {
-                throw new PoiSearchIncompleteException(
-                        "附近餐厅较多，本次尚未完成全部检索，请缩小距离或选择具体品类后重试");
+            if (diagnostics.incomplete()) {
+                throw new PoiSearchIncompleteException(SEARCH_INCOMPLETE_ERROR);
             }
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
@@ -180,6 +191,9 @@ public class RecommendationService {
                 eligible, risks, new com.elma.gohan.domain.recommendation.UserPreference(
                         condition, tasteProfile, flavorFeatures, foodHistory), randomSeed);
         if (result.pool().isEmpty()) {
+            if (diagnostics.incomplete()) {
+                throw new PoiSearchIncompleteException(SEARCH_INCOMPLETE_ERROR);
+            }
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
 
@@ -217,7 +231,8 @@ public class RecommendationService {
                 first.risk().algorithmVersion(), result.algorithmVersion(),
                 first.personalization().algorithmVersion(),
                 first.personalization().selectionMode().name(), result.randomSeed(),
-                toJson(result.selectionSnapshot()), now));
+                toJson(result.selectionSnapshot()), toJson(recallSnapshot(diagnostics, searchNotice)),
+                now));
 
         RecommendationCandidateEntity firstEntity = null;
         for (int i = 0; i < persisted.size(); i++) {
@@ -242,7 +257,7 @@ public class RecommendationService {
         behaviorService.recordRecommended(anonymousUserId, recommendationLog,
                 java.util.Objects.requireNonNull(firstEntity), now);
 
-        return toResponse(logId, persisted.get(0), persisted.size() - 1);
+        return toResponse(logId, persisted.get(0), persisted.size() - 1, searchNotice);
     }
 
     @Transactional
@@ -272,14 +287,16 @@ public class RecommendationService {
             // 候选耗尽:回到初始推荐,不再生成新候选
             target = candidates.get(0);
             remaining = 0;
-            return toResponse(log.getId(), toView(log.getId(), target), remaining);
+            return toResponse(log.getId(), toView(log.getId(), target), remaining,
+                    searchNoticeFrom(log));
         }
         LocalDateTime now = LocalDateTime.now(ZONE);
         behaviorService.recordReroll(anonymousUserId, log, previous, now);
         log.updateCurrent(target.getRestaurantId());
         behaviorService.recordRecommended(anonymousUserId, log, target, now);
 
-        return toResponse(log.getId(), toView(log.getId(), target), remaining);
+        return toResponse(log.getId(), toView(log.getId(), target), remaining,
+                searchNoticeFrom(log));
     }
 
     @Transactional
@@ -380,7 +397,8 @@ public class RecommendationService {
     }
 
     private RecommendationResponse toResponse(UUID logId, RestaurantCandidate candidate,
-                                              int alternativesRemaining) {
+                                              int alternativesRemaining,
+                                              SearchNotice searchNotice) {
         Restaurant r = candidate.restaurant();
         int walkingMinutes = Math.max(1, (int) Math.ceil(
                 r.distanceMeters() / (double) recommendationProperties.getWalkingSpeedMetersPerMinute()));
@@ -401,7 +419,37 @@ public class RecommendationService {
                         candidate.personalization().reasons(),
                         candidate.personalization().algorithmVersion()),
                 candidate.reasons(),
+                searchNotice,
                 Math.min(MAX_ALTERNATIVES, Math.max(0, alternativesRemaining)));
+    }
+
+    private Map<String, Object> recallSnapshot(PoiSearchDiagnostics diagnostics,
+                                               SearchNotice searchNotice) {
+        Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
+        snapshot.put("completionReason", diagnostics.completionReason());
+        snapshot.put("truncated", diagnostics.incomplete());
+        snapshot.put("pagesFetched", diagnostics.pagesFetched());
+        snapshot.put("retryCount", diagnostics.retryCount());
+        snapshot.put("fetchedCount", diagnostics.fetchedCount());
+        snapshot.put("mappedCount", diagnostics.mappedCount());
+        snapshot.put("cacheStatus", diagnostics.cacheStatus());
+        if (searchNotice != null) snapshot.put("searchNotice", searchNotice);
+        return snapshot;
+    }
+
+    private SearchNotice searchNoticeFrom(RecommendationLogEntity log) {
+        String json = log.getRecallDiagnosticsJson();
+        if (json == null || json.isBlank() || "{}".equals(json)) return null;
+        try {
+            JsonNode notice = objectMapper.readTree(json).path("searchNotice");
+            if (!notice.isObject()) return null;
+            String code = notice.path("code").asText(null);
+            String message = notice.path("message").asText(null);
+            if (code == null || message == null) return null;
+            return new SearchNotice(code, message);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("召回诊断反序列化失败", e);
+        }
     }
 
     private String toJson(Object value) {

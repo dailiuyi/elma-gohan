@@ -28,9 +28,20 @@ elma:
     types: "050000"
     page-size: 25
     max-pages: 8
-    target-candidates: 50
-    connect-timeout-ms: 3000
-    read-timeout-ms: 5000
+    target-candidates: ${AMAP_TARGET_CANDIDATES:25}
+    connect-timeout-ms: ${AMAP_CONNECT_TIMEOUT_MS:1500}
+    read-timeout-ms: ${AMAP_READ_TIMEOUT_MS:2500}
+    rate-limit-per-second: ${AMAP_RATE_LIMIT_PER_SECOND:3}
+    max-retries: ${AMAP_MAX_RETRIES:2}
+    recall-deadline-ms: ${AMAP_RECALL_DEADLINE_MS:6000}
+    retry-initial-backoff-ms: ${AMAP_RETRY_INITIAL_BACKOFF_MS:350}
+    retry-backoff-jitter-ms: ${AMAP_RETRY_BACKOFF_JITTER_MS:100}
+    cache-ttl-seconds: ${AMAP_CACHE_TTL_SECONDS:60}
+    cache-max-weight-bytes: ${AMAP_CACHE_MAX_WEIGHT_BYTES:33554432}
+    cache-min-entry-weight-bytes: ${AMAP_CACHE_MIN_ENTRY_WEIGHT_BYTES:524288}
+    cache-coordinate-decimals: ${AMAP_CACHE_COORDINATE_DECIMALS:4}
+    category-mapping-version: ${AMAP_CATEGORY_MAPPING_VERSION:category-map-v1}
+    cache-version: ${AMAP_CACHE_VERSION:recall-v1}
     search-types-by-category:
       MEAL: "050100|050200|050300|050400"
       CHINESE: "050100"
@@ -68,7 +79,7 @@ elma:
         keywords: [烧烤, 烤肉, 烤串, 串店, 炭火]
       - code: NOODLES
         label: 粉面
-        keywords: [粉面, 米粉, 米线, 面馆, 拉面, 螺蛳粉, 馄饨, 饺子馆]
+        keywords: [粉面, 米粉, 米线, 河粉, 肠粉, 螺蛳粉, 牛肉粉, 羊肉粉, 酸辣粉, 土豆粉, 红薯粉, 凉粉, 粉店, 粉馆, 面馆, 面店, 拉面, 牛肉面, 板面, 烩面, 刀削面, 担担面, 热干面, 炸酱面, 拌面, 炒面, 汤面, 凉面, 馄饨, 饺子馆]
       - code: JAPANESE_KOREAN
         label: 日韩料理
         keywords: [日本料理, 韩国料理, 日韩料理, 日式, 韩式, 寿司, 居酒屋]
