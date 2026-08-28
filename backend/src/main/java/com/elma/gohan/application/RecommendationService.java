@@ -197,7 +197,8 @@ public class RecommendationService {
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
 
-        List<RestaurantCandidate> pool = result.pool();
+        List<RestaurantCandidate> pool = excludePreviouslyShown(
+                result.pool(), request.excludeRestaurantId());
         UUID logId = UUID.randomUUID();
 
         // upsert restaurant,同时把内部 id 回填到候选
@@ -224,6 +225,7 @@ public class RecommendationService {
         conditionSnapshot.put("maxBudget", request.maxBudget());
         conditionSnapshot.put("category", condition.category());
         conditionSnapshot.put("dislikes", condition.dislikes());
+        conditionSnapshot.put("excludeRestaurantId", request.excludeRestaurantId());
         RecommendationLogEntity recommendationLog = logRepository.save(new RecommendationLogEntity(
                 logId, anonymousUserId, toJson(conditionSnapshot),
                 persisted.size(), first.restaurant().id(), first.restaurant().id(),
@@ -258,6 +260,22 @@ public class RecommendationService {
                 java.util.Objects.requireNonNull(firstEntity), now);
 
         return toResponse(logId, persisted.get(0), persisted.size() - 1, searchNotice);
+    }
+
+    private List<RestaurantCandidate> excludePreviouslyShown(
+            List<RestaurantCandidate> pool, String excludeRestaurantId) {
+        if (excludeRestaurantId == null || excludeRestaurantId.isBlank() || pool.size() <= 1) {
+            return pool;
+        }
+        RestaurantEntity previous = restaurantRepository.findById(UUID.fromString(excludeRestaurantId))
+                .orElse(null);
+        if (previous == null) return pool;
+
+        List<RestaurantCandidate> refreshed = pool.stream()
+                .filter(candidate -> !(previous.getSource().equals(candidate.restaurant().source())
+                        && previous.getSourcePoiId().equals(candidate.restaurant().sourcePoiId())))
+                .toList();
+        return refreshed.isEmpty() ? pool : refreshed;
     }
 
     @Transactional

@@ -37,4 +37,14 @@ class CreateRecommendationRequestTest {
 
         assertThat(request.dislikes()).containsExactly("粉面", "粉", "面");
     }
+
+    @Test
+    @DisplayName("修改条件时保留需要排除的当前餐厅 ID")
+    void keepsExcludedRestaurantId() {
+        String restaurantId = "8322a6eb-186b-4be7-b4e5-980c9ef93042";
+        var request = new CreateRecommendationRequest(
+                28.2282, 112.9388, 1000, 500, 40, 20, "MEAL", List.of(), restaurantId);
+
+        assertThat(request.excludeRestaurantId()).isEqualTo(restaurantId);
+    }
 }

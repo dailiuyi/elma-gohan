@@ -45,7 +45,11 @@ public record CreateRecommendationRequest(
 
         @Size(max = 10, message = "最多 10 个")
         List<@NotBlank(message = "不能为空")
-        @Size(max = 30, message = "长度不能超过 30") String> dislikes
+        @Size(max = 30, message = "长度不能超过 30") String> dislikes,
+
+        @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+                message = "必须是合法的 UUID")
+        String excludeRestaurantId
 ) {
     public CreateRecommendationRequest {
         dislikes = normalizeDislikes(dislikes);
@@ -53,7 +57,14 @@ public record CreateRecommendationRequest(
 
     public CreateRecommendationRequest(Double latitude, Double longitude, Integer radius,
                                        Integer maxBudget, String category, List<String> dislikes) {
-        this(latitude, longitude, radius, null, maxBudget, null, category, dislikes);
+        this(latitude, longitude, radius, null, maxBudget, null, category, dislikes, null);
+    }
+
+    public CreateRecommendationRequest(Double latitude, Double longitude, Integer radius,
+                                       Integer minDistance, Integer maxBudget, Integer minBudget,
+                                       String category, List<String> dislikes) {
+        this(latitude, longitude, radius, minDistance, maxBudget, minBudget,
+                category, dislikes, null);
     }
 
     private static List<String> normalizeDislikes(List<String> rawValues) {

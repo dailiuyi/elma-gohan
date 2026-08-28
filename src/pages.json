@@ -11,14 +11,15 @@
       "path": "pages/result/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "今天吃这个"
+        "navigationBarTitleText": "今晚这一页",
+        "enableShareAppMessage": true
       }
     },
     {
       "path": "pages/deep-evidence/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "深挖结果"
+        "navigationBarTitleText": "页边"
       }
     },
     {
@@ -31,8 +32,8 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarBackgroundColor": "#F8F8FB",
-    "backgroundColor": "#F8F8FB",
+    "navigationBarBackgroundColor": "#F7F7F5",
+    "backgroundColor": "#F7F7F5",
     "backgroundTextStyle": "dark"
   }
 }

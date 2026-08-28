@@ -216,6 +216,24 @@ class RecommendationApiTest {
     }
 
     @Test
+    void changedConditionsExcludeTheCurrentlyShownRestaurantWhenAlternativesExist() throws Exception {
+        JsonNode initial = JSON.readTree(create(USER, """
+                {"latitude": 28.2282, "longitude": 112.9388,
+                 "radius": 3000, "category": "ANY", "dislikes": []}
+                """).getBody());
+        String previousRestaurantId = initial.path("restaurant").path("id").asText();
+
+        JsonNode refreshed = JSON.readTree(create(USER, """
+                {"latitude": 28.2282, "longitude": 112.9388,
+                 "radius": 3000, "category": "ANY", "dislikes": [],
+                 "excludeRestaurantId": "%s"}
+                """.formatted(previousRestaurantId)).getBody());
+
+        assertThat(refreshed.path("restaurant").path("id").asText())
+                .isNotEqualTo(previousRestaurantId);
+    }
+
+    @Test
     void incompleteRecallWithAnInBandCandidateReturnsNoticeAndRerollKeepsIt() throws Exception {
         amapResponse.set(partialRingPois());
         try {

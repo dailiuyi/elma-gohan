@@ -10,6 +10,7 @@ import type { CreateRecommendationRequest, RecommendationResponse } from '@/type
 vi.mock('@dcloudio/uni-app', () => ({
   onLoad: (callback: () => void) => callback(),
   onUnload: vi.fn(),
+  onShareAppMessage: vi.fn(),
 }))
 
 const request: CreateRecommendationRequest = {
@@ -72,17 +73,16 @@ describe('result page acceptance states', () => {
     expect(uni.reLaunch).toHaveBeenCalledWith({ url: '/pages/home/index' })
   })
 
-  it('renders nullable fields, risk label, reasons, and exhausted alternatives', () => {
+  it('renders tonight as a page with exhausted alternatives sealed', () => {
     recommendationStore.setCurrent(recommendation(), request)
     const wrapper = mount(ResultPage)
 
     expect(wrapper.text()).toContain('老街牛肉粉')
-    expect(wrapper.text()).toContain('1.6km')
-    expect(wrapper.text()).toContain('暂无')
-    expect(wrapper.text()).toContain('中低风险')
+    expect(wrapper.text()).toContain('18 分钟的路')
+    expect(wrapper.text()).toContain('人均还不清楚')
     expect(wrapper.text()).toContain('距离可接受')
     expect(wrapper.find('.reroll-button').exists()).toBe(false)
-    expect(wrapper.text()).toContain('备选已用完')
+    expect(wrapper.text()).toContain('今晚写完了')
   })
 
   it('renders incomplete recall as a non-error notice', () => {
@@ -99,7 +99,7 @@ describe('result page acceptance states', () => {
     expect(wrapper.find('.operation-error').exists()).toBe(false)
   })
 
-  it('renders matched platform ratings and the consistency explanation', () => {
+  it('keeps platform ratings off the page itself', () => {
     recommendationStore.setCurrent(recommendation({
       evidenceSummary: {
         matchStatus: 'MATCHED',
@@ -120,10 +120,9 @@ describe('result page acceptance states', () => {
 
     const wrapper = mount(ResultPage)
 
-    expect(wrapper.find('.evidence-section').exists()).toBe(true)
-    expect(wrapper.text()).toContain('已匹配同一门店')
-    expect(wrapper.text()).toContain('口味 4.0 · 服务 4.1')
-    expect(wrapper.text()).toContain('高德评分比百度高 0.7 分')
+    expect(wrapper.find('.evidence-section').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('口味 4.0')
+    expect(wrapper.find('.deep-evidence-button').exists()).toBe(true)
   })
 
   it('opens the independent deep-evidence page for the frozen restaurant', async () => {
@@ -146,7 +145,7 @@ describe('result page acceptance states', () => {
     const wrapper = mount(ResultPage)
 
     await wrapper.find('.reroll-button').trigger('click')
-    expect(wrapper.find('.reroll-button').text()).toContain('正在换一家')
+    expect(wrapper.find('.reroll-button').text()).toContain('在写下一页')
     expect(wrapper.find('.accept-button').attributes('disabled')).toBeDefined()
 
     finishReroll(
@@ -162,8 +161,83 @@ describe('result page acceptance states', () => {
     expect(wrapper.find('.reroll-button').exists()).toBe(false)
   })
 
+  it('records the abandoned restaurant as SKIP before rewriting conditions', async () => {
+    recommendationStore.setCurrent(recommendation({ alternativesRemaining: 5 }), request)
+    const behaviorSpy = vi.spyOn(recommendationApi, 'submitRecommendationBehavior')
+      .mockResolvedValue({
+        eventId: 'event-id',
+        recommendationId: recommendation().recommendationId,
+        restaurantId: 'restaurant-a',
+        type: 'SKIP',
+        recordedAt: '2026-08-28T12:00:00+08:00',
+        deduplicated: false,
+      })
+    let finishCreate!: (value: RecommendationResponse) => void
+    const createSpy = vi.spyOn(recommendationApi, 'createRecommendation')
+      .mockReturnValue(new Promise((resolve) => (finishCreate = resolve)))
+    const wrapper = mount(ResultPage)
+
+    await wrapper.find('.text-btn').trigger('click')
+    await wrapper.findAll('.sheet .chips')[0].findAll('button')[2].trigger('click')
+    await wrapper.find('.sheet .go-button').trigger('click')
+    expect(wrapper.find('.refresh-overlay').exists()).toBe(true)
+    expect(wrapper.text()).toContain('正在重新选')
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
+      minDistance: 1000,
+      radius: 2000,
+      excludeRestaurantId: 'restaurant-a',
+    }))
+
+    finishCreate(recommendation({
+      recommendationId: 'new-recommendation-id',
+      restaurant: { ...recommendation().restaurant, id: 'restaurant-b', name: '南门盖饭' },
+    }))
+    await flushPromises()
+
+    expect(behaviorSpy).toHaveBeenCalledWith(
+      recommendation().recommendationId,
+      expect.any(String),
+      'restaurant-a',
+      'SKIP',
+    )
+    expect(recommendationStore.state.current?.recommendationId).toBe('new-recommendation-id')
+    expect(wrapper.find('.refresh-overlay').exists()).toBe(false)
+  })
+
+  it('automatically advances when the refreshed session still starts with the old restaurant', async () => {
+    recommendationStore.setCurrent(recommendation({ alternativesRemaining: 5 }), request)
+    vi.spyOn(recommendationApi, 'submitRecommendationBehavior').mockResolvedValue({
+      eventId: 'event-id',
+      recommendationId: recommendation().recommendationId,
+      restaurantId: 'restaurant-a',
+      type: 'SKIP',
+      recordedAt: '2026-08-28T12:00:00+08:00',
+      deduplicated: false,
+    })
+    vi.spyOn(recommendationApi, 'createRecommendation').mockResolvedValue(
+      recommendation({ recommendationId: 'refreshed-session', alternativesRemaining: 5 }),
+    )
+    const rerollSpy = vi.spyOn(recommendationApi, 'rerollRecommendation').mockResolvedValue(
+      recommendation({
+        recommendationId: 'refreshed-session',
+        restaurant: { ...recommendation().restaurant, id: 'restaurant-b', name: '南门盖饭' },
+        alternativesRemaining: 4,
+      }),
+    )
+    const wrapper = mount(ResultPage)
+
+    await wrapper.find('.text-btn').trigger('click')
+    await wrapper.findAll('.sheet .chips')[0].findAll('button')[2].trigger('click')
+    await wrapper.find('.sheet .go-button').trigger('click')
+    await flushPromises()
+
+    expect(rerollSpy).toHaveBeenCalledWith('refreshed-session')
+    expect(wrapper.text()).toContain('南门盖饭')
+  })
+
   it('collects optional flavor tags and records feedback once', async () => {
     recommendationStore.setCurrent(recommendation(), request)
+    vi.spyOn(NavigationService, 'openRestaurant').mockResolvedValue()
     const feedbackSpy = vi.spyOn(recommendationApi, 'submitRecommendationFeedback').mockResolvedValue({
       feedbackId: 'feedback-id',
       recommendationId: recommendation().recommendationId,
@@ -173,6 +247,7 @@ describe('result page acceptance states', () => {
     })
     const wrapper = mount(ResultPage)
 
+    await wrapper.find('.accept-button').trigger('click')
     await wrapper.findAll('.feedback-button')[0].trigger('click')
     expect(wrapper.find('.flavor-panel').exists()).toBe(true)
     await wrapper.findAll('.flavor-option')[0].trigger('click')
@@ -185,7 +260,7 @@ describe('result page acceptance states', () => {
       'LIKE',
       ['SPICY'],
     )
-    expect(wrapper.text()).toContain('这家反馈已记录')
+    expect(wrapper.text()).toContain('记下了')
     expect(wrapper.findAll('.feedback-button').every((button) => button.attributes('disabled') !== undefined)).toBe(true)
   })
 
@@ -198,7 +273,6 @@ describe('result page acceptance states', () => {
     await flushPromises()
 
     expect(wrapper.find('.operation-error').text()).toBe('请求失败，请稍后再试')
-    expect(wrapper.find('.accept-button').attributes('disabled')).toBeUndefined()
-    expect(wrapper.find('.accept-button').text()).toContain('就它了')
+    expect(wrapper.text()).toContain('出门')
   })
 })

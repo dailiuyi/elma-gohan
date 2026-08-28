@@ -4,6 +4,7 @@ export type BackendErrorCode =
   | 'POI_SEARCH_INCOMPLETE'
   | 'RECOMMENDATION_NOT_FOUND'
   | 'POI_PROVIDER_UNAVAILABLE'
+  | 'FEEDBACK_ALREADY_RECORDED'
 
 export interface FieldError {
   field: string

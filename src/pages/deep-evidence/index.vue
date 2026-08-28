@@ -2,12 +2,12 @@
   <view class="deep-page">
     <view class="deep-nav">
       <button class="back-button" aria-label="返回推荐" @click="goBack">←</button>
-      <text class="deep-brand">ELMA / DEEP CHECK</text>
+      <text class="deep-brand">ELMA</text>
       <view class="nav-placeholder" />
     </view>
 
     <view v-if="loading" class="loading-card">
-      <text class="loading-title">正在进一步看看这家店……</text>
+      <text class="loading-title">再看一点……</text>
       <view v-for="source in pendingSources" :key="source" class="loading-row">
         <text class="loading-dot">·</text>
         <text>{{ source }} · 查询中</text>
@@ -22,9 +22,9 @@
 
     <template v-else-if="result">
       <view class="deep-heading">
-        <text class="deep-kicker">深挖结果</text>
+        <text class="deep-kicker">页边的注解</text>
         <text class="restaurant-name">{{ result.restaurantName }}</text>
-        <text class="weak-evidence-note">公开搜索线索不等同于平台完整评价</text>
+        <text class="weak-evidence-note">公开索引里的标题和摘要。不是完整评价。</text>
       </view>
 
       <view class="summary-card">
@@ -88,7 +88,7 @@
         重新深挖
       </button>
 
-      <button class="accept-button" @click="goBack">就吃这家</button>
+      <button class="accept-button" @click="goBack">回去</button>
     </template>
   </view>
 </template>
@@ -222,9 +222,9 @@ function goBack() {
 .deep-page {
   box-sizing: border-box;
   min-height: 100vh;
-  padding: calc(var(--status-bar-height) + 34rpx) 40rpx 60rpx;
-  background: #f8f8fb;
-  color: #18203a;
+  padding: calc(var(--status-bar-height) + var(--elma-custom-nav-offset)) 40rpx 60rpx;
+  background: #f7f7f5;
+  color: #171717;
 }
 
 .deep-nav,
@@ -280,7 +280,7 @@ function goBack() {
 .error-message { display: block; margin-top: 18rpx; color: #a6455a; font-size: 21rpx; }
 
 .deep-heading { margin-top: 48rpx; }
-.deep-kicker { display: block; color: #5b61d6; font-size: 19rpx; letter-spacing: 2rpx; }
+.deep-kicker { display: block; color: #5d6d5a; font-size: 19rpx; letter-spacing: 4rpx; }
 .restaurant-name { display: block; margin-top: 14rpx; font-size: 48rpx; font-weight: 700; }
 .weak-evidence-note { display: block; margin-top: 12rpx; color: #7a8298; font-size: 18rpx; }
 
@@ -316,6 +316,6 @@ function goBack() {
 .copy-action { margin-left: 20rpx; color: #5b61d6; font-size: 17rpx; }
 
 .retry-button,
-.accept-button { width: 100%; margin: 28rpx 0 0; padding: 24rpx; border-radius: 12rpx; background: #5b61d6; color: #ffffff; font-size: 24rpx; }
+.accept-button { width: 100%; margin: 28rpx 0 0; padding: 24rpx; border-radius: 20rpx; background: #5d6d5a; color: #f7f7f5; font-size: 24rpx; }
 .accept-button { margin-top: 34rpx; }
 </style>

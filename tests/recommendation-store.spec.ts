@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { recommendationStore } from '@/stores/recommendation'
 import type {
@@ -22,7 +22,21 @@ const response = {
 } as RecommendationResponse
 
 describe('recommendation store', () => {
-  afterEach(() => recommendationStore.clear())
+  const storage = new Map<string, unknown>()
+
+  beforeEach(() => {
+    storage.clear()
+    vi.stubGlobal('uni', {
+      getStorageSync: vi.fn((key: string) => storage.get(key)),
+      setStorageSync: vi.fn((key: string, value: unknown) => storage.set(key, value)),
+      removeStorageSync: vi.fn((key: string) => storage.delete(key)),
+    })
+  })
+
+  afterEach(() => {
+    recommendationStore.clear()
+    vi.unstubAllGlobals()
+  })
 
   it('keeps the real response and its originating request', () => {
     recommendationStore.setCurrent(response, request)
@@ -84,5 +98,32 @@ describe('recommendation store', () => {
     )
 
     expect(recommendationStore.getCurrentFeedback()).toBeNull()
+  })
+
+  it('reuses and persists the same behavior event ID for network retries', () => {
+    recommendationStore.setCurrent(response, request)
+    const create = vi.fn(() => 'event-id')
+
+    expect(recommendationStore.getBehaviorEventId(
+      response.recommendationId,
+      response.restaurant.id,
+      'ACCEPT',
+      create,
+    )).toBe('event-id')
+    expect(recommendationStore.getBehaviorEventId(
+      response.recommendationId,
+      response.restaurant.id,
+      'ACCEPT',
+      create,
+    )).toBe('event-id')
+
+    expect(create).toHaveBeenCalledOnce()
+    expect(recommendationStore.hasBehaviorEvent(
+      response.recommendationId,
+      response.restaurant.id,
+      'ACCEPT',
+    )).toBe(true)
+    expect([...storage.values()].some((value) =>
+      JSON.stringify(value).includes('event-id'))).toBe(true)
   })
 })

@@ -86,6 +86,33 @@ describe('api client', () => {
     expect(getUserFacingError(error)).toContain('尚未完成全部检索')
   })
 
+  it('preserves the duplicate feedback business error', async () => {
+    vi.stubGlobal('uni', {
+      getStorageSync: vi.fn(() => USER_ID),
+      setStorageSync: vi.fn(),
+      request: vi.fn((options: UniApp.RequestOptions) => {
+        options.success?.({
+          statusCode: 409,
+          header: {},
+          cookies: [],
+          data: {
+            code: 'FEEDBACK_ALREADY_RECORDED',
+            message: '这家餐厅已经记录过反馈',
+            traceId: 'trace-feedback',
+          },
+        })
+      }),
+    })
+
+    const error = await apiRequest({ path: '/recommendations/id/feedback' })
+      .catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ApiError)
+    if (!(error instanceof ApiError)) throw new Error('Expected ApiError')
+    expect(error.response?.code).toBe('FEEDBACK_ALREADY_RECORDED')
+    expect(getUserFacingError(error)).toBe('这家餐厅已经记录过反馈')
+  })
+
   it('normalizes request failures as network errors', async () => {
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => USER_ID),

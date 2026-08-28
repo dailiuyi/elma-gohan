@@ -1,202 +1,208 @@
 <template>
   <view v-if="recommendation" class="result-page">
-    <view class="result-nav">
-      <button class="back-button" aria-label="返回首页" @click="goHome">←</button>
-      <text class="result-brand">ELMA / TODAY</text>
-      <view class="nav-pixels" aria-hidden="true" />
+    <view class="nav">
+      <text class="brand">ELMA</text>
+      <button v-if="viewMode === 'page'" class="text-btn" @click="sheetOpen = true">改条件</button>
+      <button v-else class="text-btn" @click="viewMode = 'page'">← 回去</button>
     </view>
 
-    <view class="pick-heading">
-      <text class="pick-index">TODAY'S PICK · 01</text>
-      <text class="pick-kicker">别选了，今天吃这个。</text>
-    </view>
-
-    <view v-if="recommendation.searchNotice" class="search-notice" role="status">
-      <text class="search-notice-code">SEARCH STATUS</text>
-      <text class="search-notice-message">{{ recommendation.searchNotice.message }}</text>
-    </view>
-
-    <view class="restaurant-section">
-      <text class="category-label">{{ recommendation.restaurant.category.label }}</text>
-      <text class="restaurant-name">{{ recommendation.restaurant.name }}</text>
-      <text class="restaurant-address">{{ recommendation.restaurant.address }}</text>
-
-      <view class="restaurant-meta">
-        <view class="meta-item">
-          <text class="meta-value">{{ formatDistance(recommendation.restaurant.distanceMeters) }}</text>
-          <text class="meta-label">距离</text>
-        </view>
-        <view class="meta-rule" />
-        <view class="meta-item">
-          <text class="meta-value">{{ formatPrice(recommendation.restaurant.averagePrice) }}</text>
-          <text class="meta-label">人均</text>
-        </view>
-        <view class="meta-rule" />
-        <view class="meta-item">
-          <text class="meta-value">{{ recommendation.restaurant.walkingMinutes }} 分钟</text>
-          <text class="meta-label">步行</text>
-        </view>
+    <view v-if="viewMode === 'page'" class="leaf" :class="{ ink: inkPlay }">
+      <text class="kicker">{{ kicker }}</text>
+      <text class="date">{{ dateLine }}</text>
+      <text class="name">{{ recommendation.restaurant.name }}</text>
+      <text class="chorus">别选了。</text>
+      <text class="line">{{ headline }}</text>
+      <text class="meta">{{ metaLine }}</text>
+      <view v-if="recommendation.searchNotice" class="search-notice">
+        <text class="search-notice-message">{{ recommendation.searchNotice.message }}</text>
       </view>
-    </view>
-
-    <view class="risk-strip" :class="`risk-strip--${recommendation.risk.riskLevel.toLowerCase()}`">
-      <view>
-        <text class="risk-caption">RISK CHECK</text>
-        <text class="risk-label">{{ riskLabel }}</text>
-      </view>
-      <view class="risk-signal" aria-hidden="true">
-        <view
-          v-for="level in 4"
-          :key="level"
-          class="risk-dot"
-          :class="{ 'risk-dot--active': level <= riskSignalLevel }"
-        />
-      </view>
-    </view>
-
-    <view v-if="visibleRiskReasons.length" class="risk-reasons">
-      <text v-for="reason in visibleRiskReasons" :key="reason" class="risk-reason">
-        {{ reason }}
+      <text v-if="recommendation.alternativesRemaining <= 0" class="sealed">
+        今晚写完了。下一顿再开一页。
       </text>
+      <view class="wave" aria-hidden="true">
+        <view class="wave-arc wave-arc--a" />
+        <view class="wave-arc wave-arc--b" />
+      </view>
     </view>
 
-    <view v-if="recommendation.evidenceSummary" class="evidence-section">
-      <view class="evidence-heading">
-        <text class="evidence-title">数据来源</text>
-        <text class="evidence-match">{{ evidenceMatchLabel }}</text>
+    <view v-else-if="viewMode === 'poster'" class="leaf">
+      <text class="kicker">{{ kicker }}</text>
+      <text class="date">{{ dateLine }}</text>
+      <text class="name">{{ recommendation.restaurant.name }}</text>
+      <text class="chorus">别选了。</text>
+      <text class="line">{{ headline }}</text>
+      <text class="meta">{{ metaLine }}</text>
+      <view class="wave" aria-hidden="true">
+        <view class="wave-arc wave-arc--a" />
+        <view class="wave-arc wave-arc--b" />
       </view>
-      <view class="evidence-platforms">
-        <view class="evidence-platform">
-          <text class="evidence-source">高德</text>
-          <text class="evidence-rating">{{ formatRating(recommendation.evidenceSummary.amap.rating) }}</text>
+      <text class="poster-hint">没有按钮的这一页，截了就可以发群。</text>
+    </view>
+
+    <view v-else class="leaf">
+      <text class="kicker">出门</text>
+      <text class="name">{{ recommendation.restaurant.name }}</text>
+      <text class="chorus">{{ navigating ? '正在打开地图…' : '地图打开了。' }}</text>
+      <text class="line">吃完回来，可以告诉我这顿怎么样。只留给下一次。</text>
+      <view class="feedback-section">
+        <text class="feedback-title">
+          {{ selectedFeedback ? '记下了。' : '这顿怎么样' }}
+        </text>
+        <view class="feedback-row">
+          <button
+            v-for="option in feedbackOptions"
+            :key="option.value"
+            class="feedback-button"
+            :class="{
+              'feedback-button--active': selectedFeedback === option.value || pendingFeedback === option.value,
+              'feedback-button--disabled': operationBusy || selectedFeedback !== null,
+            }"
+            :disabled="operationBusy || selectedFeedback !== null"
+            @click="chooseFeedback(option.value)"
+          >
+            {{ option.label }}
+          </button>
         </view>
-        <view class="evidence-platform">
-          <text class="evidence-source">百度</text>
-          <text class="evidence-rating">{{ formatRating(recommendation.evidenceSummary.baidu.rating) }}</text>
+        <view v-if="feedbackPanelOpen" class="flavor-panel">
+          <text class="flavor-title">{{ flavorPrompt }}</text>
+          <view class="flavor-options">
+            <button
+              v-for="flavor in flavorOptions"
+              :key="flavor.value"
+              class="flavor-option"
+              :class="{ 'flavor-option--active': selectedFlavorTags.includes(flavor.value) }"
+              :disabled="submittingFeedback"
+              @click="toggleFlavor(flavor.value)"
+            >
+              {{ flavor.label }}
+            </button>
+          </view>
+          <button class="flavor-submit" :disabled="submittingFeedback" @click="submitPendingFeedback">
+            {{ submittingFeedback ? '记下…' : '记下' }}
+          </button>
         </view>
       </view>
-      <text v-if="baiduDetailRatings" class="evidence-details">{{ baiduDetailRatings }}</text>
-      <text class="evidence-reason">{{ recommendation.evidenceSummary.reason }}</text>
     </view>
 
-    <view class="reason-section">
-      <view class="reason-heading">
-        <text class="reason-title">为什么是它</text>
-        <text class="reason-count">{{ String(recommendation.reasons.length).padStart(2, '0') }}</text>
-      </view>
-      <view v-if="recommendation.personalization" class="personalization-meta">
-        <text>{{ personalizationLabel }}</text>
-        <text>匹配度 {{ Math.round(recommendation.personalization.tasteMatchScore) }}</text>
-      </view>
-      <view v-for="reason in recommendation.reasons" :key="reason" class="reason-row">
-        <view class="reason-pixel" aria-hidden="true" />
-        <text>{{ reason }}</text>
-      </view>
-    </view>
-
-    <view class="result-actions">
+    <view v-if="viewMode === 'page'" class="dock">
       <button
-        class="accept-button"
+        class="go-button accept-button"
         :class="{ 'accept-button--disabled': operationBusy }"
         :disabled="operationBusy"
         @click="openNavigation"
       >
-        <text>{{ navigating ? '正在打开地图…' : '就它了' }}</text>
-        <text class="accept-arrow">↗</text>
-      </button>
-      <button
-        class="deep-evidence-button"
-        :class="{ 'deep-evidence-button--disabled': operationBusy }"
-        :disabled="operationBusy"
-        @click="openDeepEvidence"
-      >
-        深挖一下这家
+        就它了
       </button>
       <button
         v-if="recommendation.alternativesRemaining > 0"
-        class="reroll-button"
+        class="side-button reroll-button"
         :class="{ 'reroll-button--disabled': operationBusy }"
         :disabled="operationBusy"
         @click="reroll"
       >
-        {{ rerolling ? '正在换一家…' : `换一家 · 还可以换 ${recommendation.alternativesRemaining} 次` }}
+        {{ rerolling ? '在写下一页…' : `下一页 · ${recommendation.alternativesRemaining}` }}
       </button>
-      <text v-else class="alternatives-exhausted">备选已用完，今天就从这家出发吧。</text>
-      <text v-if="operationError" class="operation-error">{{ operationError }}</text>
-      <text v-if="operationTraceId" class="operation-trace">TRACE · {{ operationTraceId }}</text>
+      <button
+        v-else
+        class="side-button"
+        disabled
+      >
+        写完了
+      </button>
+      <button
+        class="side-button deep-evidence-button"
+        :disabled="operationBusy"
+        @click="openDeepEvidence"
+      >
+        页边
+      </button>
+      <button class="quiet" @click="viewMode = 'poster'">发给他们</button>
     </view>
+    <text v-if="operationError" class="operation-error">{{ operationError }}</text>
 
-    <view class="feedback-section">
-      <text class="feedback-title">
-        {{ selectedFeedback ? '这家反馈已记录' : '这个答案怎么样？' }}
-      </text>
-      <view class="feedback-row">
-        <button
-          v-for="option in feedbackOptions"
-          :key="option.value"
-          class="feedback-button"
-          :class="{
-            'feedback-button--active': selectedFeedback === option.value || pendingFeedback === option.value,
-            'feedback-button--disabled': operationBusy || selectedFeedback !== null,
-          }"
-          :disabled="operationBusy || selectedFeedback !== null"
-          @click="chooseFeedback(option.value)"
-        >
-          <text class="feedback-icon">{{ option.icon }}</text>
-          <text>{{ submittingFeedback && pendingFeedback === option.value ? '提交中' : option.label }}</text>
-        </button>
-      </view>
-      <view v-if="feedbackPanelOpen" class="flavor-panel">
-        <text class="flavor-title">{{ flavorPrompt }}</text>
-        <view class="flavor-options">
+    <view v-if="sheetOpen" class="sheet" @click.self="sheetOpen = false">
+      <view class="sheet-card">
+        <text class="sheet-title">今晚想怎么写</text>
+        <text class="sheet-hint">改了条件，这一页会重写。不是翻到下一页，是另起一顿。</text>
+
+        <text class="label">多远</text>
+        <view class="chips">
           <button
-            v-for="flavor in flavorOptions"
-            :key="flavor.value"
-            class="flavor-option"
-            :class="{ 'flavor-option--active': selectedFlavorTags.includes(flavor.value) }"
-            :disabled="submittingFeedback"
-            @click="toggleFlavor(flavor.value)"
+            v-for="option in radiusOptions"
+            :key="option.label"
+            class="chip"
+            :class="{ 'chip--active': radius === option.radius && minDistance === option.minDistance }"
+            :disabled="submitting"
+            @click="selectRadius(option)"
           >
-            {{ flavor.label }}
+            {{ option.label }}
           </button>
         </view>
-        <button class="flavor-submit" :disabled="submittingFeedback" @click="submitPendingFeedback">
-          {{ submittingFeedback ? '提交中…' : selectedFlavorTags.length ? '提交反馈' : '跳过标签并提交' }}
+
+        <text class="label">多少</text>
+        <view class="chips">
+          <button
+            v-for="option in budgetOptions"
+            :key="option.label"
+            class="chip"
+            :class="{ 'chip--active': maxBudget === option.maxBudget && minBudget === option.minBudget }"
+            :disabled="submitting"
+            @click="selectBudget(option)"
+          >
+            {{ option.label }}
+          </button>
+        </view>
+
+        <view class="prefs">
+          <view class="field">
+            <text class="label">想吃</text>
+            <picker :range="categoryOptions" range-key="label" :value="categoryIndex" @change="handleCategoryChange">
+              <text class="field-value">{{ selectedCategory.label }}</text>
+            </picker>
+          </view>
+          <view class="field">
+            <text class="label">不想吃</text>
+            <input v-model="dislikesInput" class="field-input" maxlength="309" placeholder="香菜、内脏" />
+          </view>
+        </view>
+
+        <button class="go-button" :disabled="submitting" @click="rewriteTonight">
+          {{ submitting ? '正在刷新候选…' : '按这个刷新候选' }}
         </button>
+        <button class="quiet" @click="sheetOpen = false">还是现在这样</button>
       </view>
+    </view>
+
+    <view v-if="submitting" class="refresh-overlay">
+      <view class="refresh-mark" aria-hidden="true">
+        <view class="refresh-ring refresh-ring--outer" />
+        <view class="refresh-ring refresh-ring--inner" />
+        <view class="refresh-dot" />
+      </view>
+      <text class="refresh-title">正在重新选</text>
+      <text class="refresh-copy">旧候选已放下，按新条件再筛一遍。</text>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { onLoad, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onUnload } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 
-import { rerollRecommendation, submitRecommendationBehavior, submitRecommendationFeedback } from '@/api/recommendation'
+import { createRecommendation, rerollRecommendation, submitRecommendationBehavior, submitRecommendationFeedback } from '@/api/recommendation'
 import { ApiError, getUserFacingError } from '@/api/errors'
 import { NavigationService, NavigationServiceError } from '@/services/navigation'
 import { recommendationStore } from '@/stores/recommendation'
 import { createUuidV4 } from '@/services/anonymous-user'
-import type { BehaviorType, FeedbackResult, FlavorTag, RiskLevel } from '@/types/recommendation'
+import type { BehaviorType, CategoryFilterCode, FeedbackResult, FlavorTag, Radius } from '@/types/recommendation'
+import { formatEditionDate, pageIndex, pageLine, priceLine, walkingLine } from '@/utils/edition'
+import { budgetOptions, categoryOptions, radiusOptions, type BudgetOption, type RadiusOption } from '@/utils/filters'
+import { parseDislikes } from '@/utils/dislikes'
 
-const riskLabels: Record<RiskLevel, string> = {
-  LOW: '低风险',
-  MEDIUM_LOW: '中低风险',
-  MEDIUM: '中风险',
-  HIGH: '高风险',
-}
-
-const riskSignalLevels: Record<RiskLevel, number> = {
-  LOW: 1,
-  MEDIUM_LOW: 2,
-  MEDIUM: 3,
-  HIGH: 4,
-}
-
-const feedbackOptions: Array<{ icon: string; label: string; value: FeedbackResult }> = [
-  { icon: '↑', label: '不错', value: 'LIKE' },
-  { icon: '—', label: '一般', value: 'NORMAL' },
-  { icon: '↓', label: '踩坑', value: 'DISLIKE' },
+const feedbackOptions: Array<{ label: string; value: FeedbackResult }> = [
+  { label: '不错', value: 'LIKE' },
+  { label: '一般', value: 'NORMAL' },
+  { label: '不喜欢', value: 'DISLIKE' },
 ]
 const flavorOptions: Array<{ label: string; value: FlavorTag }> = [
   { label: '辣', value: 'SPICY' },
@@ -207,8 +213,12 @@ const flavorOptions: Array<{ label: string; value: FlavorTag }> = [
 ]
 
 const recommendation = computed(() => recommendationStore.state.current)
+const viewMode = ref<'page' | 'done' | 'poster'>('page')
+const sheetOpen = ref(false)
+const inkPlay = ref(true)
 const rerolling = ref(false)
 const navigating = ref(false)
+const submitting = ref(false)
 const submittingFeedback = ref(false)
 const pendingFeedback = ref<FeedbackResult | null>(null)
 const feedbackPanelOpen = ref(false)
@@ -216,75 +226,97 @@ const selectedFlavorTags = ref<FlavorTag[]>([])
 const acceptedCurrent = ref(false)
 const feedbackSubmitted = ref(false)
 const skipReported = new Set<string>()
-const eventIds = new Map<string, string>()
 const operationError = ref('')
 const operationTraceId = ref('')
 
-const riskLabel = computed(() =>
-  recommendation.value ? riskLabels[recommendation.value.risk.riskLevel] : '',
+const minDistance = ref<number | null>(null)
+const radius = ref<Radius>(500)
+const minBudget = ref<number | null>(20)
+const maxBudget = ref<number | null>(40)
+const category = ref<CategoryFilterCode>('MEAL')
+const dislikesInput = ref('')
+
+const categoryIndex = computed(() =>
+  Math.max(0, categoryOptions.findIndex((option) => option.value === category.value)),
 )
-const riskSignalLevel = computed(() =>
-  recommendation.value ? riskSignalLevels[recommendation.value.risk.riskLevel] : 0,
-)
-const visibleRiskReasons = computed(() => recommendation.value?.risk.reasons.slice(0, 2) ?? [])
-const evidenceMatchLabel = computed(() => {
-  switch (recommendation.value?.evidenceSummary?.matchStatus) {
-    case 'MATCHED': return '已匹配同一门店'
-    case 'AMBIGUOUS': return '存在相似门店'
-    case 'UNAVAILABLE': return '百度暂不可用'
-    default: return '百度暂未匹配'
-  }
+const selectedCategory = computed(() => categoryOptions[categoryIndex.value])
+const kicker = computed(() => {
+  const remaining = recommendation.value?.alternativesRemaining ?? 0
+  return remaining <= 0 ? '06 / 写完了' : `0${pageIndex(remaining)} / 六页`
 })
-const baiduDetailRatings = computed(() => {
-  const source = recommendation.value?.evidenceSummary?.baidu
-  if (!source) return ''
-  return [
-    source.tasteRating === null ? '' : `口味 ${source.tasteRating.toFixed(1)}`,
-    source.serviceRating === null ? '' : `服务 ${source.serviceRating.toFixed(1)}`,
-    source.environmentRating === null ? '' : `环境 ${source.environmentRating.toFixed(1)}`,
-  ].filter(Boolean).join(' · ')
+const dateLine = computed(() => formatEditionDate())
+const headline = computed(() =>
+  recommendation.value
+    ? pageLine(recommendation.value.reasons, recommendation.value.risk.riskLevel)
+    : '',
+)
+const metaLine = computed(() => {
+  if (!recommendation.value) return ''
+  const restaurant = recommendation.value.restaurant
+  return `${walkingLine(restaurant.walkingMinutes)} · ${priceLine(restaurant.averagePrice)} · ${restaurant.address}`
 })
 const selectedFeedback = computed(() => recommendationStore.getCurrentFeedback())
-const flavorPrompt = computed(() => pendingFeedback.value === 'LIKE'
-  ? '哪里合你口味？最多选 3 个'
-  : pendingFeedback.value === 'DISLIKE'
-    ? '哪里不合口味？最多选 3 个'
-    : '这家有什么口味特点？最多选 3 个')
-const personalizationLabel = computed(() => {
-  switch (recommendation.value?.personalization?.selectionMode) {
-    case 'EXPLORATION': return '低风险探索'
-    case 'PERSONALIZED': return '为你匹配'
-    default: return '默认推荐'
-  }
+const flavorPrompt = computed(() => {
+  if (pendingFeedback.value === 'LIKE') return '合口味的地方，最多三个'
+  if (pendingFeedback.value === 'DISLIKE') return '不合口味的地方，最多三个'
+  return '它是什么味道，最多三个'
 })
 const operationBusy = computed(
-  () => rerolling.value || navigating.value || submittingFeedback.value,
+  () => rerolling.value || navigating.value || submittingFeedback.value || submitting.value,
 )
 
+onShareAppMessage(() => ({
+  title: recommendation.value
+    ? `${recommendation.value.restaurant.name} · 别选了。`
+    : 'ELMA 今天吃什么',
+  path: '/pages/home/index',
+}))
+
 onLoad(() => {
-  if (!recommendation.value) goHome()
+  if (!recommendation.value) {
+    uni.reLaunch({ url: '/pages/home/index' })
+    return
+  }
+  hydrateFilters()
+  const current = recommendation.value
+  if (current) {
+    acceptedCurrent.value = recommendationStore.hasBehaviorEvent(
+      current.recommendationId,
+      current.restaurant.id,
+      'ACCEPT',
+    )
+    feedbackSubmitted.value = recommendationStore.getCurrentFeedback() !== null
+  }
 })
 
 onUnload(() => {
   reportSkipBestEffort()
 })
 
-function formatDistance(distanceMeters: number) {
-  return distanceMeters < 1000 ? `${distanceMeters}m` : `${(distanceMeters / 1000).toFixed(1)}km`
+function hydrateFilters() {
+  const last = recommendationStore.state.lastRequest
+  if (!last) return
+  minDistance.value = last.minDistance ?? null
+  radius.value = last.radius
+  minBudget.value = last.minBudget ?? null
+  maxBudget.value = last.maxBudget
+  category.value = last.category
+  dislikesInput.value = [...last.dislikes].join('，')
 }
 
-function formatPrice(averagePrice: number | null) {
-  return averagePrice === null ? '暂无' : `¥${averagePrice}`
+function selectRadius(option: RadiusOption) {
+  minDistance.value = option.minDistance
+  radius.value = option.radius
 }
 
-function formatRating(rating: number | null) {
-  return rating === null ? '暂无评分' : rating.toFixed(1)
+function selectBudget(option: BudgetOption) {
+  minBudget.value = option.minBudget
+  maxBudget.value = option.maxBudget
 }
 
-function goHome() {
-  reportSkipBestEffort()
-  recommendationStore.clear()
-  uni.reLaunch({ url: '/pages/home/index' })
+function handleCategoryChange(event: { detail: { value: string | number } }) {
+  const option = categoryOptions[Number(event.detail.value)]
+  if (option) category.value = option.value
 }
 
 function resetOperationError() {
@@ -293,31 +325,84 @@ function resetOperationError() {
 }
 
 function handleOperationError(error: unknown) {
-  if (
-    error instanceof ApiError &&
-    error.response?.code === 'RECOMMENDATION_NOT_FOUND'
-  ) {
+  if (error instanceof ApiError && error.response?.code === 'RECOMMENDATION_NOT_FOUND') {
     recommendationStore.clear()
     uni.showToast({ title: error.response.message, icon: 'none' })
     uni.reLaunch({ url: '/pages/home/index' })
     return
   }
-
   operationError.value =
     error instanceof NavigationServiceError ? error.message : getUserFacingError(error)
   operationTraceId.value = error instanceof ApiError ? error.response?.traceId ?? '' : ''
 }
 
+async function rewriteTonight() {
+  const current = recommendation.value
+  const last = recommendationStore.state.lastRequest
+  if (!current || !last || submitting.value) return
+  let dislikes: string[]
+  try {
+    dislikes = parseDislikes(dislikesInput.value)
+  } catch (error) {
+    operationError.value = error instanceof Error ? error.message : '不想吃的内容格式不正确'
+    return
+  }
+  resetOperationError()
+  submitting.value = true
+  try {
+    reportSkipBestEffort()
+    const conditionsChanged = minDistance.value !== (last.minDistance ?? null)
+      || radius.value !== last.radius
+      || minBudget.value !== (last.minBudget ?? null)
+      || maxBudget.value !== last.maxBudget
+      || category.value !== last.category
+      || JSON.stringify(dislikes) !== JSON.stringify(last.dislikes)
+    const request = {
+      ...last,
+      minDistance: minDistance.value,
+      radius: radius.value,
+      minBudget: minBudget.value,
+      maxBudget: maxBudget.value,
+      category: category.value,
+      dislikes,
+      excludeRestaurantId: conditionsChanged ? current.restaurant.id : null,
+    }
+    let response = await createRecommendation(request)
+    if (conditionsChanged && response.restaurant.id === current.restaurant.id
+      && response.alternativesRemaining > 0) {
+      response = await rerollRecommendation(response.recommendationId)
+    }
+    recommendationStore.setCurrent(response, request)
+    sheetOpen.value = false
+    viewMode.value = 'page'
+    resetInteractionState()
+    inkPlay.value = false
+    setTimeout(() => {
+      inkPlay.value = true
+    }, 20)
+    if (conditionsChanged && response.restaurant.id === current.restaurant.id) {
+      uni.showToast({ title: '新条件下暂时只有这家合适', icon: 'none' })
+    }
+  } catch (error) {
+    handleOperationError(error)
+  } finally {
+    submitting.value = false
+  }
+}
+
 async function reroll() {
   const current = recommendation.value
   if (!current || current.alternativesRemaining <= 0 || operationBusy.value) return
-
   resetOperationError()
   rerolling.value = true
   try {
     const response = await rerollRecommendation(current.recommendationId)
     recommendationStore.replaceCurrent(response)
     resetInteractionState()
+    inkPlay.value = false
+    setTimeout(() => {
+      inkPlay.value = true
+    }, 20)
   } catch (error) {
     handleOperationError(error)
   } finally {
@@ -328,10 +413,10 @@ async function reroll() {
 async function openNavigation() {
   const current = recommendation.value
   if (!current || operationBusy.value) return
-
   resetOperationError()
   navigating.value = true
   acceptedCurrent.value = true
+  viewMode.value = 'done'
   void reportBehavior('ACCEPT', current.recommendationId, current.restaurant.id)
   try {
     await NavigationService.openRestaurant(current.restaurant)
@@ -366,7 +451,7 @@ function toggleFlavor(tag: FlavorTag) {
   } else if (selectedFlavorTags.value.length < 3) {
     selectedFlavorTags.value.push(tag)
   } else {
-    uni.showToast({ title: '最多选择 3 个', icon: 'none' })
+    uni.showToast({ title: '最多三个', icon: 'none' })
   }
 }
 
@@ -374,7 +459,6 @@ async function submitPendingFeedback() {
   const current = recommendation.value
   const result = pendingFeedback.value
   if (!current || !result || operationBusy.value || selectedFeedback.value) return
-
   resetOperationError()
   submittingFeedback.value = true
   try {
@@ -402,12 +486,12 @@ function resetInteractionState() {
 }
 
 function behaviorEventId(recommendationId: string, restaurantId: string, type: BehaviorType) {
-  const key = `${recommendationId}:${restaurantId}:${type}`
-  const existing = eventIds.get(key)
-  if (existing) return existing
-  const created = createUuidV4()
-  eventIds.set(key, created)
-  return created
+  return recommendationStore.getBehaviorEventId(
+    recommendationId,
+    restaurantId,
+    type,
+    createUuidV4,
+  )
 }
 
 async function reportBehavior(
@@ -423,15 +507,16 @@ async function reportBehavior(
       type,
     )
   } catch {
-    // 行为是 best-effort 信号，不能阻断主流程。
+    // best-effort
   }
 }
 
 function reportSkipBestEffort() {
   const current = recommendation.value
-  if (!current || acceptedCurrent.value || feedbackSubmitted.value
-    || skipReported.has(current.restaurant.id)) return
-  skipReported.add(current.restaurant.id)
+  const key = current ? `${current.recommendationId}:${current.restaurant.id}` : ''
+  if (!current || acceptedCurrent.value || feedbackSubmitted.value || selectedFeedback.value
+    || skipReported.has(key)) return
+  skipReported.add(key)
   void reportBehavior('SKIP', current.recommendationId, current.restaurant.id)
 }
 </script>
@@ -439,517 +524,345 @@ function reportSkipBestEffort() {
 <style scoped>
 .result-page {
   position: relative;
+  display: flex;
   box-sizing: border-box;
-  width: 100%;
   min-height: 100vh;
-  overflow: hidden;
-  padding: calc(var(--status-bar-height) + 34rpx) 48rpx 54rpx;
-  background: #f8f8fb;
-  color: #18203a;
+  flex-direction: column;
+  padding: calc(var(--status-bar-height) + var(--elma-custom-nav-offset)) 0 24rpx;
+  background: #f7f7f5;
+  color: #171717;
 }
 
-.result-nav,
-.pick-heading,
-.restaurant-meta,
-.risk-strip,
-.risk-signal,
-.reason-heading,
-.reason-row,
-.accept-button,
-.feedback-row,
-.feedback-button {
+.nav {
   display: flex;
   align-items: center;
-}
-
-.result-nav {
   justify-content: space-between;
+  padding: 0 36rpx 8rpx;
+  min-height: 48rpx;
 }
-
-.back-button {
-  width: 56rpx;
-  height: 56rpx;
-  margin: 0;
-  padding: 0;
-  border: 2rpx solid #dde1ec;
-  border-radius: 12rpx;
-  background: transparent;
-  color: #18203a;
-  font-size: 28rpx;
-  line-height: 52rpx;
-}
-
-.result-brand {
-  font-size: 19rpx;
-  font-weight: 600;
-  letter-spacing: 3rpx;
-}
-
-.nav-pixels {
-  width: 10rpx;
-  height: 10rpx;
-  margin-right: 16rpx;
-  background: #5b61d6;
-  box-shadow: 14rpx 0 0 #d9d2f6, 0 14rpx 0 #bfe8db;
-}
-
-.pick-heading {
-  justify-content: space-between;
-  margin-top: 54rpx;
-}
-
-.pick-index {
-  color: #5b61d6;
-  font-size: 18rpx;
-  letter-spacing: 2rpx;
-}
-
-.pick-kicker {
-  color: #747d97;
-  font-size: 20rpx;
-}
-
-.search-notice {
-  margin-top: 28rpx;
-  padding: 22rpx 24rpx;
-  border: 2rpx solid #d8d9f2;
-  border-radius: 14rpx;
-  background: #f0f0ff;
-}
-
-.search-notice-code,
-.search-notice-message {
-  display: block;
-}
-
-.search-notice-code {
-  color: #5b61d6;
-  font-size: 17rpx;
-  font-weight: 600;
-  letter-spacing: 2rpx;
-}
-
-.search-notice-message {
-  margin-top: 8rpx;
-  color: #505a77;
+.brand {
   font-size: 22rpx;
-  line-height: 1.55;
+  letter-spacing: 6rpx;
+  color: #686865;
 }
-
-.restaurant-section {
-  margin-top: 42rpx;
-}
-
-.category-label {
-  display: inline-block;
-  padding: 8rpx 15rpx;
-  border-radius: 8rpx;
-  background: #e8e9ff;
-  color: #343a9f;
-  font-size: 20rpx;
-  font-weight: 600;
-}
-
-.restaurant-name,
-.restaurant-address {
-  display: block;
-}
-
-.restaurant-name {
-  margin-top: 18rpx;
-  font-size: 62rpx;
-  font-weight: 700;
-  letter-spacing: -2rpx;
-  line-height: 1.16;
-}
-
-.restaurant-address {
-  margin-top: 14rpx;
-  color: #66708a;
-  font-size: 23rpx;
-}
-
-.restaurant-meta {
-  margin-top: 38rpx;
-  padding: 27rpx 0;
-  border-top: 2rpx solid #dde1ec;
-  border-bottom: 2rpx solid #dde1ec;
-}
-
-.meta-item {
-  min-width: 0;
-  flex: 1 1 0;
-}
-
-.meta-value,
-.meta-label {
-  display: block;
-  text-align: center;
-}
-
-.meta-value {
-  font-size: 28rpx;
-  font-weight: 700;
-}
-
-.meta-label {
-  margin-top: 6rpx;
-  color: #747d97;
-  font-size: 18rpx;
-}
-
-.meta-rule {
-  width: 2rpx;
-  height: 42rpx;
-  background: #dde1ec;
-}
-
-.risk-strip {
-  justify-content: space-between;
-  margin-top: 30rpx;
-  padding: 24rpx 26rpx;
-  border-radius: 12rpx;
-  background: #dff2ec;
-}
-
-.risk-caption,
-.risk-label {
-  display: block;
-}
-
-.risk-caption {
-  color: #477568;
-  font-size: 16rpx;
-  letter-spacing: 2rpx;
-}
-
-.risk-label {
-  margin-top: 4rpx;
-  font-size: 27rpx;
-  font-weight: 700;
-}
-
-.risk-signal {
-  gap: 8rpx;
-}
-
-.risk-reasons {
-  padding: 12rpx 8rpx 0;
-}
-
-.risk-reason {
-  display: block;
-  margin-top: 6rpx;
-  color: #66708a;
-  font-size: 18rpx;
-  line-height: 1.4;
-}
-
-.risk-dot {
-  width: 12rpx;
-  height: 12rpx;
-  background: #b7cec7;
-}
-
-.risk-dot--active {
-  background: #2f7d6a;
-}
-
-.risk-strip--medium .risk-dot--active,
-.risk-strip--high .risk-dot--active {
-  background: #a86145;
-}
-
-.evidence-section {
-  margin-top: 26rpx;
-  padding: 24rpx;
-  border: 2rpx solid #dfe2ed;
-  border-radius: 12rpx;
-  background: #f7f8fc;
-}
-
-.evidence-heading,
-.evidence-platforms,
-.evidence-platform {
-  display: flex;
-}
-
-.evidence-heading {
-  justify-content: space-between;
-  align-items: center;
-}
-
-.evidence-title {
-  color: #303851;
-  font-size: 23rpx;
-  font-weight: 700;
-}
-
-.evidence-match {
-  color: #68718a;
-  font-size: 17rpx;
-}
-
-.evidence-platforms {
-  gap: 16rpx;
-  margin-top: 18rpx;
-}
-
-.evidence-platform {
-  flex: 1;
-  justify-content: space-between;
-  padding: 15rpx 17rpx;
-  background: #ffffff;
-}
-
-.evidence-source {
-  color: #747d97;
-  font-size: 18rpx;
-}
-
-.evidence-rating {
-  color: #303851;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.evidence-details,
-.evidence-reason {
-  display: block;
-  margin-top: 14rpx;
-  color: #59627c;
-  font-size: 18rpx;
-  line-height: 1.5;
-}
-
-.evidence-reason {
-  color: #3f4862;
-}
-
-.reason-section {
-  margin-top: 42rpx;
-}
-
-.reason-heading {
-  justify-content: space-between;
-  padding-bottom: 16rpx;
-}
-
-.reason-title {
-  font-size: 25rpx;
-  font-weight: 700;
-}
-
-.reason-count {
-  color: #5b61d6;
-  font-size: 18rpx;
-  letter-spacing: 2rpx;
-}
-
-.reason-row {
-  gap: 20rpx;
-  padding: 17rpx 0;
-  border-top: 2rpx solid #eaecf3;
-  color: #3f4862;
-  font-size: 23rpx;
-}
-
-.reason-pixel {
-  width: 10rpx;
-  height: 10rpx;
-  flex: 0 0 auto;
-  background: #5b61d6;
-  box-shadow: 6rpx 6rpx 0 #d9d2f6;
-}
-
-.result-actions {
-  margin-top: 38rpx;
-}
-
-.accept-button {
-  width: 100%;
-  justify-content: space-between;
+.text-btn {
   margin: 0;
-  padding: 27rpx 34rpx;
-  border-radius: 12rpx;
-  background: #5b61d6;
-  color: #ffffff;
-  font-size: 30rpx;
-  font-weight: 600;
-  line-height: 1;
-  text-align: left;
-}
-
-.accept-arrow {
-  font-size: 36rpx;
-  font-weight: 400;
-}
-
-.personalization-meta {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 12rpx;
-  color: #5b61d6;
-  font-size: 18rpx;
-}
-
-.deep-evidence-button {
-  width: 100%;
-  margin: 16rpx 0 0;
-  padding: 23rpx 24rpx;
-  border: 2rpx solid #5b61d6;
-  border-radius: 12rpx;
-  background: #f0f0ff;
-  color: #4147ad;
-  font-size: 23rpx;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.deep-evidence-button--disabled {
-  opacity: 0.62;
-}
-
-.reroll-button {
-  width: 100%;
-  margin: 16rpx 0 0;
-  padding: 23rpx 24rpx;
-  border: 2rpx solid #cfd3e1;
-  border-radius: 12rpx;
+  padding: 8rpx 0;
   background: transparent;
-  color: #3f4862;
-  font-size: 23rpx;
-  line-height: 1;
+  color: #5d6d5a;
+  font-size: 26rpx;
 }
 
-.reroll-button--disabled {
-  opacity: 0.65;
-}
-
-.accept-button--disabled {
-  background: #7479c9;
-  opacity: 1;
-}
-
-.alternatives-exhausted,
-.operation-error,
-.operation-trace {
-  display: block;
-  margin-top: 16rpx;
-  text-align: center;
-}
-
-.alternatives-exhausted {
-  color: #747d97;
-  font-size: 19rpx;
-}
-
-.operation-error {
-  color: #a6455a;
-  font-size: 21rpx;
-}
-
-.operation-trace {
-  color: #8a92a8;
-  font-size: 15rpx;
-  letter-spacing: 1rpx;
-}
-
-.feedback-section {
-  margin-top: 38rpx;
-}
-
-.feedback-title {
-  display: block;
-  color: #747d97;
-  font-size: 20rpx;
-  text-align: center;
-}
-
-.feedback-row {
-  gap: 12rpx;
-  margin-top: 16rpx;
-}
-
-.feedback-button {
+.leaf {
+  display: flex;
   flex: 1;
-  justify-content: center;
-  gap: 8rpx;
-  margin: 0;
-  padding: 17rpx 10rpx;
-  border-radius: 10rpx;
-  background: #eef0f8;
-  color: #59627c;
-  font-size: 21rpx;
-  line-height: 1;
+  flex-direction: column;
+  padding: 16rpx 48rpx 12rpx;
 }
-
-.feedback-button--active {
-  background: #e8e9ff;
-  color: #343a9f;
-  font-weight: 600;
+.kicker {
+  color: #5d6d5a;
+  font-size: 22rpx;
+  letter-spacing: 6rpx;
 }
-
-.feedback-button--disabled {
-  opacity: 0.62;
-}
-
-.feedback-button--active.feedback-button--disabled {
-  opacity: 1;
-}
-
-.feedback-icon {
-  color: #5b61d6;
+.date {
+  margin-top: 10rpx;
+  color: #686865;
   font-size: 24rpx;
 }
-
-.flavor-panel {
-  margin-top: 18rpx;
-  padding: 22rpx;
-  border: 2rpx solid #dfe2ed;
-  border-radius: 12rpx;
-  background: #f7f8fc;
+.name {
+  margin-top: 48rpx;
+  font-size: 72rpx;
+  font-weight: 500;
+  line-height: 1.12;
 }
-
-.flavor-title {
+.chorus {
+  margin-top: 20rpx;
+  color: #5d6d5a;
+  font-size: 36rpx;
+}
+.line {
+  margin-top: 40rpx;
+  font-size: 28rpx;
+  line-height: 1.75;
+  color: #3f3f3b;
+}
+.meta,
+.search-notice-message,
+.sealed,
+.poster-hint {
   display: block;
-  color: #3f4862;
-  font-size: 20rpx;
+  margin-top: 20rpx;
+  color: #686865;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+.sealed { color: #5d6d5a; }
+
+.wave {
+  position: relative;
+  height: 100rpx;
+  margin-top: auto;
+  overflow: hidden;
+}
+.wave-arc {
+  position: absolute;
+  left: -18%;
+  width: 140%;
+  height: 180rpx;
+  border: 2rpx solid #5d6d5a;
+  border-radius: 50%;
+  opacity: 0.4;
+  animation: drift 16s ease-in-out infinite alternate;
+}
+.wave-arc--b {
+  top: 20rpx;
+  opacity: 0.22;
+  animation-duration: 21s;
+}
+@keyframes drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-24rpx); }
 }
 
+.dock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  padding: 12rpx 48rpx 12rpx;
+}
+.go-button,
+.accept-button {
+  width: 100%;
+  margin: 0;
+  padding: 28rpx 32rpx;
+  border-radius: 20rpx;
+  background: #5d6d5a;
+  color: #f7f7f5;
+  font-size: 30rpx;
+  text-align: left;
+}
+.side-button,
+.reroll-button,
+.deep-evidence-button {
+  width: calc(50% - 8rpx);
+  margin: 0;
+  padding: 22rpx 12rpx;
+  border: 2rpx solid rgba(23, 23, 23, 0.12);
+  border-radius: 20rpx;
+  background: transparent;
+  color: #171717;
+  font-size: 26rpx;
+}
+.quiet {
+  width: 100%;
+  margin: 0;
+  padding: 8rpx;
+  background: transparent;
+  color: #686865;
+  font-size: 24rpx;
+}
+.accept-button--disabled,
+.reroll-button--disabled {
+  opacity: 0.55;
+}
+.operation-error {
+  width: 100%;
+  color: #8a4b3a;
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.feedback-section { margin-top: 36rpx; }
+.feedback-title {
+  display: block;
+  color: #686865;
+  font-size: 24rpx;
+  letter-spacing: 2rpx;
+}
+.feedback-row {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+.feedback-button {
+  flex: 1;
+  margin: 0;
+  padding: 18rpx 0;
+  border: 2rpx solid rgba(23, 23, 23, 0.12);
+  border-radius: 16rpx;
+  background: transparent;
+  font-size: 24rpx;
+}
+.feedback-button--active {
+  background: #171717;
+  border-color: #171717;
+  color: #f7f7f5;
+}
+.flavor-panel { margin-top: 24rpx; }
+.flavor-title { display: block; font-size: 24rpx; color: #3f3f3b; }
 .flavor-options {
   display: flex;
   flex-wrap: wrap;
   gap: 12rpx;
   margin-top: 16rpx;
 }
-
 .flavor-option {
   margin: 0;
-  padding: 13rpx 22rpx;
-  border: 2rpx solid #d7dae6;
+  padding: 12rpx 22rpx;
+  border: 2rpx solid rgba(23, 23, 23, 0.12);
   border-radius: 999rpx;
-  background: #ffffff;
-  color: #59627c;
-  font-size: 20rpx;
-  line-height: 1;
+  background: transparent;
+  font-size: 24rpx;
 }
-
 .flavor-option--active {
-  border-color: #5b61d6;
-  background: #e8e9ff;
-  color: #343a9f;
+  border-color: #5d6d5a;
+  background: rgba(93, 109, 90, 0.12);
+  color: #5d6d5a;
 }
-
 .flavor-submit {
   width: 100%;
-  margin: 18rpx 0 0;
-  padding: 18rpx;
-  border-radius: 10rpx;
-  background: #5b61d6;
-  color: #ffffff;
-  font-size: 21rpx;
-  line-height: 1;
+  margin-top: 24rpx;
+  padding: 22rpx;
+  border-radius: 20rpx;
+  background: #5d6d5a;
+  color: #f7f7f5;
+}
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(23, 23, 23, 0.28);
+}
+.sheet-card {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  max-height: 88vh;
+  padding: 48rpx 44rpx 64rpx;
+  background: #f7f7f5;
+  overflow: auto;
+}
+.sheet-title { display: block; font-size: 32rpx; font-weight: 500; }
+.sheet-hint {
+  display: block;
+  margin-top: 18rpx;
+  color: #686865;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+.label {
+  display: block;
+  margin-top: 44rpx;
+  color: #686865;
+  font-size: 22rpx;
+  letter-spacing: 4rpx;
+}
+.chips {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+.chip {
+  flex: 1;
+  margin: 0;
+  padding: 20rpx 0;
+  border: 2rpx solid rgba(23, 23, 23, 0.12);
+  border-radius: 16rpx;
+  background: transparent;
+  font-size: 24rpx;
+}
+.chip--active {
+  background: #5d6d5a;
+  border-color: #5d6d5a;
+  color: #f7f7f5;
+}
+.prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 36rpx;
+  margin-top: 44rpx;
+}
+.field { flex: 1; min-width: 0; }
+.field .label { margin-top: 0; }
+.field-value,
+.field-input {
+  display: block;
+  margin-top: 18rpx;
+  padding-bottom: 14rpx;
+  border-bottom: 2rpx solid rgba(23, 23, 23, 0.12);
+  font-size: 28rpx;
+}
+.field-input { height: 62rpx; }
+
+.ink .name {
+  animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.refresh-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 48rpx;
+  background: rgba(247, 247, 245, 0.96);
+}
+.refresh-mark {
+  position: relative;
+  width: 150rpx;
+  height: 150rpx;
+}
+.refresh-ring {
+  position: absolute;
+  border: 2rpx solid #5d6d5a;
+  border-radius: 50%;
+}
+.refresh-ring--outer {
+  inset: 0;
+  border-right-color: transparent;
+  animation: refresh-spin 1.4s linear infinite;
+}
+.refresh-ring--inner {
+  inset: 28rpx;
+  border-top-color: transparent;
+  opacity: 0.48;
+  animation: refresh-spin 1s linear infinite reverse;
+}
+.refresh-dot {
+  position: absolute;
+  top: 67rpx;
+  left: 67rpx;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #5d6d5a;
+  animation: refresh-pulse 0.9s ease-in-out infinite alternate;
+}
+.refresh-title {
+  margin-top: 38rpx;
+  font-size: 34rpx;
+  font-weight: 500;
+  letter-spacing: 4rpx;
+}
+.refresh-copy {
+  margin-top: 18rpx;
+  color: #686865;
+  font-size: 24rpx;
+  text-align: center;
+}
+@keyframes refresh-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes refresh-pulse {
+  from { opacity: 0.35; transform: scale(0.75); }
+  to { opacity: 1; transform: scale(1.15); }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16rpx); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>
-  suppressSkip.value = true

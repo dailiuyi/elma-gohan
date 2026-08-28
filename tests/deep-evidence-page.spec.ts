@@ -82,7 +82,7 @@ describe('deep evidence page', () => {
 
     expect(wrapper.text()).toContain('老王湘菜馆')
     expect(wrapper.text()).toContain('82%')
-    expect(wrapper.text()).toContain('公开搜索线索不等同于平台完整评价')
+    expect(wrapper.text()).toContain('公开索引里的标题和摘要')
     expect(wrapper.text()).toContain('暂未找到同店公开线索')
     expect(wrapper.text()).toContain('多次提到性价比')
 

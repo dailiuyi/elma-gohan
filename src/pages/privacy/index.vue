@@ -7,8 +7,8 @@
     </view>
 
     <view class="intro">
-      <text class="eyebrow">ELMA / PRIVACY</text>
-      <text class="headline">少收集，讲明白，随时可删。</text>
+      <text class="eyebrow">数据</text>
+      <text class="headline">少收集，讲明白。</text>
       <text class="updated-at">更新日期：2026 年 8 月 28 日</text>
     </view>
 
@@ -118,9 +118,9 @@ function goBack() {
 .privacy-page {
   box-sizing: border-box;
   min-height: 100vh;
-  padding: calc(var(--status-bar-height) + 28rpx) 44rpx 64rpx;
-  background: #f8f8fb;
-  color: #18203a;
+  padding: calc(var(--status-bar-height) + var(--elma-custom-nav-offset)) 44rpx 64rpx;
+  background: #f7f7f5;
+  color: #171717;
 }
 
 .page-header {
@@ -138,7 +138,7 @@ function goBack() {
   margin: 0;
   padding: 8rpx 0;
   background: transparent;
-  color: #5b61d6;
+  color: #5d6d5a;
   font-size: 36rpx;
   line-height: 1;
 }

@@ -309,6 +309,11 @@ components:
             type: string
             minLength: 1
             maxLength: 30
+        excludeRestaurantId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 修改条件时可传当前展示餐厅；新候选池存在其他合格餐厅时将排除它。
 
     RecommendationResponse:
       type: object

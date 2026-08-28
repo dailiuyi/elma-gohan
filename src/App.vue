@@ -10,13 +10,14 @@ body,
 #app {
   min-height: 100%;
   margin: 0;
-  background: #f8f8fb;
+  background: #f7f7f5;
 }
 
 page {
+  --elma-custom-nav-offset: 120rpx;
   min-height: 100%;
-  background: #f8f8fb;
-  color: #18203a;
+  background: #f7f7f5;
+  color: #171717;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 

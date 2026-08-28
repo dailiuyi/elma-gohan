@@ -32,6 +32,7 @@ export interface CreateRecommendationRequest {
   maxBudget: number | null
   category: CategoryFilterCode
   dislikes: string[]
+  excludeRestaurantId?: string | null
 }
 
 export interface SubmitFeedbackRequest {
