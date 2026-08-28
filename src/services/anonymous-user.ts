@@ -46,3 +46,7 @@ export function getAnonymousUserId(): string {
   return anonymousUserId
 }
 
+export function clearAnonymousUserId(): void {
+  uni.removeStorageSync(ANONYMOUS_USER_ID_STORAGE_KEY)
+}
+

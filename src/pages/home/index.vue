@@ -141,6 +141,7 @@
       <text v-if="requestError" class="request-error">{{ requestError }}</text>
       <text v-if="requestTraceId" class="request-trace">TRACE · {{ requestTraceId }}</text>
       <text class="decision-caption">ONE GOOD CHOICE, NOT A LIST.</text>
+      <button class="privacy-link" @click="openPrivacyPage">隐私与数据</button>
     </view>
   </view>
 </template>
@@ -353,6 +354,10 @@ async function submitRecommendation() {
   } finally {
     submitting.value = false
   }
+}
+
+function openPrivacyPage() {
+  uni.navigateTo({ url: '/pages/privacy/index' })
 }
 
 onMounted(locate)
@@ -751,5 +756,15 @@ onMounted(locate)
   color: #8a92a8;
   font-size: 15rpx;
   letter-spacing: 1rpx;
+}
+
+.privacy-link {
+  margin: 18rpx auto 0;
+  padding: 8rpx 20rpx;
+  background: transparent;
+  color: #747d97;
+  font-size: 19rpx;
+  line-height: 1;
+  text-decoration: underline;
 }
 </style>

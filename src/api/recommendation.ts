@@ -60,3 +60,10 @@ export function deepenRecommendationEvidence(
     method: 'POST',
   })
 }
+
+export function deleteMyUserData(): Promise<void> {
+  return apiRequest<void>({
+    path: '/users/me/data',
+    method: 'DELETE',
+  })
+}

@@ -365,6 +365,44 @@ class RecommendationApiTest {
     }
 
     @Test
+    void deletingUserDataIsCompleteScopedAndIdempotent() throws Exception {
+        JsonNode created = JSON.readTree(create(USER,
+                "{\"latitude\": 28.2282, \"longitude\": 112.9388}").getBody());
+        String recommendationId = created.get("recommendationId").asText();
+        assertThat(post("/api/v1/recommendations/" + recommendationId + "/feedback",
+                USER, "{\"result\":\"LIKE\",\"flavorTags\":[\"SPICY\"]}")
+                .getStatusCode().value()).isEqualTo(201);
+        jdbc.update("INSERT INTO user_preference "
+                        + "(id, anonymous_user_id, preference_json, created_at) "
+                        + "VALUES (?::uuid, ?::uuid, '{}'::jsonb, CURRENT_TIMESTAMP)",
+                UUID.randomUUID().toString(), USER);
+
+        create(OTHER_USER, "{\"latitude\": 28.2282, \"longitude\": 112.9388}");
+        int restaurantCount = jdbc.queryForObject("SELECT count(*) FROM restaurant", Integer.class);
+
+        assertThat(deleteUserData(USER).getStatusCode().value()).isEqualTo(204);
+        assertThat(deleteUserData(USER).getStatusCode().value()).isEqualTo(204);
+
+        for (String table : List.of("restaurant_flavor_observation", "user_food_history",
+                "user_behavior", "user_feedback", "user_taste_profile", "user_preference",
+                "recommendation_log")) {
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM " + table
+                            + " WHERE anonymous_user_id = ?::uuid", Integer.class, USER))
+                    .as(table)
+                    .isZero();
+        }
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM recommendation_candidate rc "
+                        + "JOIN recommendation_log rl ON rl.id = rc.recommendation_log_id "
+                        + "WHERE rl.anonymous_user_id = ?::uuid", Integer.class, USER)).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM recommendation_log WHERE anonymous_user_id = ?::uuid",
+                Integer.class, OTHER_USER)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurant", Integer.class))
+                .isEqualTo(restaurantCount);
+    }
+
+    @Test
     void feedbackStoresOptionalFlavorTagsAndRejectsConflictingSecondSubmission() throws Exception {
         JsonNode created = JSON.readTree(create(USER,
                 "{\"latitude\": 28.2282, \"longitude\": 112.9388}").getBody());
@@ -601,6 +639,13 @@ class RecommendationApiTest {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Anonymous-User-Id", userId);
         return rest.exchange(path, HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
+    }
+
+    private ResponseEntity<Void> deleteUserData(String userId) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Anonymous-User-Id", userId);
+        return rest.exchange("/api/v1/users/me/data", HttpMethod.DELETE,
+                new HttpEntity<>(headers), Void.class);
     }
 
     private static String eightPois() {

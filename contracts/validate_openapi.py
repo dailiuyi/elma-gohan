@@ -17,6 +17,7 @@ EXPECTED_OPERATIONS = {
     ("/recommendations/{id}/feedback", "post"): ("submitRecommendationFeedback", "201"),
     ("/recommendations/{id}/behaviors", "post"): ("submitRecommendationBehavior", "201"),
     ("/recommendations/{id}/deep-evidence", "post"): ("deepenRecommendationEvidence", "200"),
+    ("/users/me/data", "delete"): ("deleteMyUserData", "204"),
 }
 
 
@@ -140,7 +141,7 @@ def inspect_operations(document: dict[str, Any]) -> None:
         if method in {"get", "post", "put", "patch", "delete"}
     }
     if actual != set(EXPECTED_OPERATIONS):
-        fail(f"operation set differs from V0.4 contract: {sorted(actual)}")
+        fail(f"operation set differs from V1 contract: {sorted(actual)}")
 
     operation_ids: set[str] = set()
     for (path, method), (operation_id, success_code) in EXPECTED_OPERATIONS.items():

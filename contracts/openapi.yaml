@@ -11,6 +11,8 @@ servers:
 tags:
   - name: Recommendations
     description: 推荐、换一家、反馈与按需深挖闭环
+  - name: Privacy
+    description: 匿名用户数据管理
 
 paths:
   /recommendations:
@@ -179,6 +181,23 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/RecommendationNotFound'
+
+  /users/me/data:
+    delete:
+      tags: [Privacy]
+      operationId: deleteMyUserData
+      summary: 删除当前匿名用户数据
+      description: |
+        删除当前匿名 UUID 关联的推荐会话、候选快照、行为、反馈、饮食历史、
+        个性化画像和口味标注。餐厅、共享地图 Evidence 和其他用户数据不受影响。
+        接口幂等，数据已经不存在时仍返回成功。
+      parameters:
+        - $ref: '#/components/parameters/AnonymousUserId'
+      responses:
+        '204':
+          description: 用户数据已删除或原本不存在
+        '400':
+          $ref: '#/components/responses/BadRequest'
 
 components:
   parameters:

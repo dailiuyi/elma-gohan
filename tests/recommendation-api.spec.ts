@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiRequest } from '@/api/client'
 import {
   createRecommendation,
+  deleteMyUserData,
   deepenRecommendationEvidence,
   rerollRecommendation,
   submitRecommendationBehavior,
@@ -92,6 +93,16 @@ describe('recommendation API', () => {
       path: '/recommendations/session-id/behaviors',
       method: 'POST',
       data: { eventId: 'event-id', restaurantId: 'restaurant-a', type: 'ACCEPT' },
+    })
+  })
+
+  it('deletes all data for the current anonymous user', async () => {
+    vi.mocked(apiRequest).mockResolvedValue(undefined)
+
+    await expect(deleteMyUserData()).resolves.toBeUndefined()
+    expect(apiRequest).toHaveBeenCalledWith({
+      path: '/users/me/data',
+      method: 'DELETE',
     })
   })
 })

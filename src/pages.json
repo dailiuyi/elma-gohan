@@ -20,6 +20,13 @@
         "navigationStyle": "custom",
         "navigationBarTitleText": "深挖结果"
       }
+    },
+    {
+      "path": "pages/privacy/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "隐私与数据"
+      }
     }
   ],
   "globalStyle": {

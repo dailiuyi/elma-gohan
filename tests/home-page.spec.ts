@@ -80,6 +80,9 @@ describe('home page acceptance states', () => {
     ])
     expect(wrapper.find('.category-value').text()).toContain('正餐')
 
+    await wrapper.find('.privacy-link').trigger('click')
+    expect(uni.navigateTo).toHaveBeenCalledWith({ url: '/pages/privacy/index' })
+
     await wrapper.find('input').setValue('香菜 内脏, 香菜,肥肉')
     await wrapper.find('.decision-button').trigger('click')
     await flushPromises()
