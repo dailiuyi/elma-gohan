@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/** 用户已确认吃过的餐厅历史。 */
 @Entity
 @Table(name = "user_food_history")
 public class UserFoodHistoryEntity {

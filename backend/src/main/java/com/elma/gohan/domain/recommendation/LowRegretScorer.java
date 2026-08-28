@@ -14,6 +14,7 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/** 组合质量、安全、偏好、预算、距离和近期多样性的排序器。 */
 @Component
 public class LowRegretScorer {
     private final RecommendationProperties props;

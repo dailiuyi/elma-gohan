@@ -51,6 +51,7 @@ public class TasteProfileService {
         this.objectMapper = objectMapper;
     }
 
+    /** 加载并衰减画像；必要时从旧快照和遗漏反馈恢复。 */
     public TasteProfile load(UUID userId) {
         LocalDateTime now = LocalDateTime.now(ZONE);
         TasteProfile profile = profileRepository.findById(userId).map(this::toDomain).orElse(null);
@@ -63,12 +64,14 @@ public class TasteProfileService {
         return profile.decayedTo(now, properties);
     }
 
+    /** 兼容旧调用的显式反馈更新入口。 */
     public TasteProfile update(UUID userId, TasteProfile current, Restaurant restaurant,
             int distanceMeters, String result, LocalDateTime occurredAt) {
         return updateFeedback(userId, current, restaurant, distanceMeters, result,
                 java.util.List.of(), occurredAt);
     }
 
+    /** 应用显式反馈和可选口味标签，并持久化画像。 */
     public TasteProfile updateFeedback(UUID userId, TasteProfile current, Restaurant restaurant,
             int distanceMeters, String result, Collection<FlavorTag> tags,
             LocalDateTime occurredAt) {
@@ -78,6 +81,7 @@ public class TasteProfileService {
         return updated;
     }
 
+    /** 累积隐式行为，达到门槛后小步更新长期画像。 */
     public TasteProfile updateImplicit(UUID userId, Restaurant restaurant, int distanceMeters,
             Collection<FlavorTag> tags, BehaviorType type, LocalDateTime occurredAt) {
         TasteProfile updated = load(userId).applyImplicit(restaurant, distanceMeters, tags,

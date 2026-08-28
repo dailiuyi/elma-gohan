@@ -9,6 +9,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/** 使用近期窗口与历史窗口比较评分趋势。 */
 @Component
 public class RuleBasedRecentTrendDetector implements RecentTrendDetector {
 

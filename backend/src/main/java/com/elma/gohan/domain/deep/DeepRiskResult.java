@@ -3,6 +3,7 @@ package com.elma.gohan.domain.deep;
 import com.elma.gohan.domain.risk.RiskLevel;
 import java.util.List;
 
+/** 深挖后的风险分、置信度和解释。 */
 public record DeepRiskResult(
         int riskScore,
         RiskLevel riskLevel,

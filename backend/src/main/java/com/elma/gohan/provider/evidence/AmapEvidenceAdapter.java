@@ -4,6 +4,7 @@ import com.elma.gohan.domain.restaurant.Restaurant;
 import java.time.Instant;
 import org.springframework.stereotype.Component;
 
+/** 将主餐厅实体映射为统一高德平台 Evidence。 */
 @Component
 public class AmapEvidenceAdapter {
 

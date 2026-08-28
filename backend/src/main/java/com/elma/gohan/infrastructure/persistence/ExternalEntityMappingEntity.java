@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 高德主实体与外部平台门店的匹配及 Evidence 缓存。 */
 @Entity
 @Table(name = "external_entity_mapping")
 public class ExternalEntityMappingEntity {

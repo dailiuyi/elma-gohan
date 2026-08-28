@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/** 用户画像的衰减、反馈增量和隐式学习参数。 */
 @ConfigurationProperties(prefix = "elma.taste")
 public class TasteProperties {
     private String algorithmVersion = "taste-v0.1";
@@ -41,6 +42,7 @@ public class TasteProperties {
     public List<Integer> getDistanceBandUpperBounds() { return distanceBandUpperBounds; }
     public void setDistanceBandUpperBounds(List<Integer> v) { distanceBandUpperBounds = v; }
 
+    /** 显式反馈对应的画像增量。 */
     public static class Feedback {
         private double like = 1.0;
         private double normal = 0.1;
@@ -53,6 +55,7 @@ public class TasteProperties {
         public void setDislike(double v) { dislike = v; }
     }
 
+    /** 隐式行为对应的画像增量。 */
     public static class Behavior {
         private double accept = 0.1;
         private double navigate = 0.1;

@@ -3,6 +3,7 @@ package com.elma.gohan.provider.deep;
 import java.time.Instant;
 import java.util.List;
 
+/** 搜索服务返回并完成标准化的单条公开线索。 */
 public record WebEvidenceItem(
         DeepEvidenceSource source,
         String title,

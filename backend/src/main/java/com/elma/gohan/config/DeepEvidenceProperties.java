@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/** Web 深挖查询、缓存和信号词表配置。 */
 @ConfigurationProperties(prefix = "elma.deep-evidence")
 public class DeepEvidenceProperties {
 

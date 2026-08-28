@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+/** 外部门店映射与平台 Evidence 缓存仓库。 */
 public interface ExternalEntityMappingRepository
         extends JpaRepository<ExternalEntityMappingEntity, UUID> {
 

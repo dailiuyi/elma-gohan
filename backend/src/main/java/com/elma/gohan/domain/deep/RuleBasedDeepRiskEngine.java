@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
+/** 按公开线索方向和覆盖率计算有限风险调整。 */
 @Component
 public class RuleBasedDeepRiskEngine implements DeepRiskEngine {
 

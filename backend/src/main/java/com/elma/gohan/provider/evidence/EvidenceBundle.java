@@ -1,5 +1,6 @@
 package com.elma.gohan.provider.evidence;
 
+/** 风险计算所需的评论、平台和一致性 Evidence 集合。 */
 public record EvidenceBundle(
         RestaurantEvidence reviewEvidence,
         PlatformEvidence amap,

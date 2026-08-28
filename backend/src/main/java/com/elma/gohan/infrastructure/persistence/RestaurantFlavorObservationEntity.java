@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
+/** 匿名用户对餐厅口味标签的观察记录。 */
 @Entity
 @Table(name = "restaurant_flavor_observation")
 @IdClass(RestaurantFlavorObservationEntity.Key.class)

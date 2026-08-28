@@ -2,6 +2,7 @@ package com.elma.gohan.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/** 百度地点检索开关、凭据与超时配置。 */
 @ConfigurationProperties(prefix = "elma.baidu")
 public class BaiduProperties {
 

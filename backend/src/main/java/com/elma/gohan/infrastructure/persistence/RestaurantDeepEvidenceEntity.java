@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 单家餐厅按来源保存的公开 Web Evidence 缓存。 */
 @Entity
 @Table(name = "restaurant_deep_evidence")
 public class RestaurantDeepEvidenceEntity {

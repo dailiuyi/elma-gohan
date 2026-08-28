@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
+/** 管理用户口味标注，并按双用户门槛生成公共口味特征。 */
 @Service
 public class FlavorFeatureService {
     private final RestaurantRepository restaurantRepository;
@@ -28,6 +29,7 @@ public class FlavorFeatureService {
         this.observationRepository = observationRepository;
     }
 
+    /** 批量加载候选餐厅可用于当前用户的口味标签。 */
     public Map<String, Set<FlavorTag>> loadForCandidates(UUID userId,
             Collection<Restaurant> restaurants) {
         Map<String, List<String>> idsBySource = new HashMap<>();
@@ -58,6 +60,7 @@ public class FlavorFeatureService {
         return result;
     }
 
+    /** 加载单家餐厅对当前用户可见的口味标签。 */
     public Set<FlavorTag> loadForRestaurant(UUID userId, UUID restaurantId) {
         List<RestaurantFlavorObservationEntity> observations =
                 observationRepository.findByRestaurantIdIn(List.of(restaurantId));
@@ -72,6 +75,7 @@ public class FlavorFeatureService {
         return result;
     }
 
+    /** 保存用户对餐厅的口味观察。 */
     public void record(UUID userId, RestaurantEntity restaurant, Collection<FlavorTag> tags,
             String result, LocalDateTime observedAt) {
         if (tags == null) return;

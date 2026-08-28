@@ -12,6 +12,7 @@ import com.elma.gohan.domain.restaurant.BusinessStatus;
 import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.elma.gohan.domain.restaurant.CategoryConfidence;
 
+/** 标准化餐厅主实体。 */
 @Entity
 @Table(name = "restaurant")
 public class RestaurantEntity {

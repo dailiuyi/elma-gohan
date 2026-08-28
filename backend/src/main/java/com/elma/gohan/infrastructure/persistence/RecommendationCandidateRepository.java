@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+/** 冻结候选池的持久化仓库。 */
 public interface RecommendationCandidateRepository
         extends JpaRepository<RecommendationCandidateEntity, UUID> {
 

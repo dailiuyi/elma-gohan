@@ -24,8 +24,10 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** 记录用户行为，并将有效隐式信号同步到口味画像。 */
 @Service
 public class BehaviorService {
+    /** 行为写入结果及是否为首次创建。 */
     public record Recorded(BehaviorResponse response, boolean created) { }
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private final RecommendationLogRepository logRepository;
@@ -48,6 +50,7 @@ public class BehaviorService {
     }
 
     @Transactional
+    /** 记录客户端行为；相同事件 ID 会幂等返回。 */
     public Recorded recordClient(UUID userId, UUID recommendationId, SubmitBehaviorRequest request) {
         if (!request.type().clientWritable()) {
             throw new ValidationFailedException("type", "客户端只能提交 ACCEPT、NAVIGATE 或 SKIP");
@@ -78,14 +81,17 @@ public class BehaviorService {
         return new Recorded(toResponse(saved, false), true);
     }
 
+    /** 记录服务端产生的推荐展示事件。 */
     public void recordRecommended(UUID userId, RecommendationLogEntity log,
             RecommendationCandidateEntity candidate, LocalDateTime now) {
         recordServer(userId, log, candidate, BehaviorType.RECOMMENDED, now);
     }
+    /** 记录换一家事件。 */
     public void recordReroll(UUID userId, RecommendationLogEntity log,
             RecommendationCandidateEntity candidate, LocalDateTime now) {
         recordServer(userId, log, candidate, BehaviorType.REROLL, now);
     }
+    /** 将显式反馈同步为行为记录。 */
     public void recordFeedback(UUID userId, RecommendationLogEntity log,
             RecommendationCandidateEntity candidate, BehaviorType type, LocalDateTime now) {
         recordServer(userId, log, candidate, type, now);

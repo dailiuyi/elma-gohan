@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 兼容旧版本的追加式用户偏好 JSON 快照。 */
 @Entity
 @Table(name = "user_preference")
 public class UserPreferenceEntity {

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+/** 公开搜索线索的聚合信号分析。 */
 public record DeepSignalAnalysis(
         List<String> positive,
         List<String> negative,

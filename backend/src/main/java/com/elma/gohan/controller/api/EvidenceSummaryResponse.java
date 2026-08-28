@@ -2,6 +2,7 @@ package com.elma.gohan.controller.api;
 
 import com.elma.gohan.provider.evidence.EvidenceSummary;
 
+/** 面向客户端的高德、百度 Evidence 摘要。 */
 public record EvidenceSummaryResponse(
         String matchStatus,
         Double matchConfidence,

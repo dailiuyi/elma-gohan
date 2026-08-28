@@ -2,6 +2,7 @@ package com.elma.gohan.provider.evidence;
 
 import java.util.List;
 
+/** 一页平台地点检索结果及分页元数据。 */
 public record PlatformSearchResult(
         EvidenceStatus status,
         List<PlatformEvidence> evidence,

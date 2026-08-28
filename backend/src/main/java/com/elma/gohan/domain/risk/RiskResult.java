@@ -3,6 +3,7 @@ package com.elma.gohan.domain.risk;
 import com.elma.gohan.provider.evidence.EvidenceSummary;
 import java.util.List;
 
+/** 餐厅客观风险、置信度、因子和解释。 */
 public record RiskResult(
         int riskScore,
         RiskLevel riskLevel,

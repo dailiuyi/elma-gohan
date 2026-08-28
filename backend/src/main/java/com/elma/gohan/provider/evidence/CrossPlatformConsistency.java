@@ -1,5 +1,6 @@
 package com.elma.gohan.provider.evidence;
 
+/** 已匹配平台评分差异及冲突风险。 */
 public record CrossPlatformConsistency(
         ConsistencyLevel level,
         Double ratingDifference,

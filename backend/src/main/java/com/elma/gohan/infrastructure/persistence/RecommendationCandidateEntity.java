@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 推荐会话内冻结的候选、风险和排序快照。 */
 @Entity
 @Table(name = "recommendation_candidate")
 public class RecommendationCandidateEntity {

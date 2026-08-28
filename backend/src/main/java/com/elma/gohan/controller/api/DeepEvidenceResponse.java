@@ -2,6 +2,7 @@ package com.elma.gohan.controller.api;
 
 import java.util.List;
 
+/** 按需深挖的风险、来源覆盖和公开链接响应。 */
 public record DeepEvidenceResponse(
         String recommendationId,
         String restaurantId,

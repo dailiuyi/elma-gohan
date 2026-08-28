@@ -8,11 +8,13 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
+/** 读取和记录用户近期确认吃过的餐厅。 */
 @Service
 public class UserFoodHistoryService {
     private final UserFoodHistoryRepository repository;
     public UserFoodHistoryService(UserFoodHistoryRepository repository) { this.repository = repository; }
 
+    /** 加载最近 30 天饮食历史。 */
     public RecentFoodHistory load(UUID userId, LocalDateTime now) {
         var entries = repository.findByAnonymousUserIdAndSelectedAtAfterOrderBySelectedAtDesc(
                 userId, now.minusDays(30)).stream()
@@ -22,6 +24,7 @@ public class UserFoodHistoryService {
         return new RecentFoodHistory(entries, now);
     }
 
+    /** 根据显式反馈记录一次已确认饮食。 */
     public void record(UUID userId, UUID recommendationId, RestaurantEntity restaurant,
             String result, LocalDateTime now) {
         repository.save(new UserFoodHistoryEntity(UUID.randomUUID(), userId, recommendationId,

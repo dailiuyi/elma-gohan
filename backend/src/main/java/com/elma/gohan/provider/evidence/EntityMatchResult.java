@@ -2,6 +2,7 @@ package com.elma.gohan.provider.evidence;
 
 import java.util.Map;
 
+/** 单家高德餐厅与百度门店的匹配结果。 */
 public record EntityMatchResult(
         EntityMatchStatus status,
         Double confidence,

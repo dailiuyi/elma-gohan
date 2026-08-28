@@ -8,6 +8,7 @@ import com.elma.gohan.provider.evidence.EntityMatchStatus;
 import com.elma.gohan.provider.evidence.PlatformEvidence;
 import org.springframework.stereotype.Component;
 
+/** 比较已匹配平台的综合评分并量化冲突。 */
 @Component
 public class CrossPlatformConsistencyAnalyzer {
 

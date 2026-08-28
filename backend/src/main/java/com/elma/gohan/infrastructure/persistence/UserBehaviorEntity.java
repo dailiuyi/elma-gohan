@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 用户显式与隐式行为事件及候选特征快照。 */
 @Entity
 @Table(name = "user_behavior")
 public class UserBehaviorEntity {

@@ -2,6 +2,7 @@ package com.elma.gohan.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/** 评论型 Evidence Provider 的来源和加载上限配置。 */
 @ConfigurationProperties(prefix = "elma.evidence")
 public class EvidenceProperties {
 

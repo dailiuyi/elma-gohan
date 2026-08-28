@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 餐厅客观风险计算结果及 Evidence 快照。 */
 @Entity
 @Table(name = "risk_result")
 public class RiskResultEntity {

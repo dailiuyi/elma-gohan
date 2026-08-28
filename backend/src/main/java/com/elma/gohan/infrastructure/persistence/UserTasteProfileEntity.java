@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 用户长期口味画像及乐观锁版本。 */
 @Entity
 @Table(name = "user_taste_profile")
 public class UserTasteProfileEntity {

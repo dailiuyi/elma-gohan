@@ -55,6 +55,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+/** 按需聚合公开 Web 线索并生成独立的深挖风险结果。 */
 @Service
 public class DeepEvidenceService {
 
@@ -98,6 +99,7 @@ public class DeepEvidenceService {
         this.executor = executor;
     }
 
+    /** 深挖当前推荐餐厅，优先复用缓存且不改变主推荐排序。 */
     public DeepEvidenceResponse deepen(UUID anonymousUserId, UUID recommendationId) {
         long started = System.nanoTime();
         RecommendationLogEntity recommendation = logRepository

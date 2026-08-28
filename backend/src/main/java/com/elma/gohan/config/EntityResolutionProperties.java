@@ -2,6 +2,7 @@ package com.elma.gohan.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/** 高德与百度门店实体匹配的权重、阈值和缓存时长。 */
 @ConfigurationProperties(prefix = "elma.entity-resolution")
 public class EntityResolutionProperties {
 

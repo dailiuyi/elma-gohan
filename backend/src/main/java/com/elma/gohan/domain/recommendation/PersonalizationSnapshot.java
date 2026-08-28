@@ -2,6 +2,7 @@ package com.elma.gohan.domain.recommendation;
 
 import java.util.List;
 
+/** 候选创建时冻结的个性化解释和分项快照。 */
 public record PersonalizationSnapshot(
         double tasteMatchScore,
         double confidence,

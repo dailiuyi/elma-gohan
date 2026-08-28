@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/** 用于短期重复惩罚和探索限制的近期饮食历史。 */
 public record RecentFoodHistory(List<Entry> entries, LocalDateTime now) {
     public record Entry(String source, String sourcePoiId, String categoryCode,
                         String result, LocalDateTime selectedAt) { }

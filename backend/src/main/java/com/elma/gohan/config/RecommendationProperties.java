@@ -2,6 +2,7 @@ package com.elma.gohan.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/** 推荐排序、候选池和安全探索参数。 */
 @ConfigurationProperties(prefix = "elma.recommendation")
 public class RecommendationProperties {
     private String algorithmVersion = "recommendation-v0.4.1";
@@ -39,6 +40,7 @@ public class RecommendationProperties {
     public CategoryConfidencePenalty getCategoryConfidencePenalty() { return categoryConfidencePenalty; }
     public void setCategoryConfidencePenalty(CategoryConfidencePenalty v) { categoryConfidencePenalty = v; }
 
+    /** LowRegretScore 各分项权重。 */
     public static class Weights {
         private double restaurantQuality = 25;
         private double riskSafety = 25;
@@ -60,6 +62,7 @@ public class RecommendationProperties {
         public void setRecentDiversity(double v) { recentDiversity = v; }
     }
 
+    /** 餐饮分类可信度对应的排序惩罚。 */
     public static class CategoryConfidencePenalty {
         private double verified = 0;
         private double supported = 6;

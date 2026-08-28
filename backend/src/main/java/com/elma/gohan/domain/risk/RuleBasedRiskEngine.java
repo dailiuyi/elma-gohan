@@ -57,6 +57,7 @@ public class RuleBasedRiskEngine implements RiskEngine {
                 new RuleBasedRecentTrendDetector(properties));
     }
 
+    /** 使用评论 Evidence 评估单家餐厅。 */
     @Override
     public RiskResult evaluate(Restaurant restaurant, RestaurantEvidence suppliedEvidence) {
         PlatformEvidence amap = new PlatformEvidence("AMAP", restaurant.sourcePoiId(),
@@ -69,6 +70,7 @@ public class RuleBasedRiskEngine implements RiskEngine {
                 CrossPlatformConsistency.unknown("百度暂未匹配到同一门店")));
     }
 
+    /** 使用完整多平台 Evidence 评估单家餐厅。 */
     @Override
     public RiskResult evaluate(Restaurant restaurant, EvidenceBundle suppliedBundle) {
         EvidenceBundle bundle = suppliedBundle == null ? legacyUnavailable(restaurant) : suppliedBundle;

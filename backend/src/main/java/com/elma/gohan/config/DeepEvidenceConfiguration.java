@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+/** 深挖 Evidence 的并行执行器配置。 */
 @Configuration
 public class DeepEvidenceConfiguration {
 

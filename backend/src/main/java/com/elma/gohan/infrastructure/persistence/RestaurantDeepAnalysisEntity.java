@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 餐厅公开线索的派生分析缓存。 */
 @Entity
 @Table(name = "restaurant_deep_analysis")
 public class RestaurantDeepAnalysisEntity {

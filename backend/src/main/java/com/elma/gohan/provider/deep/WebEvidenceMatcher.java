@@ -11,6 +11,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
+/** 按店名和地址关键词过滤同店公开搜索结果。 */
 @Component
 public class WebEvidenceMatcher {
 

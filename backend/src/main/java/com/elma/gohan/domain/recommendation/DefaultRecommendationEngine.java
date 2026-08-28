@@ -32,6 +32,7 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
         this.props = props;
     }
 
+    /** 过滤高风险候选后完成评分、探索和多样化抽取。 */
     @Override
     public RecommendationResult recommend(List<Restaurant> candidates,
             Map<String, RiskResult> risks, UserPreference preference, long seed) {
@@ -97,6 +98,7 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
                     >= props.getExplorationNegativePreferenceThreshold();
     }
 
+    /** 使用冻结快照和随机种子重放候选池选择。 */
     @Override
     public List<SelectionCandidate> replaySelection(List<SelectionCandidate> selectionSnapshot,
                                                      int poolSize, long seed) {

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
+/** 使用透明短语规则提取正负面、运营和营销信号。 */
 @Component
 public class RuleBasedDeepSignalAnalyzer implements DeepSignalAnalyzer {
 

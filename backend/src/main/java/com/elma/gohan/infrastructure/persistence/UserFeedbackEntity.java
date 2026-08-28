@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** 用户对推荐餐厅的显式反馈。 */
 @Entity
 @Table(name = "user_feedback")
 public class UserFeedbackEntity {
