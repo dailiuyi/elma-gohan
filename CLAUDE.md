@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 仓库现状
 
-这是「ELMA 今天吃什么」前后端仓库。当前版本为 V0.4：默认推荐保持高德 + 百度与 `risk-v0.3.1`，使用 `taste-v0.1`、行为闭环、近期饮食历史、有限探索和可重放的 `recommendation-v0.4.1`；用户主动深挖仍生成不参与排序的 `deep-risk-v0.1`。接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，当前增量规则见 [docs/V0.4-personalized-decision-loop.md](docs/V0.4-personalized-decision-loop.md)。
+这是「ELMA 今天吃什么」前后端仓库。当前应用版本为 V1.0.0：默认推荐保持高德 + 百度与 `risk-v0.3.1`，使用 `taste-v0.1`、行为闭环、近期饮食历史、有限探索和可重放的 `recommendation-v0.4.1`；用户主动深挖仍生成不参与排序的 `deep-risk-v0.1`。接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，个性化规则见 [docs/V0.4-personalized-decision-loop.md](docs/V0.4-personalized-decision-loop.md)。
 
 两份方案文档（`elma-gohan_V0.1_Demo_技术与产品方案.md`、`elma-gohan产品介绍.md`）是项目起点，不得覆盖或重写。
 
@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 python contracts/validate_openapi.py
 ```
 
-需要 `pyyaml`。脚本会校验操作集合（只允许五个 POST 接口）、operationId、`X-Anonymous-User-Id` 头、反馈/行为 DTO 形状以及所有 example/default 与 schema 一致，输出 `CONTRACT_OK` 或 `CONTRACT_INVALID`。
+需要 `pyyaml`。脚本会校验六个公开接口、operationId、`X-Anonymous-User-Id` 头、反馈/行为 DTO 形状以及所有 example/default 与 schema 一致，输出 `CONTRACT_OK` 或 `CONTRACT_INVALID`。
 
 后端工程在 `backend/`（Java 17 + Spring Boot 3.5 + Maven 单模块）：
 
@@ -32,13 +32,14 @@ cd backend && mvn test
 
 接口事实源是 [contracts/openapi.yaml](contracts/openapi.yaml)，说明见 [contracts/README.md](contracts/README.md)。前后端实现不得自行定义第二套 DTO 字段含义；改契约必须先改 YAML 并通过验证脚本。
 
-五个接口（均要求 `X-Anonymous-User-Id` 请求头，值为客户端生成的匿名 UUID）：
+六个接口（均要求 `X-Anonymous-User-Id` 请求头，值为客户端生成的匿名 UUID）：
 
 - `POST /api/v1/recommendations` — 创建推荐会话，只返回一家（201）
 - `POST /api/v1/recommendations/{id}/reroll` — 换一家（200）
 - `POST /api/v1/recommendations/{id}/feedback` — 用户反馈，可附最多 3 个口味标签（201）
 - `POST /api/v1/recommendations/{id}/behaviors` — 幂等记录 ACCEPT/NAVIGATE/SKIP（201/200）
 - `POST /api/v1/recommendations/{id}/deep-evidence` — 只深挖当前展示餐厅，无请求体（200）
+- `DELETE /api/v1/users/me/data` — 幂等删除当前匿名用户的推荐与个性化数据（204）
 
 路径中的 `id` 是推荐会话 ID，不是餐厅 ID。
 

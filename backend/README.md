@@ -1,6 +1,6 @@
-# ELMA 今天吃什么 V0.4 后端
+# ELMA 今天吃什么 V1.0.0 后端
 
-Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德与百度提供结构化 Evidence，`risk-v0.3.1` 只表达客观风险；`taste-v0.1` 和 `recommendation-v0.4.1` 负责匿名用户画像、近期历史、有限探索、个性化排序与确定性选择重放。Brave Web Search 仍只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，V0.4 增量见 [`../docs/V0.4-personalized-decision-loop.md`](../docs/V0.4-personalized-decision-loop.md)。
+Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德与百度提供结构化 Evidence，`risk-v0.3.1` 只表达客观风险；`taste-v0.1` 和 `recommendation-v0.4.1` 负责匿名用户画像、近期历史、有限探索、个性化排序与确定性选择重放。Brave Web Search 仍只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，个性化规则见 [`../docs/V0.4-personalized-decision-loop.md`](../docs/V0.4-personalized-decision-loop.md)。
 
 ## 构建与测试
 
@@ -35,7 +35,7 @@ mvn spring-boot:run   # 启动开发服务(默认 8080)
 ## 架构
 
 ```
-controller/        五个 POST 接口,DTO 严格对齐 openapi.yaml
+controller/        推荐闭环与用户数据删除接口，DTO 严格对齐 openapi.yaml
 application/       推荐、反馈、行为、画像、近期历史 + 按需 DeepEvidenceService
 domain/
   restaurant/      Restaurant 标准模型(第三方数据必须先转此模型)
@@ -79,3 +79,4 @@ config/            Amap/Baidu/EntityResolution/Risk/Taste/Recommendation/DeepEvi
 3. 检查响应中的 `evidenceSummary`；百度不可用时应为 `UNAVAILABLE`，推荐仍成功。
 4. 用返回的 `recommendationId` 调 `/behaviors` 记录 ACCEPT/NAVIGATE/SKIP，并调 `/feedback` 提交 `{"result":"LIKE","flavorTags":["SPICY"]}`；相同事件 ID 重试不重复落库。
 5. 对当前餐厅调用 `/api/v1/recommendations/<id>/deep-evidence`；三个来源先查询最近 31 天，严格门店匹配为 0 时各自最多追加一次不限时间查询，因此首次最多 6 次 Brave 调用；同一餐厅再次调用应命中缓存且不再查询。
+6. 调用 `DELETE /api/v1/users/me/data` 后，确认该匿名用户的推荐、行为、反馈、饮食历史和画像均被删除，其他用户及共享餐厅数据保留。

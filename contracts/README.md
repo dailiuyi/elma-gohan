@@ -1,6 +1,6 @@
 # ELMA API 契约说明
 
-V0.4 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本文只解释已确定的跨端规则，不定义第二套 DTO。
+V1.0.0 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本文只解释已确定的跨端规则，不定义第二套 DTO。
 
 ## 接口范围
 
@@ -12,7 +12,7 @@ V0.4 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本文
 | 用户行为 | `POST /api/v1/recommendations/{id}/behaviors` | `SubmitBehaviorRequest` | `201/200 BehaviorResponse` |
 | 按需深挖 | `POST /api/v1/recommendations/{id}/deep-evidence` | 无请求体 | `200 DeepEvidenceResponse` |
 
-五个接口都要求 `X-Anonymous-User-Id` 请求头，值为客户端首次启动生成并持久化的 UUID。`id` 是推荐会话 ID，不是餐厅 ID。行为和深挖只允许操作属于该用户且已经展示的餐厅。
+六个接口都要求 `X-Anonymous-User-Id` 请求头，值为客户端首次启动生成并持久化的 UUID。`id` 是推荐会话 ID，不是餐厅 ID。行为和深挖只允许操作属于该用户且已经展示的餐厅；数据删除只影响该匿名 UUID。
 
 ## 已确定规则
 

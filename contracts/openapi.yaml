@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
   title: ELMA 今天吃什么 API
-  version: 0.4.0
+  version: 1.0.0
   description: |
-    V0.3 测试版的前后端接口契约。服务端负责高德 POI、百度 Evidence、实体匹配、跨平台一致性、风险过滤、TasteProfile、
+    V1.0 正式版的前后端接口契约。服务端负责高德 POI、百度 Evidence、实体匹配、跨平台一致性、风险过滤、TasteProfile、
     Low Regret 排序、多样化重排、候选池管理与按需公开 Web Evidence 深挖；客户端不得自行重算风险或排序。
 servers:
   - url: /api/v1

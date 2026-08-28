@@ -61,7 +61,7 @@ describe('home page acceptance states', () => {
     expect(wrapper.find('.product-name').text()).toBe('ELMA 今天吃什么')
     expect(wrapper.findAll('.product-name')).toHaveLength(1)
     expect(wrapper.find('.brand').exists()).toBe(false)
-    expect(wrapper.find('.edition').text()).toBe('elma-gohan / 0.4.0')
+    expect(wrapper.find('.edition').text()).toBe('elma-gohan / 1.0.0')
     expect(wrapper.find('.header-rail').exists()).toBe(true)
     expect(wrapper.findAll('.decision-flow__step').map((item) => item.text())).toEqual([
       '定位附近',

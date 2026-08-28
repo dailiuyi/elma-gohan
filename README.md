@@ -1,6 +1,6 @@
-# ELMA 今天吃什么 V0.4
+# ELMA 今天吃什么 V1.0.0
 
-LowRegret V0.4 是 Java 模块化单体后端与 uni-app 微信小程序前端。`risk-v0.3.1` 继续只判断餐厅的客观风险；`taste-v0.1` 从显式反馈、轻量行为与近期饮食历史形成匿名用户画像；`recommendation-v0.4.1` 将两者保持隔离后组合成个性化 LowRegretScore，并保存可确定性重放的随机种子与候选快照。接口事实源是 [`contracts/openapi.yaml`](contracts/openapi.yaml)，当前规则见 [`docs/V0.4-personalized-decision-loop.md`](docs/V0.4-personalized-decision-loop.md)。
+LowRegret V1.0.0 是 Java 模块化单体后端与 uni-app 微信小程序前端。`risk-v0.3.1` 只判断餐厅的客观风险；`taste-v0.1` 从显式反馈、轻量行为与近期饮食历史形成匿名用户画像；`recommendation-v0.4.1` 将两者保持隔离后组合成个性化 LowRegretScore，并保存可确定性重放的随机种子与候选快照。接口事实源是 [`contracts/openapi.yaml`](contracts/openapi.yaml)，个性化规则见 [`docs/V0.4-personalized-decision-loop.md`](docs/V0.4-personalized-decision-loop.md)，正式版变更见 [`docs/releases/v1.0.0.md`](docs/releases/v1.0.0.md)。
 
 ## 环境
 
@@ -25,6 +25,8 @@ pnpm build:mp-weixin
 ```
 
 当前闭环：首页默认正餐，可按互斥的距离与预算区间筛选；服务端只返回一家推荐，并允许测试用户最多重新选择 5 次。“就它了”、导航、换一家和跳过形成隐式行为；三态反馈可附带最多 3 个口味标签。长期画像和近期饮食历史只影响下一次新推荐，当前会话最多 6 家候选的风险、个性化分项和顺序快照保持冻结。
+
+首页“隐私与数据”页面会说明位置、匿名编号、推荐与反馈数据的用途。用户可以一键删除当前匿名编号关联的推荐会话、行为、反馈、饮食历史、口味标注和个性化画像，并同时清除本地匿名身份。
 
 ## 配置与边界
 
