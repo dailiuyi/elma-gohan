@@ -11,14 +11,14 @@
 ## 产品截图
 
 <p align="center">
-  <img src="docs/images/readme/home-filter.jpg" alt="微信小程序首页：定位、距离、预算和餐饮偏好筛选" width="360">
-  <img src="docs/images/readme/recommendation-result.jpg" alt="推荐结果页：餐厅、风险、数据来源和推荐理由" width="360">
+  <img src="docs/images/readme/home-filter.jpg" alt="微信小程序首页：定位、距离、预算和餐饮偏好筛选" width="220">
+  <img src="docs/images/readme/recommendation-result.jpg" alt="推荐结果页：餐厅、风险、数据来源和推荐理由" width="220">
 </p>
 
 <p align="center"><sub>首页筛选与推荐结果页</sub></p>
 
 <p align="center">
-  <img src="docs/images/readme/wechat-search.jpg" alt="微信搜一搜饭点电波" width="760">
+  <img src="docs/images/readme/wechat-search.jpg" alt="微信搜一搜饭点电波" width="480">
 </p>
 
 <p align="center"><sub>微信搜一搜“饭点电波”体验小程序</sub></p>
