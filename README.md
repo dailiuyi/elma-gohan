@@ -8,14 +8,13 @@
 
 后端技术栈：`Spring Boot + PostgreSQL`
 
-## 产品截图
+## 产品演示
 
 <p align="center">
-  <img src="docs/images/readme/home-filter.jpg" alt="微信小程序首页：定位、距离、预算和餐饮偏好筛选" width="220">
-  <img src="docs/images/readme/recommendation-result.jpg" alt="推荐结果页：餐厅、风险、数据来源和推荐理由" width="220">
+  <img src="docs/images/readme/product-demo.gif" alt="微信小程序从条件筛选到推荐结果和深挖页面的操作演示" width="260">
 </p>
 
-<p align="center"><sub>首页筛选与推荐结果页</sub></p>
+<p align="center"><sub>从条件筛选到推荐结果与按需深挖</sub></p>
 
 <p align="center">
   <img src="docs/images/readme/wechat-search.jpg" alt="微信搜一搜饭点电波" width="480">
