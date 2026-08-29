@@ -47,7 +47,7 @@ V1.0.0 的机器可读接口事实源是 [`openapi.yaml`](./openapi.yaml)。本�
 - `risk`：可解释、带版本的风险结果；`confidence` 为 0～1，内部 factors 不对客户端公开。
 - `evidenceSummary`：V0.3 可选兼容字段；后端正常返回高德/百度评分摘要、门店匹配状态和一条一致性说明，不含平台 POI ID 与匹配特征。
 - `reasons`：服务端生成的推荐理由。
-- `personalization`：Taste 匹配分、画像可信度、选择模式、个性化理由及 `taste-v0.1` 版本。
+- `personalization`：Taste 匹配分、画像可信度、选择模式、个性化理由及 `taste-v0.2` 版本。
 - `alternativesRemaining`：剩余未展示替代项数量，范围 0～5。
 
 ### SubmitFeedbackRequest / FeedbackResponse

@@ -10,7 +10,14 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,6 +27,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
@@ -30,6 +38,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
@@ -64,6 +73,14 @@ class RecommendationApiTest {
 
     @Autowired
     private PoiRecallCache recallCache;
+
+    @Autowired
+    @Qualifier("safeRegretShadowExecutor")
+    private Executor shadowExecutor;
+
+    @Autowired
+    @Qualifier("safeRegretShadowCaptureExecutor")
+    private Executor shadowCaptureExecutor;
 
     private static final HttpServer amapStub;
     private static final AtomicReference<String> amapResponse = new AtomicReference<>("{}");
@@ -129,6 +146,8 @@ class RecommendationApiTest {
     static void amapBaseUrl(DynamicPropertyRegistry registry) {
         registry.add("elma.amap.base-url",
                 () -> "http://localhost:" + amapStub.getAddress().getPort());
+        registry.add("elma.safe-regret.shadow-enabled", () -> true);
+        registry.add("elma.safe-regret.serving-enabled", () -> false);
     }
 
     @AfterAll
@@ -138,6 +157,7 @@ class RecommendationApiTest {
 
     @AfterEach
     void cleanDb() {
+        awaitShadowIdle();
         recallCache.invalidateAll();
         evidenceFailure.set(false);
         deepEvidenceCalls.set(0);
@@ -193,14 +213,14 @@ class RecommendationApiTest {
         JsonNode personalization = body.get("personalization");
         assertThat(personalization.get("tasteMatchScore").asDouble()).isBetween(0.0, 100.0);
         assertThat(personalization.get("confidence").asDouble()).isBetween(0.0, 1.0);
-        assertThat(personalization.get("algorithmVersion").asText()).isEqualTo("taste-v0.1");
+        assertThat(personalization.get("algorithmVersion").asText()).isEqualTo("taste-v0.2");
         // 落库校验:推荐日志含条件快照与双算法版本
         Integer logs = jdbc.queryForObject(
                 "SELECT count(*) FROM recommendation_log WHERE request_condition_json IS NOT NULL "
                         + "AND recommended_restaurant_id = current_restaurant_id "
                         + "AND risk_algorithm_version = 'risk-v0.3.1' "
                         + "AND recommendation_algorithm_version = 'recommendation-v0.4.1' "
-                        + "AND taste_algorithm_version = 'taste-v0.1' "
+                        + "AND taste_algorithm_version = 'taste-v0.2' "
                         + "AND random_seed <> 0 "
                         + "AND jsonb_array_length(selection_snapshot_json) > 0", Integer.class);
         assertThat(logs).isEqualTo(1);
@@ -212,6 +232,40 @@ class RecommendationApiTest {
         assertThat(snapshot.get("radius").asInt()).isEqualTo(1000);
         assertThat(snapshot.get("minBudget").asInt()).isEqualTo(20);
         assertThat(snapshot.get("maxBudget").asInt()).isEqualTo(40);
+
+        awaitDecisionSnapshot(body.get("recommendationId").asText());
+        Map<String, Object> decisionSnapshot = jdbc.queryForMap(
+                "SELECT experiment_key, variant, served_risk_algorithm_version, "
+                        + "shadow_risk_algorithm_version, "
+                        + "served_recommendation_algorithm_version, "
+                        + "shadow_recommendation_algorithm_version, "
+                        + "all_candidates_json::text AS payload_json "
+                        + "FROM recommendation_decision_snapshot "
+                        + "WHERE recommendation_log_id = ?::uuid",
+                body.get("recommendationId").asText());
+        assertThat(decisionSnapshot)
+                .containsEntry("experiment_key", "safe-regret-v0.5")
+                .containsEntry("variant", "SHADOW")
+                .containsEntry("served_risk_algorithm_version", "risk-v0.3.1")
+                .containsEntry("shadow_risk_algorithm_version", "risk-v0.5")
+                .containsEntry("served_recommendation_algorithm_version", "recommendation-v0.4.1")
+                .containsEntry("shadow_recommendation_algorithm_version", "recommendation-v0.5");
+        JsonNode shadowPayload = JSON.readTree((String) decisionSnapshot.get("payload_json"));
+        assertThat(shadowPayload.path("featureSchemaVersion").asInt()).isEqualTo(2);
+        assertThat(shadowPayload.path("candidates"))
+                .extracting(candidate -> candidate.path("restaurant").path("sourcePoiId").asText())
+                .containsExactly("POI-4", "POI-5", "POI-6", "POI-7", "POI-8");
+        assertThat(shadowPayload.path("candidates")).allSatisfy(candidate -> {
+            assertThat(candidate.path("candidateId").asText()).isNotBlank();
+            assertThat(candidate.path("servedRisk").path("algorithmVersion").asText())
+                    .isEqualTo("risk-v0.3.1");
+            assertThat(candidate.path("shadowRisk").path("algorithmVersion").asText())
+                    .isEqualTo("risk-v0.5");
+            assertThat(candidate.path("shadowCounterfactual").isObject()).isTrue();
+            assertThat(candidate.path("shadowActual").isObject()).isTrue();
+            assertThat(candidate.has("shadowScore")).isFalse();
+            assertThat(candidate.has("shadowRank")).isFalse();
+        });
         assertThat(deepEvidenceCalls).hasValue(0);
     }
 
@@ -222,6 +276,9 @@ class RecommendationApiTest {
                  "radius": 3000, "category": "ANY", "dislikes": []}
                 """).getBody());
         String previousRestaurantId = initial.path("restaurant").path("id").asText();
+        String previousSourcePoiId = jdbc.queryForObject(
+                "SELECT source_poi_id FROM restaurant WHERE id = ?::uuid",
+                String.class, previousRestaurantId);
 
         JsonNode refreshed = JSON.readTree(create(USER, """
                 {"latitude": 28.2282, "longitude": 112.9388,
@@ -231,6 +288,16 @@ class RecommendationApiTest {
 
         assertThat(refreshed.path("restaurant").path("id").asText())
                 .isNotEqualTo(previousRestaurantId);
+        String recommendationId = refreshed.path("recommendationId").asText();
+        assertThat(jdbc.queryForObject(
+                "SELECT candidate_count FROM recommendation_log WHERE id = ?::uuid",
+                Integer.class, recommendationId)).isEqualTo(6);
+        String selectionSnapshotJson = jdbc.queryForObject(
+                "SELECT selection_snapshot_json::text FROM recommendation_log WHERE id = ?::uuid",
+                String.class, recommendationId);
+        assertThat(JSON.readTree(selectionSnapshotJson))
+                .allSatisfy(candidate -> assertThat(candidate.path("sourcePoiId").asText())
+                        .isNotEqualTo(previousSourcePoiId));
     }
 
     @Test
@@ -302,6 +369,69 @@ class RecommendationApiTest {
         assertThat(exhausted.get("restaurant").get("id").asText()).isEqualTo(a);
         assertThat(exhausted.get("alternativesRemaining").asInt()).isEqualTo(0);
         assertThat(deepEvidenceCalls).hasValue(0);
+
+        String current = jdbc.queryForObject(
+                "SELECT current_restaurant_id::text FROM recommendation_log WHERE id = ?::uuid",
+                String.class, recommendationId);
+        assertThat(current).isEqualTo(a);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM user_behavior WHERE recommendation_log_id = ?::uuid "
+                        + "AND behavior_type = 'REROLL'",
+                Integer.class, recommendationId)).isEqualTo(6);
+
+        ResponseEntity<String> feedbackResponse = post(
+                "/api/v1/recommendations/" + recommendationId + "/feedback",
+                USER, "{\"result\": \"LIKE\"}");
+        assertThat(feedbackResponse.getStatusCode().value()).isEqualTo(201);
+        JsonNode feedback = JSON.readTree(feedbackResponse.getBody());
+        assertThat(feedback.get("restaurantId").asText()).isEqualTo(a);
+        assertThat(jdbc.queryForObject(
+                "SELECT restaurant_id::text FROM user_feedback WHERE recommendation_log_id = ?::uuid",
+                String.class, recommendationId)).isEqualTo(a);
+    }
+
+    @Test
+    void concurrentRerollsConsumeDifferentCandidates() throws Exception {
+        JsonNode created = JSON.readTree(create(USER, """
+                {"latitude": 28.2282, "longitude": 112.9388}
+                """).getBody());
+        String recommendationId = created.get("recommendationId").asText();
+        String initialRestaurantId = created.get("restaurant").get("id").asText();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Callable<JsonNode> task = () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("并发 reroll 未按时开始");
+                }
+                return reroll(USER, recommendationId);
+            };
+            Future<JsonNode> first = executor.submit(task);
+            Future<JsonNode> second = executor.submit(task);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            JsonNode firstResponse = first.get(10, TimeUnit.SECONDS);
+            JsonNode secondResponse = second.get(10, TimeUnit.SECONDS);
+            String firstRestaurantId = firstResponse.get("restaurant").get("id").asText();
+            String secondRestaurantId = secondResponse.get("restaurant").get("id").asText();
+
+            assertThat(firstRestaurantId).isNotEqualTo(initialRestaurantId);
+            assertThat(secondRestaurantId).isNotEqualTo(initialRestaurantId);
+            assertThat(firstRestaurantId).isNotEqualTo(secondRestaurantId);
+            assertThat(List.of(
+                    firstResponse.get("alternativesRemaining").asInt(),
+                    secondResponse.get("alternativesRemaining").asInt()))
+                    .containsExactlyInAnyOrder(3, 4);
+            assertThat(jdbc.queryForObject(
+                    "SELECT count(*) FROM recommendation_candidate "
+                            + "WHERE recommendation_log_id = ?::uuid AND shown = true",
+                    Integer.class, recommendationId)).isEqualTo(3);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -395,7 +525,19 @@ class RecommendationApiTest {
                         + "VALUES (?::uuid, ?::uuid, '{}'::jsonb, CURRENT_TIMESTAMP)",
                 UUID.randomUUID().toString(), USER);
 
-        create(OTHER_USER, "{\"latitude\": 28.2282, \"longitude\": 112.9388}");
+        JsonNode otherCreated = JSON.readTree(create(OTHER_USER,
+                "{\"latitude\": 28.2282, \"longitude\": 112.9388}").getBody());
+        String otherRecommendationId = otherCreated.get("recommendationId").asText();
+        awaitDecisionSnapshot(recommendationId);
+        awaitDecisionSnapshot(otherRecommendationId);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM recommendation_decision_snapshot "
+                        + "WHERE recommendation_log_id = ?::uuid",
+                Integer.class, recommendationId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM recommendation_decision_snapshot "
+                        + "WHERE recommendation_log_id = ?::uuid",
+                Integer.class, otherRecommendationId)).isEqualTo(1);
         int restaurantCount = jdbc.queryForObject("SELECT count(*) FROM restaurant", Integer.class);
 
         assertThat(deleteUserData(USER).getStatusCode().value()).isEqualTo(204);
@@ -416,6 +558,14 @@ class RecommendationApiTest {
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM recommendation_log WHERE anonymous_user_id = ?::uuid",
                 Integer.class, OTHER_USER)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM recommendation_decision_snapshot "
+                        + "WHERE recommendation_log_id = ?::uuid",
+                Integer.class, recommendationId)).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM recommendation_decision_snapshot "
+                        + "WHERE recommendation_log_id = ?::uuid",
+                Integer.class, otherRecommendationId)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM restaurant", Integer.class))
                 .isEqualTo(restaurantCount);
     }
@@ -636,12 +786,55 @@ class RecommendationApiTest {
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM v_recommendation_metrics "
                         + "WHERE recommendation_algorithm_version = 'recommendation-v0.4.1' "
-                        + "AND taste_algorithm_version = 'taste-v0.1'",
+                        + "AND taste_algorithm_version = 'taste-v0.2'",
                 Integer.class)).isGreaterThan(0);
     }
 
     private ResponseEntity<String> create(String userId, String body) {
         return post("/api/v1/recommendations", userId, body);
+    }
+
+    private void awaitDecisionSnapshot(String recommendationId) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        int count;
+        do {
+            count = jdbc.queryForObject(
+                    "SELECT count(*) FROM recommendation_decision_snapshot "
+                            + "WHERE recommendation_log_id = ?::uuid",
+                    Integer.class, recommendationId);
+            if (count == 1) return;
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("等待 shadow 快照时被中断", exception);
+            }
+        } while (System.nanoTime() < deadline);
+        assertThat(count).as("shadow snapshot for " + recommendationId).isEqualTo(1);
+    }
+
+    private void awaitShadowIdle() {
+        if (!(shadowExecutor instanceof ThreadPoolTaskExecutor dispatch)
+                || !(shadowCaptureExecutor instanceof ThreadPoolTaskExecutor capture)) return;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while ((busy(dispatch) || busy(capture))
+                && System.nanoTime() < deadline) {
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("等待 shadow 线程池时被中断", exception);
+            }
+        }
+        assertThat(dispatch.getActiveCount()).isZero();
+        assertThat(dispatch.getThreadPoolExecutor().getQueue()).isEmpty();
+        assertThat(capture.getActiveCount()).isZero();
+        assertThat(capture.getThreadPoolExecutor().getQueue()).isEmpty();
+    }
+
+    private boolean busy(ThreadPoolTaskExecutor executor) {
+        return executor.getActiveCount() > 0
+                || !executor.getThreadPoolExecutor().getQueue().isEmpty();
     }
 
     private JsonNode reroll(String userId, String recommendationId) throws Exception {
@@ -672,13 +865,15 @@ class RecommendationApiTest {
             if (i > 1) {
                 pois.append(',');
             }
+            int distance = 200 + i * 80;
+            double latitude = 28.2282 + distance / 111_195.0;
             pois.append("""
                     {"id": "POI-%d", "name": "测试餐厅%d", "type": "餐饮服务;中餐厅;家常菜",
                      "typecode": "050100", "address": "麓山南路 %d 号",
-                     "location": "112.9445,28.2291", "distance": "%d",
+                     "location": "112.9388,%s", "distance": "%d",
                      "pname": "湖南省", "cityname": "长沙市", "adname": "岳麓区",
                      "biz_ext": {"rating": "4.%d", "cost": "%d", "opening_time": "09:00-21:00"}}
-                    """.formatted(i, i, i, 200 + i * 80, 9 - i, 20 + i));
+                    """.formatted(i, i, i, Double.toString(latitude), distance, 9 - i, 20 + i));
         }
         pois.append(']');
         return "{\"status\":\"1\",\"info\":\"OK\",\"pois\":" + pois + "}";

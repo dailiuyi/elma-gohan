@@ -24,7 +24,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 记录用户行为，并将有效隐式信号同步到口味画像。 */
+/** 记录用户行为；只有可独立解释的信号才同步到长期口味画像。 */
 @Service
 public class BehaviorService {
     /** 行为写入结果及是否为首次创建。 */
@@ -105,7 +105,8 @@ public class BehaviorService {
         UUID id = UUID.nameUUIDFromBytes((log.getId() + ":" + candidate.getRestaurantId() + ":" + type)
                 .getBytes(StandardCharsets.UTF_8));
         persist(id, userId, log, candidate, type, "SERVER", now);
-        if (type == BehaviorType.REROLL) learnImplicit(userId, candidate, type, now);
+        // 单独一次 REROLL 无法说明用户拒绝的是品类、价格还是距离。
+        // 它只保留为会话事件，等待后续 A -> B 的选择形成差分证据。
     }
 
     private UserBehaviorEntity persist(UUID id, UUID userId, RecommendationLogEntity log,

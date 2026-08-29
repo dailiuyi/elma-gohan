@@ -772,7 +772,7 @@ components:
           items: { type: string, maxLength: 120 }
         algorithmVersion:
           type: string
-          example: taste-v0.1
+          example: taste-v0.2
 
     SubmitBehaviorRequest:
       type: object

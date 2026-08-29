@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /** 用户画像的衰减、反馈增量和隐式学习参数。 */
 @ConfigurationProperties(prefix = "elma.taste")
 public class TasteProperties {
-    private String algorithmVersion = "taste-v0.1";
+    private String algorithmVersion = "taste-v0.2";
     private int halfLifeDays = 90;
     private double maxAbsoluteWeight = 3.0;
     private int confidenceTargetSamples = 5;

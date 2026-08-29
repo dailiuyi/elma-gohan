@@ -2,6 +2,8 @@ package com.elma.gohan.application;
 
 import com.elma.gohan.config.RecommendationProperties;
 import com.elma.gohan.config.RiskProperties;
+import com.elma.gohan.application.shadow.SafeRegretShadowDispatcher;
+import com.elma.gohan.application.shadow.SafeRegretShadowInput;
 import com.elma.gohan.controller.api.CreateRecommendationRequest;
 import com.elma.gohan.controller.api.FeedbackResponse;
 import com.elma.gohan.controller.api.RecommendationResponse;
@@ -19,6 +21,7 @@ import com.elma.gohan.domain.recommendation.RecommendationEngine;
 import com.elma.gohan.domain.recommendation.HardFilter;
 import com.elma.gohan.domain.recommendation.RecommendationResult;
 import com.elma.gohan.domain.recommendation.RestaurantCandidate;
+import com.elma.gohan.domain.recommendation.UserPreference;
 import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.elma.gohan.domain.restaurant.Location;
 import com.elma.gohan.domain.restaurant.Restaurant;
@@ -83,6 +86,7 @@ public class RecommendationService {
     private final FlavorFeatureService flavorFeatureService;
     private final UserFoodHistoryService foodHistoryService;
     private final BehaviorService behaviorService;
+    private final SafeRegretShadowDispatcher shadowDispatcher;
     private final RecommendationProperties recommendationProperties;
     private final RiskProperties riskProperties;
     private final RestaurantRepository restaurantRepository;
@@ -98,6 +102,7 @@ public class RecommendationService {
                                  FlavorFeatureService flavorFeatureService,
                                  UserFoodHistoryService foodHistoryService,
                                  BehaviorService behaviorService,
+                                 SafeRegretShadowDispatcher shadowDispatcher,
                                  RecommendationProperties recommendationProperties,
                                  RiskProperties riskProperties,
                                  RestaurantRepository restaurantRepository,
@@ -115,6 +120,7 @@ public class RecommendationService {
         this.flavorFeatureService = flavorFeatureService;
         this.foodHistoryService = foodHistoryService;
         this.behaviorService = behaviorService;
+        this.shadowDispatcher = shadowDispatcher;
         this.recommendationProperties = recommendationProperties;
         this.riskProperties = riskProperties;
         this.restaurantRepository = restaurantRepository;
@@ -151,7 +157,7 @@ public class RecommendationService {
         PoiSearchResult recall = poiProvider.nearby(
                 new Location(request.latitude(), request.longitude()), condition);
         List<Restaurant> pois = recall.restaurants();
-        List<Restaurant> eligible = hardFilter.filter(pois, condition);
+        List<Restaurant> hardEligible = hardFilter.filter(pois, condition);
         PoiSearchDiagnostics diagnostics = recall.diagnostics();
         log.info("POI 推荐过滤汇总: providerTotalCount={}, fetchedCount={}, pagesFetched={}, "
                         + "deduplicatedCount={}, mappedCount={}, hardEligibleCount={}, truncated={}, "
@@ -159,14 +165,14 @@ public class RecommendationService {
                         + "lastFetchedDistanceMeters={}, requestedCategory={}, queryTypes={}",
                 diagnostics.providerTotalCount(), diagnostics.fetchedCount(),
                 diagnostics.pagesFetched(), diagnostics.deduplicatedCount(),
-                diagnostics.mappedCount(), eligible.size(), diagnostics.truncated(),
+                diagnostics.mappedCount(), hardEligible.size(), diagnostics.truncated(),
                 diagnostics.completionReason(), diagnostics.retryCount(), diagnostics.cacheStatus(),
                 diagnostics.estimatedCacheWeightBytes(),
                 diagnostics.lastFetchedDistanceMeters(), condition.category(),
                 diagnostics.queryTypes());
         SearchNotice searchNotice = diagnostics.incomplete()
                 ? new SearchNotice(SEARCH_INCOMPLETE_CODE, SEARCH_INCOMPLETE_NOTICE) : null;
-        if (eligible.isEmpty()) {
+        if (hardEligible.isEmpty()) {
             if (diagnostics.incomplete()) {
                 throw new PoiSearchIncompleteException(SEARCH_INCOMPLETE_ERROR);
             }
@@ -174,22 +180,28 @@ public class RecommendationService {
         }
 
         Map<String, Double> priceBaselines = PriceBaselineCalculator.byCategoryGroup(
-                eligible, riskProperties.getPriceAnomalyMinPoolSize());
-        Map<String, EvidenceBundle> evidence = evidenceAggregator.collect(eligible,
+                hardEligible, riskProperties.getPriceAnomalyMinPoolSize());
+        Map<String, EvidenceBundle> evidence = evidenceAggregator.collect(hardEligible,
                 new Location(request.latitude(), request.longitude()), radius, priceBaselines);
-        Map<String, RiskResult> risks = riskEngine.evaluateAllBundles(eligible, evidence);
+        Map<String, RiskResult> risks = riskEngine.evaluateAllBundles(hardEligible, evidence);
+        // exclude 只改变最终选池，不改变其他候选的价格基线、Evidence 或风险。
+        // 若被排除项是唯一仍可服务的候选，则保留它，兼容旧前端“有其他合格餐厅才排除”。
+        List<Restaurant> eligible = excludeRequestedRestaurant(
+                hardEligible, request.excludeRestaurantId(), risks);
 
         LocalDateTime now = LocalDateTime.now(ZONE);
         var tasteProfile = tasteProfileService.load(anonymousUserId);
-        var flavorFeatures = flavorFeatureService.loadForCandidates(anonymousUserId, eligible);
+        // 画像特征同样冻结 hard-filter 全集，保证被 exclude 项仍可完整审计/重放。
+        var flavorFeatures = flavorFeatureService.loadForCandidates(anonymousUserId, hardEligible);
         var foodHistory = foodHistoryService.load(anonymousUserId, now);
+        UserPreference preference = new UserPreference(
+                condition, tasteProfile, flavorFeatures, foodHistory);
         long randomSeed;
         do {
             randomSeed = ThreadLocalRandom.current().nextLong();
         } while (randomSeed == 0L);
         RecommendationResult result = recommendationEngine.recommend(
-                eligible, risks, new com.elma.gohan.domain.recommendation.UserPreference(
-                        condition, tasteProfile, flavorFeatures, foodHistory), randomSeed);
+                eligible, risks, preference, randomSeed);
         if (result.pool().isEmpty()) {
             if (diagnostics.incomplete()) {
                 throw new PoiSearchIncompleteException(SEARCH_INCOMPLETE_ERROR);
@@ -197,8 +209,7 @@ public class RecommendationService {
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
 
-        List<RestaurantCandidate> pool = excludePreviouslyShown(
-                result.pool(), request.excludeRestaurantId());
+        List<RestaurantCandidate> pool = result.pool();
         UUID logId = UUID.randomUUID();
 
         // upsert restaurant,同时把内部 id 回填到候选
@@ -259,29 +270,40 @@ public class RecommendationService {
         behaviorService.recordRecommended(anonymousUserId, recommendationLog,
                 java.util.Objects.requireNonNull(firstEntity), now);
 
+        shadowDispatcher.afterCommit(new SafeRegretShadowInput(
+                anonymousUserId, logId, hardEligible, eligible, evidence, risks,
+                preference, result, randomSeed, now));
+
         return toResponse(logId, persisted.get(0), persisted.size() - 1, searchNotice);
     }
 
-    private List<RestaurantCandidate> excludePreviouslyShown(
-            List<RestaurantCandidate> pool, String excludeRestaurantId) {
-        if (excludeRestaurantId == null || excludeRestaurantId.isBlank() || pool.size() <= 1) {
-            return pool;
+    List<Restaurant> excludeRequestedRestaurant(
+            List<Restaurant> candidates, String excludeRestaurantId,
+            Map<String, RiskResult> risks) {
+        if (excludeRestaurantId == null || excludeRestaurantId.isBlank()
+                || candidates.size() <= 1) {
+            return candidates;
         }
         RestaurantEntity previous = restaurantRepository.findById(UUID.fromString(excludeRestaurantId))
                 .orElse(null);
-        if (previous == null) return pool;
+        if (previous == null) return candidates;
 
-        List<RestaurantCandidate> refreshed = pool.stream()
-                .filter(candidate -> !(previous.getSource().equals(candidate.restaurant().source())
-                        && previous.getSourcePoiId().equals(candidate.restaurant().sourcePoiId())))
-                .toList();
-        return refreshed.isEmpty() ? pool : refreshed;
+        java.util.function.Predicate<Restaurant> isPrevious = candidate ->
+                previous.getSource().equals(candidate.source())
+                        && previous.getSourcePoiId().equals(candidate.sourcePoiId());
+        if (candidates.stream().noneMatch(isPrevious)) return candidates;
+        boolean hasOtherServable = candidates.stream()
+                .filter(isPrevious.negate())
+                .map(candidate -> risks.get(candidate.sourcePoiId()))
+                .anyMatch(risk -> risk != null && risk.riskLevel() != RiskLevel.HIGH);
+        if (!hasOtherServable) return candidates;
+        return candidates.stream().filter(isPrevious.negate()).toList();
     }
 
     @Transactional
     /** 从冻结候选池切换到下一家，不重新计算风险和画像。 */
     public RecommendationResponse reroll(UUID anonymousUserId, UUID recommendationId) {
-        RecommendationLogEntity log = findLog(anonymousUserId, recommendationId);
+        RecommendationLogEntity log = findLogForUpdate(anonymousUserId, recommendationId);
         List<RecommendationCandidateEntity> candidates =
                 candidateRepository.findByRecommendationLogIdOrderBySlotAsc(recommendationId);
         RecommendationCandidateEntity previous = candidateRepository
@@ -301,19 +323,21 @@ public class RecommendationService {
                 }
             }
         }
+        LocalDateTime now = LocalDateTime.now(ZONE);
         if (target == null) {
             // 候选耗尽:回到初始推荐,不再生成新候选
             target = candidates.get(0);
             remaining = 0;
-            return toResponse(log.getId(), toView(log.getId(), target), remaining,
+            behaviorService.recordReroll(anonymousUserId, log, previous, now);
+            log.updateCurrent(target.getRestaurantId());
+            return toResponse(log.getId(), toView(log, target), remaining,
                     searchNoticeFrom(log));
         }
-        LocalDateTime now = LocalDateTime.now(ZONE);
         behaviorService.recordReroll(anonymousUserId, log, previous, now);
         log.updateCurrent(target.getRestaurantId());
         behaviorService.recordRecommended(anonymousUserId, log, target, now);
 
-        return toResponse(log.getId(), toView(log.getId(), target), remaining,
+        return toResponse(log.getId(), toView(log, target), remaining,
                 searchNoticeFrom(log));
     }
 
@@ -369,6 +393,13 @@ public class RecommendationService {
                 .orElseThrow(() -> new RecommendationNotFoundException("推荐已失效,请重新获取"));
     }
 
+    private RecommendationLogEntity findLogForUpdate(UUID anonymousUserId,
+                                                       UUID recommendationId) {
+        return logRepository.findByIdAndAnonymousUserIdForUpdate(
+                        recommendationId, anonymousUserId)
+                .orElseThrow(() -> new RecommendationNotFoundException("推荐已失效,请重新获取"));
+    }
+
     private Restaurant upsertRestaurant(Restaurant r, LocalDateTime now) {
         RestaurantEntity entity = restaurantRepository
                 .findBySourceAndSourcePoiId(r.source(), r.sourcePoiId())
@@ -397,7 +428,8 @@ public class RecommendationService {
     }
 
     /** reroll 时从候选快照 + restaurant 表重建候选视图。 */
-    private RestaurantCandidate toView(UUID logId, RecommendationCandidateEntity c) {
+    private RestaurantCandidate toView(RecommendationLogEntity log,
+                                       RecommendationCandidateEntity c) {
         RestaurantEntity e = restaurantRepository.findById(c.getRestaurantId())
                 .orElseThrow(() -> new RecommendationNotFoundException("推荐已失效,请重新获取"));
         Restaurant restaurant = toDomain(e, c.getDistanceMeters());
@@ -408,7 +440,7 @@ public class RecommendationService {
         PersonalizationSnapshot personalization = new PersonalizationSnapshot(
                 c.getTasteMatchScore(), c.getTasteConfidence(),
                 SelectionMode.valueOf(c.getSelectionMode()),
-                fromJson(c.getPersonalizationReasonsJson()), "taste-v0.1",
+                fromJson(c.getPersonalizationReasonsJson()), log.getTasteAlgorithmVersion(),
                 fromScoreBreakdownJson(c.getScoreBreakdownJson()));
         return new RestaurantCandidate(restaurant, risk, c.getLowRegretScore(),
                 fromJson(c.getReasonsJson()), personalization);

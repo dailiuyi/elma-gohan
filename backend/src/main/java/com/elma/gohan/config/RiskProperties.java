@@ -100,6 +100,7 @@ public class RiskProperties {
         private int windowDays = 3;
         private int minPeakCount = 12;
         private int minHistoryDays = 14;
+        private int maxHistoryDays = 365;
         private double ratioStart = 3.0;
         private double ratioFull = 8.0;
         public int getMinReviews() { return minReviews; }
@@ -110,6 +111,8 @@ public class RiskProperties {
         public void setMinPeakCount(int v) { minPeakCount = v; }
         public int getMinHistoryDays() { return minHistoryDays; }
         public void setMinHistoryDays(int v) { minHistoryDays = v; }
+        public int getMaxHistoryDays() { return maxHistoryDays; }
+        public void setMaxHistoryDays(int v) { maxHistoryDays = v; }
         public double getRatioStart() { return ratioStart; }
         public void setRatioStart(double v) { ratioStart = v; }
         public double getRatioFull() { return ratioFull; }

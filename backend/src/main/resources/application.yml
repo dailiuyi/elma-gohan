@@ -19,7 +19,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
 
 elma:
   amap:
@@ -158,6 +158,7 @@ elma:
       window-days: 3
       min-peak-count: 12
       min-history-days: 14
+      max-history-days: 365
       ratio-start: 3.0
       ratio-full: 8.0
     trend:
@@ -239,8 +240,22 @@ elma:
       verified: 0
       supported: 6
       inferred: 18
+  safe-regret:
+    # 阶段 1 只做同请求 shadow 与快照；接入阶段 2 前 serving=true 会拒绝启动。
+    shadow-enabled: ${SAFE_REGRET_SHADOW_ENABLED:true}
+    serving-enabled: ${SAFE_REGRET_SERVING_ENABLED:false}
+    rollout-percentage: ${SAFE_REGRET_ROLLOUT_PERCENTAGE:0}
+    experiment-key: safe-regret-v0.5
+    feature-schema-version: 2
+    high-risk-threshold: 0.61
+    trusted-safe-threshold: 0.40
+    minimum-decision-confidence: 0.75
+    shadow-execution:
+      capture-timeout-seconds: ${SAFE_REGRET_SHADOW_CAPTURE_TIMEOUT_SECONDS:3}
+      transaction-timeout-seconds: ${SAFE_REGRET_SHADOW_TRANSACTION_TIMEOUT_SECONDS:2}
+      shutdown-timeout-seconds: ${SAFE_REGRET_SHADOW_SHUTDOWN_TIMEOUT_SECONDS:3}
   taste:
-    algorithm-version: taste-v0.1
+    algorithm-version: taste-v0.2
     half-life-days: 90
     max-absolute-weight: 3.0
     confidence-target-samples: 5

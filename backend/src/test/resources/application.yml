@@ -129,7 +129,7 @@ elma:
       supported: 6
       inferred: 18
   taste:
-    algorithm-version: taste-v0.1
+    algorithm-version: taste-v0.2
     half-life-days: 90
     max-absolute-weight: 3.0
     confidence-target-samples: 5

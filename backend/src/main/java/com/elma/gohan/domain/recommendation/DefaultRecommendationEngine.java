@@ -1,6 +1,7 @@
 package com.elma.gohan.domain.recommendation;
 
 import com.elma.gohan.config.RecommendationProperties;
+import com.elma.gohan.config.TasteProperties;
 import com.elma.gohan.domain.restaurant.CategoryFilter;
 import com.elma.gohan.domain.restaurant.Restaurant;
 import com.elma.gohan.domain.restaurant.SearchCondition;
@@ -24,12 +25,14 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
     private final HardFilter hardFilter;
     private final LowRegretScorer scorer;
     private final RecommendationProperties props;
+    private final TasteProperties tasteProperties;
 
     public DefaultRecommendationEngine(HardFilter hardFilter, LowRegretScorer scorer,
-            RecommendationProperties props) {
+            RecommendationProperties props, TasteProperties tasteProperties) {
         this.hardFilter = hardFilter;
         this.scorer = scorer;
         this.props = props;
+        this.tasteProperties = tasteProperties;
     }
 
     /** 过滤高风险候选后完成评分、探索和多样化抽取。 */
@@ -80,7 +83,8 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
                     ? SelectionMode.EXPLORATION : normalMode;
             PersonalizationSnapshot snapshot = new PersonalizationSnapshot(
                     item.score().tasteMatchScore(), item.score().confidence(), mode,
-                    item.score().personalizationReasons(), "taste-v0.1", item.score().breakdown());
+                    item.score().personalizationReasons(), tasteProperties.getAlgorithmVersion(),
+                    item.score().breakdown());
             pool.add(new RestaurantCandidate(item.restaurant(), item.risk(), item.score().score(),
                     item.score().reasons(), snapshot));
         }

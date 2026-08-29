@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.elma.gohan.TestRestaurants;
 import com.elma.gohan.config.RecommendationProperties;
+import com.elma.gohan.config.TasteProperties;
 import com.elma.gohan.domain.restaurant.BusinessStatus;
 import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.elma.gohan.domain.restaurant.Restaurant;
@@ -21,7 +22,7 @@ class DefaultRecommendationEngineTest {
 
     private final RecommendationProperties props = recommendationProperties();
     private final DefaultRecommendationEngine engine = new DefaultRecommendationEngine(
-            new HardFilter(), new LowRegretScorer(props), props);
+            new HardFilter(), new LowRegretScorer(props), props, new TasteProperties());
 
     private static RecommendationProperties recommendationProperties() {
         RecommendationProperties properties = new RecommendationProperties();
@@ -47,6 +48,9 @@ class DefaultRecommendationEngineTest {
         assertThat(result.pool()).extracting(c -> c.restaurant().sourcePoiId())
                 .doesNotHaveDuplicates();
         assertThat(result.algorithmVersion()).isEqualTo("recommendation-v0.4.1");
+        assertThat(result.pool()).allSatisfy(candidate ->
+                assertThat(candidate.personalization().algorithmVersion())
+                        .isEqualTo("taste-v0.2"));
         assertThat(result.randomSeed()).isNotZero();
     }
 
@@ -113,7 +117,8 @@ class DefaultRecommendationEngineTest {
         RecommendationProperties explorationProps = new RecommendationProperties();
         explorationProps.setExplorationRate(1.0);
         DefaultRecommendationEngine explorationEngine = new DefaultRecommendationEngine(
-                new HardFilter(), new LowRegretScorer(explorationProps), explorationProps);
+                new HardFilter(), new LowRegretScorer(explorationProps), explorationProps,
+                new TasteProperties());
         Restaurant familiar = categoryRestaurant("c", "CHINESE", 4.9);
         Restaurant novel = categoryRestaurant("f", "FOREIGN", 4.2);
         LocalDateTime now = LocalDateTime.of(2026, 8, 21, 12, 0);

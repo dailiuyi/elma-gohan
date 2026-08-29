@@ -2,29 +2,43 @@ package com.elma.gohan.domain.risk;
 
 import com.elma.gohan.config.RiskProperties;
 import com.elma.gohan.provider.evidence.ReviewEvidence;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-/** 以包含零评论日的日历时间线计算峰值窗口相对历史基线。 */
+/** 过滤未来与极老时间后，以包含零评论日的时间线计算峰值窗口相对历史基线。 */
 @Component
 public class SlidingWindowBurstDetector implements ReviewBurstDetector {
 
     private final RiskProperties.Burst properties;
+    private final Clock clock;
 
+    @Autowired
     public SlidingWindowBurstDetector(RiskProperties riskProperties) {
+        this(riskProperties, Clock.systemUTC());
+    }
+
+    SlidingWindowBurstDetector(RiskProperties riskProperties, Clock clock) {
         this.properties = riskProperties.getBurst();
+        this.clock = clock;
     }
 
     @Override
     public BurstDetectionResult detect(List<ReviewEvidence> reviews) {
         Map<LocalDate, Integer> counts = new HashMap<>();
+        Instant now = clock.instant();
+        Instant earliest = now.minus(Math.max(1, properties.getMaxHistoryDays()), ChronoUnit.DAYS);
         for (ReviewEvidence review : reviews == null ? List.<ReviewEvidence>of() : reviews) {
-            if (review.createdAt() != null) {
+            if (review.createdAt() != null
+                    && !review.createdAt().isAfter(now)
+                    && !review.createdAt().isBefore(earliest)) {
                 LocalDate date = review.createdAt().atZone(ZoneOffset.UTC).toLocalDate();
                 counts.merge(date, 1, Integer::sum);
             }
