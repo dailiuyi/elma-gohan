@@ -123,6 +123,15 @@
 - 发布包生成成功：`backend/target/gohan-backend-1.0.0.jar`，大小 `63,471,467` 字节，SHA-256 `77AB2C2399BDC2034A4DB9E34988558AF6BC4CC26C55E46B182482AA7000BE4B`。
 - serving 安全闩继续关闭；生产激活前仍必须实时核对服务器当前应用版本与 Flyway 状态，不能仅凭本地通过直接覆盖。
 
+### 2026-08-30 / 生产发布完成
+
+- 功能提交 `5bff1ff` 已推送到 GitHub `main`，本地与远端哈希一致；生产发布包 SHA-256 为 `77AB2C2399BDC2034A4DB9E34988558AF6BC4CC26C55E46B182482AA7000BE4B`。
+- 发布前确认生产服务为 `active/running`、Java 17、PostgreSQL 数据库 `elma`、Flyway 当前版本 8；生产旧 JAR 与新 JAR 的 V1～V8 SQL 在规范化换行后逐文件哈希一致，新版本仅追加 V9。
+- 新 JAR 先在 `127.0.0.1:18081` 以零流量 canary 启动，使用真实生产配置成功迁移 V8→V9并返回健康 `UP`，随后正常停止；正式 8081 服务在 canary 期间持续在线。
+- 旧 JAR 已备份为 `/opt/elma-gohan/releases/app-before-5bff1ff-68464144.jar`，SHA-256 为 `6846414428B63E1EC5BA982C33E78CA8210971F0A6464FFF934AE9A28215FC3F`；正式 JAR 通过临时文件加原子 `mv` 切换并重启。
+- 发布后确认：systemd `active/running`、`/actuator/health` 为 `UP`、Flyway V9 success、`recommendation_decision_snapshot` 存在、`/actuator/prometheus` 返回五类 shadow counter，重启后无 warning 日志。
+- 无副作用 API 冒烟测试通过：缺失经纬度的 POST 在直连 8081 和 Nginx 8080 均返回预期 `400 VALIDATION_FAILED`，健康检查随后仍为 `UP`。serving 安全闩保持默认关闭，v0.5 仍只运行 shadow。
+
 ## 下一次恢复入口
 
 1. 阅读本文件“当前检查点”和最后一条阶段记录；不要重新实现已通过的纯领域核心。
