@@ -149,3 +149,7 @@ docs/                        版本设计、算法审计与发布说明
 ```
 
 更多版本事实见 [`docs/releases/v1.0.0.md`](docs/releases/v1.0.0.md)。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)，版权所有 © 2026 elma。

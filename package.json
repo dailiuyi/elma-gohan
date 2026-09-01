@@ -2,6 +2,7 @@
   "name": "elma-gohan-frontend",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=22 <23"
