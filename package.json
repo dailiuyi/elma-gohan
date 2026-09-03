@@ -30,6 +30,7 @@
     "@dcloudio/uni-cli-shared": "3.0.0-5020420260813003",
     "@dcloudio/uni-stacktracey": "3.0.0-5020420260813003",
     "@dcloudio/vite-plugin-uni": "3.0.0-5020420260813003",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^22.10.2",
     "@vitejs/plugin-vue": "5.2.4",
     "@vue/compiler-sfc": "3.4.21",

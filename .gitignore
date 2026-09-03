@@ -17,3 +17,7 @@ dist/
 .idea/
 .vscode/
 coverage/
+__pycache__/
+*.py[cod]
+output/database-guide/dashboard.local.html
+output/database-guide/dashboard-*.html

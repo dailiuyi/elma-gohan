@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "snapshotAt": "2026-09-03T20:30:00+08:00",
+    "periodStart": "2026-08-28",
+    "periodEnd": "2026-09-03",
+    "windowDays": 7,
+    "databaseName": "elma_test",
+    "serverVersion": "17.6",
+    "timezone": "Asia/Shanghai",
+    "flywayVersion": 9,
+    "readOnlyVerified": true,
+    "sourceMode": "fixture",
+    "sourceLabel": "本地验收聚合快照",
+    "queryCount": 23,
+    "queryDurationMs": 86,
+    "warnings": []
+  },
+  "overview": {
+    "totalRecommendations": 18,
+    "totalAnonymousIds": 7,
+    "totalRestaurants": 12,
+    "totalFeedbacks": 6,
+    "totalReturningIds": 4,
+    "totalReturningRate": 0.5714,
+    "averageRequestsPerId": 2.57,
+    "averageCandidateCount": 5.2,
+    "firstRequestAt": "2026-08-20T12:00:00",
+    "lastRequestAt": "2026-09-03T19:40:00",
+    "periodRecommendations": 12,
+    "periodActiveIds": 5,
+    "periodNewIds": 2,
+    "periodReturningIds": 3
+  },
+  "funnel": {
+    "recommendationSessions": 12,
+    "acceptedSessions": 5,
+    "navigatedSessions": 3,
+    "rerolledSessions": 4,
+    "feedbackSessions": 4,
+    "feedbackCount": 5,
+    "dislikedSessions": 1,
+    "rerollCount": 7,
+    "averageRerolls": 0.58,
+    "acceptanceRate": 0.4167,
+    "navigationRate": 0.25,
+    "feedbackRate": 0.3333
+  },
+  "daily": [
+    {"metricDate": "2026-08-28", "recommendations": 0, "activeIds": 0, "newIds": 0, "accepts": 0, "navigations": 0, "rerolls": 0, "feedbacks": 0, "dislikes": 0},
+    {"metricDate": "2026-08-29", "recommendations": 1, "activeIds": 1, "newIds": 1, "accepts": 0, "navigations": 0, "rerolls": 1, "feedbacks": 0, "dislikes": 0},
+    {"metricDate": "2026-08-30", "recommendations": 2, "activeIds": 2, "newIds": 0, "accepts": 1, "navigations": 1, "rerolls": 0, "feedbacks": 1, "dislikes": 0},
+    {"metricDate": "2026-08-31", "recommendations": 1, "activeIds": 1, "newIds": 0, "accepts": 1, "navigations": 0, "rerolls": 2, "feedbacks": 1, "dislikes": 0},
+    {"metricDate": "2026-09-01", "recommendations": 3, "activeIds": 2, "newIds": 1, "accepts": 1, "navigations": 1, "rerolls": 1, "feedbacks": 1, "dislikes": 0},
+    {"metricDate": "2026-09-02", "recommendations": 2, "activeIds": 2, "newIds": 0, "accepts": 1, "navigations": 0, "rerolls": 2, "feedbacks": 1, "dislikes": 1},
+    {"metricDate": "2026-09-03", "recommendations": 3, "activeIds": 3, "newIds": 0, "accepts": 1, "navigations": 1, "rerolls": 1, "feedbacks": 1, "dislikes": 0}
+  ],
+  "behaviors": [
+    {"label": "RECOMMENDED", "eventCount": 19, "anonymousIds": 5},
+    {"label": "REROLL", "eventCount": 7, "anonymousIds": 3},
+    {"label": "ACCEPT", "eventCount": 5, "anonymousIds": 4},
+    {"label": "NAVIGATE", "eventCount": 3, "anonymousIds": 3},
+    {"label": "SKIP", "eventCount": 2, "anonymousIds": 2}
+  ],
+  "feedback": [
+    {"label": "LIKE", "feedbackCount": 3, "anonymousIds": 3},
+    {"label": "NORMAL", "feedbackCount": 1, "anonymousIds": 1},
+    {"label": "DISLIKE", "feedbackCount": 1, "anonymousIds": 1}
+  ],
+  "risks": [
+    {"label": "[0,20]", "recommendationCount": 5, "averageScore": 14.2},
+    {"label": "(20,40]", "recommendationCount": 4, "averageScore": 31.5},
+    {"label": "(40,60]", "recommendationCount": 2, "averageScore": 48.5},
+    {"label": ">60", "recommendationCount": 1, "averageScore": 66}
+  ],
+  "riskCalibration": [
+    {"riskAlgorithmVersion": "risk-v0.3.1", "riskBucket": "[0,20]", "feedbackCount": 3, "dislikeCount": 0, "dislikeRate": 0}
+  ],
+  "categories": [
+    {"label": "湘菜", "candidateCount": 21, "shownCount": 6, "sessionCount": 9},
+    {"label": "粉面", "candidateCount": 14, "shownCount": 4, "sessionCount": 7},
+    {"label": "烧烤", "candidateCount": 9, "shownCount": 2, "sessionCount": 5}
+  ],
+  "algorithms": [
+    {"recommendationAlgorithmVersion": "recommendation-v0.4.1", "riskAlgorithmVersion": "risk-v0.3.1", "tasteAlgorithmVersion": "taste-v0.1", "selectionMode": "PERSONALIZED", "recommendationCount": 9},
+    {"recommendationAlgorithmVersion": "recommendation-v0.4.1", "riskAlgorithmVersion": "risk-v0.3.1", "tasteAlgorithmVersion": "taste-v0.1", "selectionMode": "DEFAULT", "recommendationCount": 3}
+  ],
+  "shadow": {
+    "available": true,
+    "summary": {"periodRecommendations": 12, "totalSnapshots": 10, "coveredRecommendations": 10, "noSelectable": 0, "sameFirstChoice": 4, "changedFirstChoice": 6, "coverageRate": 0.8333},
+    "variants": [{"experimentKey": "safe-regret-v0.5", "variant": "SHADOW", "servedRiskAlgorithmVersion": "risk-v0.3.1", "shadowRiskAlgorithmVersion": "risk-v0.5", "servedRecommendationAlgorithmVersion": "recommendation-v0.4.1", "shadowRecommendationAlgorithmVersion": "recommendation-v0.5", "snapshotCount": 10}],
+    "selectionReasons": [
+      {"label": "LOWEST_CONSERVATIVE_RISK_FALLBACK", "selectionCount": 7},
+      {"label": "SAFE_REGRET", "selectionCount": 3}
+    ],
+    "note": "覆盖率只表示 V9 快照落盘覆盖，不等同于 shadow 成功率。"
+  },
+  "locations": {
+    "coordinateSystem": "WGS-84",
+    "sourceCoordinateSystem": "GCJ-02",
+    "aggregationLevel": "prefecture",
+    "gridPrecision": 1,
+    "minimumAnonymousIds": 1,
+    "lowSampleThreshold": 3,
+    "totalAnonymousIds": 7,
+    "totalRequests": 18,
+    "cityCount": 3,
+    "sourceGridCount": 3,
+    "mappedAnonymousIds": 7,
+    "mappedRequests": 18,
+    "locatedAnonymousIds": 7,
+    "locatedRequests": 18,
+    "unmatchedGridCount": 0,
+    "unmatchedGridUserEntries": 0,
+    "unmatchedPrimaryIds": 0,
+    "unmatchedGridRequests": 0,
+    "hiddenGridCount": 0,
+    "hiddenGridUserEntries": 0,
+    "hiddenPrimaryIds": 0,
+    "hiddenGridRequests": 0,
+    "points": [
+      {"code": "156430100", "label": "长沙市", "province": "湖南省", "latitude": 28.23316, "longitude": 113.16196, "anonymousIds": 4, "activeIdEntries": 5, "requests": 12, "sourceGridCount": 1, "lowSample": false},
+      {"code": "156440100", "label": "广州市", "province": "广东省", "latitude": 23.34172, "longitude": 113.53379, "anonymousIds": 2, "activeIdEntries": 2, "requests": 4, "sourceGridCount": 1, "lowSample": true},
+      {"code": "156110000", "label": "北京市", "province": "北京市", "latitude": 40.17431, "longitude": 116.40141, "anonymousIds": 1, "activeIdEntries": 1, "requests": 2, "sourceGridCount": 1, "lowSample": true}
+    ]
+  },
+  "tableRows": {
+    "restaurant": 12,
+    "risk_result": 36,
+    "recommendation_log": 18,
+    "recommendation_candidate": 56,
+    "user_feedback": 6,
+    "user_preference": 2,
+    "external_entity_mapping": 14,
+    "restaurant_deep_evidence": 3,
+    "restaurant_deep_analysis": 2,
+    "user_taste_profile": 5,
+    "user_behavior": 36,
+    "user_food_history": 4,
+    "restaurant_flavor_observation": 3,
+    "recommendation_decision_snapshot": 10,
+    "flyway_schema_history": 9
+  },
+  "capabilities": {"behaviorMetrics": true, "riskCalibration": true, "shadowSnapshots": true}
+}

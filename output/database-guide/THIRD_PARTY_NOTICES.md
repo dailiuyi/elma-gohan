@@ -4,7 +4,9 @@
 
 - Source: https://github.com/JayMuShui/chinese-global-compliant-geodata
 - Data source stated by the upstream project: China National Platform for Common Geospatial Information Services (Tianditu), May 2024
-- Local modification: province-level geometry simplified for the ELMA Gohan local database visualization
+- Pinned source commit: `3cf3485789876c37be6193bf2848cf9aaa40f758`
+- Level-2 source SHA-256: `f22a0c64f9db010b82ef22f1301bee20f0bfb7501acb13e05038d21b882e6f34`
+- Local modifications: province-level geometry simplified for visualization; level-2 geometry converted into a compact 0.1-degree GCJ-02-to-prefecture lookup index for offline aggregation
 
 MIT License
 
