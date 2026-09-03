@@ -92,6 +92,14 @@ elma:
     base-url: ${BAIDU_BASE_URL:https://api.map.baidu.com}
     query: 餐饮
     page-size: 20
+    name-recall-max-restaurants: ${BAIDU_NAME_RECALL_MAX_RESTAURANTS:10}
+    name-recall-max-requests: ${BAIDU_NAME_RECALL_MAX_REQUESTS:20}
+    name-recall-radius-meters: ${BAIDU_NAME_RECALL_RADIUS_METERS:500}
+    recall-max-calls: ${BAIDU_RECALL_MAX_CALLS:22}
+    recall-time-budget-ms: ${BAIDU_RECALL_TIME_BUDGET_MS:8000}
+    rate-limit-per-second: ${BAIDU_RATE_LIMIT_PER_SECOND:3}
+    rate-limit-max-wait-ms: ${BAIDU_RATE_LIMIT_MAX_WAIT_MS:1000}
+    region: 长沙
     connect-timeout-ms: 1500
     read-timeout-ms: 2500
   deep-evidence:
@@ -120,12 +128,12 @@ elma:
     coordinate-weight: 0.30
     address-weight: 0.15
     telephone-weight: 0.10
-    accept-threshold: 0.78
+    accept-threshold: 0.50
     ambiguity-margin: 0.08
-    minimum-name-similarity: 0.45
+    minimum-name-similarity: 0.20
     maximum-distance-meters: 300
-    sparse-match-minimum-name-similarity: 0.70
-    sparse-match-maximum-distance-meters: 100
+    sparse-match-minimum-name-similarity: 0.40
+    sparse-match-maximum-distance-meters: 150
     matched-ttl-days: 30
     ambiguous-ttl-hours: 6
     no-match-ttl-minutes: 30

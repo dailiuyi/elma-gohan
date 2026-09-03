@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.elma.gohan.TestRestaurants;
+import com.elma.gohan.config.BaiduProperties;
 import com.elma.gohan.config.EntityResolutionProperties;
 import com.elma.gohan.config.RiskProperties;
 import com.elma.gohan.domain.restaurant.Location;
@@ -171,7 +172,10 @@ class EvidenceAggregatorTest {
         EvidenceBundle result = aggregator(provider, emptyRepository()).collect(
                 List.of(restaurant), new Location(28.2291, 112.9412), 1200, 48).get("a1");
 
+        assertThat(provider.v3Calls).isEqualTo(2);
         assertThat(provider.v3Pages).containsExactly(0, 1);
+        assertThat(provider.nearbyCalls).isZero();
+        assertThat(provider.suggestionCalls).isZero();
         assertThat(provider.v3Calls + provider.v2Calls).isEqualTo(2);
         assertThat(provider.v2Calls).isZero();
         assertThat(result.entityMatch().status()).isEqualTo(EntityMatchStatus.MATCHED);
@@ -199,6 +203,108 @@ class EvidenceAggregatorTest {
     }
 
     @Test
+    void fullNameThenBrandThenSuggestionRecallMatchesInThatOrder() {
+        Restaurant restaurant = TestRestaurants.full("a1", "开坛湘·坛子菜·钵子饭(麓云店)", 4.7, 80, 48);
+        List<PlatformEvidence> firstPage = unrelatedPage("p0", 19);
+        CountingProvider provider = new CountingProvider(
+                new PlatformSearchResult(EvidenceStatus.AVAILABLE, firstPage, 19, 0, 20),
+                PlatformSearchResult.unavailable(),
+                PlatformSearchResult.unavailable());
+        provider.suggestion = new PlatformSearchResult(EvidenceStatus.AVAILABLE, List.of(
+                namedBaidu("b-suggest", "菜道味·开坛湘·坛子菜·钵子饭(麓云店)",
+                        28.2291, 112.9412, null)));
+
+        EvidenceBundle result = aggregator(provider, emptyRepository()).collect(
+                List.of(restaurant), new Location(28.2291, 112.9412), 1200, 48).get("a1");
+
+        assertThat(provider.suggestionCalls).isEqualTo(1);
+        assertThat(provider.v3Calls).isEqualTo(1);
+        assertThat(provider.nearbyQueries).containsExactly(
+                "开坛湘坛子菜钵子饭麓云", "开坛湘");
+        assertThat(provider.callOrder).containsExactly(
+                "v3:0", "nearby:开坛湘坛子菜钵子饭麓云", "nearby:开坛湘",
+                "suggestion:开坛湘");
+        assertThat(result.entityMatch().status()).isEqualTo(EntityMatchStatus.MATCHED);
+        assertThat(result.entityMatch().evidence().providerPoiId()).isEqualTo("b-suggest");
+    }
+
+    @Test
+    void fullNameMissThenBrandNearbyHitUsesTwoNameRequestsWithoutSuggestion() {
+        Restaurant restaurant = TestRestaurants.full("a1",
+                "开坛湘·坛子菜·钵子饭(麓云店)", 4.7, 80, 48);
+        CountingProvider provider = new CountingProvider(
+                new PlatformSearchResult(EvidenceStatus.NO_DATA, List.of(), 0, 0, 20),
+                PlatformSearchResult.unavailable());
+        provider.nearbyByQuery.put("开坛湘",
+                new PlatformSearchResult(EvidenceStatus.AVAILABLE, List.of(
+                        namedBaidu("b-nearby", "菜道味·开坛湘·坛子菜·钵子饭(麓云店)",
+                                28.2291, 112.9412, null))));
+
+        EvidenceBundle result = aggregator(provider, emptyRepository()).collect(
+                List.of(restaurant), new Location(28.2291, 112.9412), 1200, 48).get("a1");
+
+        assertThat(provider.nearbyCalls).isEqualTo(2);
+        assertThat(provider.nearbyQueries).containsExactly(
+                "开坛湘坛子菜钵子饭麓云", "开坛湘");
+        assertThat(provider.suggestionCalls).isZero();
+        assertThat(result.entityMatch().status()).isEqualTo(EntityMatchStatus.MATCHED);
+    }
+
+    @Test
+    void nameRecallRequestLimitLeavesSkippedRestaurantWithoutNegativeCache() {
+        Restaurant queried = TestRestaurants.full("a1", "第一家湘菜馆", 4.7, 80, 48);
+        Restaurant skipped = TestRestaurants.full("a2", "第二家湘菜馆", 4.6, 90, 45);
+        CountingProvider provider = new CountingProvider(
+                new PlatformSearchResult(EvidenceStatus.NO_DATA, List.of(), 0, 0, 20),
+                PlatformSearchResult.unavailable());
+        BaiduProperties baiduProperties = new BaiduProperties();
+        baiduProperties.setNameRecallMaxRestaurants(10);
+        baiduProperties.setNameRecallMaxRequests(3);
+        baiduProperties.setRecallMaxCalls(12);
+        ExternalEntityMappingRepository repository = emptyRepository();
+        ArgumentCaptor<ExternalEntityMappingEntity> saved =
+                ArgumentCaptor.forClass(ExternalEntityMappingEntity.class);
+
+        aggregator(provider, repository, baiduProperties).collect(List.of(queried, skipped),
+                new Location(28.2291, 112.9412), 1200, 48);
+
+        verify(repository, times(2)).save(saved.capture());
+        Map<String, ExternalEntityMappingEntity> mappings = saved.getAllValues().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ExternalEntityMappingEntity::getPrimaryPoiId, value -> value));
+        assertThat(mappings.get("a1").getExpiresAt())
+                .isAfter(LocalDateTime.now(ZoneOffset.UTC).plusMinutes(29));
+        assertThat(mappings.get("a2").getExpiresAt())
+                .isBefore(LocalDateTime.now(ZoneOffset.UTC).plusSeconds(5));
+    }
+
+    @Test
+    void genericPagesAndNameEvidenceAreDeduplicatedByBaiduUid() {
+        Restaurant first = TestRestaurants.full("a1", "湘味小馆", 4.9, 100, 58);
+        Restaurant second = TestRestaurants.full("a2", "第二页餐厅", 4.7, 80, 48);
+        List<PlatformEvidence> firstPage = new ArrayList<>(unrelatedPage("p0", 19));
+        firstPage.add(baidu("b-shared", null));
+        PlatformEvidence duplicateWithFineRating = baidu("b-shared", 4.0);
+        PlatformEvidence secondPageMatch = namedBaidu("b-second", "第二页餐厅",
+                28.2291, 112.9412, null);
+        CountingProvider provider = new CountingProvider(
+                new PlatformSearchResult(EvidenceStatus.AVAILABLE, firstPage, 40, 0, 20),
+                new PlatformSearchResult(EvidenceStatus.AVAILABLE,
+                        List.of(duplicateWithFineRating, secondPageMatch), 40, 1, 20),
+                PlatformSearchResult.unavailable());
+
+        Map<String, EvidenceBundle> result = aggregator(provider, emptyRepository()).collect(
+                List.of(first, second), new Location(28.2291, 112.9412), 1200, 53);
+
+        assertThat(provider.v3Pages).containsExactly(0, 1);
+        assertThat(result.get("a1").entityMatch().evidence().providerPoiId())
+                .isEqualTo("b-shared");
+        assertThat(result.get("a1").baidu().tasteRating()).isNull();
+        assertThat(result.get("a2").entityMatch().evidence().providerPoiId())
+                .isEqualTo("b-second");
+    }
+
+    @Test
     void unavailableSecondPageKeepsFirstPageMatchAndDoesNotNegativeCacheMiss() {
         Restaurant matched = TestRestaurants.full("a1", "湘味小馆", 4.9, 100, 58);
         Restaurant missed = TestRestaurants.full("a2", "第二页餐厅", 4.7, 80, 48);
@@ -214,6 +320,7 @@ class EvidenceAggregatorTest {
         Map<String, EvidenceBundle> result = aggregator(provider, repository).collect(
                 List.of(matched, missed), new Location(28.2291, 112.9412), 1200, 53);
 
+        assertThat(provider.v3Calls).isEqualTo(2);
         assertThat(provider.v3Pages).containsExactly(0, 1);
         assertThat(provider.v2Calls).isZero();
         assertThat(result.get("a1").entityMatch().status()).isEqualTo(EntityMatchStatus.MATCHED);
@@ -227,11 +334,17 @@ class EvidenceAggregatorTest {
     }
 
     private EvidenceAggregator aggregator(PlatformEvidenceProvider provider,
-                                          ExternalEntityMappingRepository repository) {
+                                           ExternalEntityMappingRepository repository) {
+        return aggregator(provider, repository, new BaiduProperties());
+    }
+
+    private EvidenceAggregator aggregator(PlatformEvidenceProvider provider,
+                                           ExternalEntityMappingRepository repository,
+                                           BaiduProperties baiduProperties) {
         return new EvidenceAggregator(restaurant -> RestaurantEvidence.empty(), provider,
                 new AmapEvidenceAdapter(), new EntityResolver(entityProperties),
                 new CrossPlatformConsistencyAnalyzer(new RiskProperties()), repository,
-                entityProperties, objectMapper);
+                entityProperties, objectMapper, baiduProperties);
     }
 
     private ExternalEntityMappingRepository emptyRepository() {
@@ -267,7 +380,14 @@ class EvidenceAggregatorTest {
         private final PlatformSearchResult v2;
         private int v3Calls;
         private int v2Calls;
+        private int nearbyCalls;
+        private int suggestionCalls;
+        private PlatformSearchResult suggestion = new PlatformSearchResult(
+                EvidenceStatus.NO_DATA, List.of(), 0, 0, 0);
         private final List<Integer> v3Pages = new ArrayList<>();
+        private final List<String> nearbyQueries = new ArrayList<>();
+        private final List<String> callOrder = new ArrayList<>();
+        private final Map<String, PlatformSearchResult> nearbyByQuery = new HashMap<>();
 
         private CountingProvider(PlatformSearchResult v3, PlatformSearchResult v2) {
             this(v3, PlatformSearchResult.unavailable(), v2);
@@ -285,13 +405,31 @@ class EvidenceAggregatorTest {
         public PlatformSearchResult searchV3(Location center, int radiusMeters, int pageNumber) {
             v3Calls++;
             v3Pages.add(pageNumber);
+            callOrder.add("v3:" + pageNumber);
             return v3ByPage.getOrDefault(pageNumber, PlatformSearchResult.unavailable());
+        }
+
+        @Override
+        public PlatformSearchResult searchNearby(Location center, int radiusMeters, String query) {
+            nearbyCalls++;
+            nearbyQueries.add(query);
+            callOrder.add("nearby:" + query);
+            return nearbyByQuery.getOrDefault(query,
+                    new PlatformSearchResult(EvidenceStatus.NO_DATA, List.of(), 0, 0, 20));
         }
 
         @Override
         public PlatformSearchResult searchV2(Location center, int radiusMeters) {
             v2Calls++;
+            callOrder.add("v2");
             return v2;
+        }
+
+        @Override
+        public PlatformSearchResult searchSuggestion(Location center, String query, String region) {
+            suggestionCalls++;
+            callOrder.add("suggestion:" + query);
+            return suggestion;
         }
     }
 }

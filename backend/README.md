@@ -21,6 +21,13 @@ mvn spring-boot:run   # 启动开发服务(默认 8080)
 | `BAIDU_MAP_AK` | 百度 Place 服务端 AK，**只能放环境变量** | 空（自动降级） |
 | `BAIDU_ENABLED` | 是否启用百度第二 Evidence 来源 | `true` |
 | `BAIDU_BASE_URL` | 百度 API 地址（测试 stub 用） | `https://api.map.baidu.com` |
+| `BAIDU_NAME_RECALL_MAX_RESTAURANTS` | 单次推荐最多逐店补召回的未匹配门店数 | `10` |
+| `BAIDU_NAME_RECALL_MAX_REQUESTS` | 单次推荐最多逐店补召回的百度 API 请求数 | `20` |
+| `BAIDU_NAME_RECALL_RADIUS_METERS` | 逐店严格周边检索半径（米） | `500` |
+| `BAIDU_RECALL_MAX_CALLS` | 通用页、逐店召回和可选 V2 合计调用上限 | `22` |
+| `BAIDU_RECALL_TIME_BUDGET_MS` | 整次百度召回时间预算（毫秒） | `8000` |
+| `BAIDU_RATE_LIMIT_PER_SECOND` | 单 JVM 内所有百度 Place 请求共享的全局速率上限 | `3` |
+| `BAIDU_RATE_LIMIT_MAX_WAIT_MS` | 单次百度 Place 请求等待全局限速许可的最长时间；超时按平台不可用处理 | `1000` |
 | `EVIDENCE_PROVIDER` | Evidence 实现：`file` 或 `empty` | `file` |
 | `EVIDENCE_FILE` | 标准化评论证据 JSON，可用外部文件覆盖 | `classpath:evidence/restaurant-evidence.json` |
 | `BRAVE_ENABLED` | 是否启用按需公开 Web Evidence | `false` |

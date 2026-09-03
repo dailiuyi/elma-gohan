@@ -10,12 +10,12 @@ public class EntityResolutionProperties {
     private double coordinateWeight = 0.30;
     private double addressWeight = 0.15;
     private double telephoneWeight = 0.10;
-    private double acceptThreshold = 0.78;
+    private double acceptThreshold = 0.50;
     private double ambiguityMargin = 0.08;
-    private double minimumNameSimilarity = 0.45;
+    private double minimumNameSimilarity = 0.20;
     private int maximumDistanceMeters = 300;
-    private double sparseMatchMinimumNameSimilarity = 0.70;
-    private int sparseMatchMaximumDistanceMeters = 100;
+    private double sparseMatchMinimumNameSimilarity = 0.40;
+    private int sparseMatchMaximumDistanceMeters = 150;
     private int matchedTtlDays = 30;
     private int ambiguousTtlHours = 6;
     private int noMatchTtlMinutes = 30;

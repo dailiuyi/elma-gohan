@@ -1,5 +1,6 @@
 package com.elma.gohan.application;
 
+import com.elma.gohan.config.BaiduProperties;
 import com.elma.gohan.config.EntityResolutionProperties;
 import com.elma.gohan.domain.restaurant.Location;
 import com.elma.gohan.domain.restaurant.Restaurant;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -36,7 +38,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * 推荐级 Evidence 编排：最多两次百度调用，自适应选择 V3 第二页或 V2 细评分。
+ * 推荐级 Evidence 编排：先批量餐饮周边，再对未匹配店按店名逐家补召回。
  */
 @Service
 public class EvidenceAggregator {
@@ -53,6 +55,7 @@ public class EvidenceAggregator {
     private final ExternalEntityMappingRepository mappingRepository;
     private final EntityResolutionProperties properties;
     private final ObjectMapper objectMapper;
+    private final BaiduProperties baiduProperties;
 
     public EvidenceAggregator(EvidenceProvider reviewProvider,
                               PlatformEvidenceProvider baiduProvider,
@@ -61,7 +64,8 @@ public class EvidenceAggregator {
                               CrossPlatformConsistencyAnalyzer consistencyAnalyzer,
                               ExternalEntityMappingRepository mappingRepository,
                               EntityResolutionProperties properties,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              BaiduProperties baiduProperties) {
         this.reviewProvider = reviewProvider;
         this.baiduProvider = baiduProvider;
         this.amapAdapter = amapAdapter;
@@ -70,6 +74,7 @@ public class EvidenceAggregator {
         this.mappingRepository = mappingRepository;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.baiduProperties = baiduProperties;
     }
 
     public Map<String, EvidenceBundle> collect(List<Restaurant> restaurants, Location center,
@@ -111,37 +116,69 @@ public class EvidenceAggregator {
         }
 
         PlatformSearchResult v3Result = null;
-        boolean secondCallUsed = false;
-        boolean completeV3Recall = true;
-        int baiduCallCount = 0;
+        boolean supplementalRecallUsed = false;
+        boolean recallTruncated = false;
+        Set<String> incompleteRecallPrimaryIds = new HashSet<>();
+        RecallBudget recallBudget = new RecallBudget(baiduProperties.getRecallMaxCalls(),
+                baiduProperties.getRecallTimeBudgetMs());
+        NameRecallOutcome nameRecall = NameRecallOutcome.empty();
         List<Integer> v3PagesRequested = new ArrayList<>();
         if (!unresolved.isEmpty()) {
-            baiduCallCount++;
-            v3PagesRequested.add(0);
-            PlatformSearchResult firstPage = safeSearchV3(center, radiusMeters, 0);
+            PlatformSearchResult firstPage;
+            if (!recallBudget.tryAcquire()) {
+                firstPage = PlatformSearchResult.unavailable();
+                recallTruncated = true;
+                addPrimaryIds(incompleteRecallPrimaryIds, unresolved);
+            } else {
+                v3PagesRequested.add(0);
+                firstPage = safeSearchV3(center, radiusMeters, 0);
+            }
             v3Result = firstPage;
-            if (v3Result.status() == EvidenceStatus.UNAVAILABLE) {
+            if (firstPage.status() == EvidenceStatus.UNAVAILABLE) {
+                recallTruncated = true;
+                addPrimaryIds(incompleteRecallPrimaryIds, unresolved);
                 for (Restaurant restaurant : unresolved) {
                     matches.put(restaurant.sourcePoiId(), EntityMatchResult.unavailable());
                 }
             } else {
-                Map<String, EntityMatchResult> firstPageMatches = entityResolver.resolve(
+                Map<String, EntityMatchResult> currentMatches = entityResolver.resolve(
                         unresolved, firstPage.evidence(), reservedProviderIds);
-                if (shouldFetchSecondV3Page(firstPage, firstPageMatches)) {
-                    secondCallUsed = true;
-                    baiduCallCount++;
-                    v3PagesRequested.add(1);
-                    PlatformSearchResult secondPage = safeSearchV3(center, radiusMeters, 1);
-                    if (secondPage.status() == EvidenceStatus.UNAVAILABLE) {
-                        completeV3Recall = false;
-                        matches.putAll(firstPageMatches);
+                if (shouldFetchSecondV3Page(firstPage, currentMatches)) {
+                    supplementalRecallUsed = true;
+                    if (recallBudget.tryAcquire()) {
+                        v3PagesRequested.add(1);
+                        PlatformSearchResult secondPage = safeSearchV3(center, radiusMeters, 1);
+                        if (secondPage.status() == EvidenceStatus.UNAVAILABLE) {
+                            recallTruncated = true;
+                            addNoMatchPrimaryIds(incompleteRecallPrimaryIds, unresolved,
+                                    currentMatches);
+                        } else {
+                            v3Result = mergeV3Pages(firstPage, secondPage);
+                            currentMatches = entityResolver.resolve(unresolved,
+                                    v3Result.evidence(), reservedProviderIds);
+                        }
                     } else {
-                        v3Result = mergeV3Pages(firstPage, secondPage);
-                        matches.putAll(entityResolver.resolve(unresolved, v3Result.evidence(),
-                                reservedProviderIds));
+                        recallTruncated = true;
+                        addNoMatchPrimaryIds(incompleteRecallPrimaryIds, unresolved,
+                                currentMatches);
                     }
+                }
+
+                List<Restaurant> stillUnmatched = unmatchedRestaurants(unresolved, currentMatches);
+                nameRecall = recallUnmatchedByName(stillUnmatched, recallBudget,
+                        reservedProviderIds);
+                supplementalRecallUsed = supplementalRecallUsed || nameRecall.requestCount() > 0;
+                recallTruncated = recallTruncated || nameRecall.truncated();
+                incompleteRecallPrimaryIds.addAll(nameRecall.incompletePrimaryIds());
+                if (!nameRecall.evidence().isEmpty()) {
+                    PlatformSearchResult namedPage = new PlatformSearchResult(
+                            EvidenceStatus.AVAILABLE, nameRecall.evidence(),
+                            nameRecall.evidence().size(), 0, nameRecall.evidence().size());
+                    v3Result = mergeV3Pages(v3Result, namedPage);
+                    matches.putAll(entityResolver.resolve(unresolved, v3Result.evidence(),
+                            reservedProviderIds));
                 } else {
-                    matches.putAll(firstPageMatches);
+                    matches.putAll(currentMatches);
                 }
                 for (Restaurant restaurant : unresolved) {
                     String primaryPoiId = restaurant.sourcePoiId();
@@ -156,8 +193,8 @@ public class EvidenceAggregator {
             if (needsV2(match)) v2RequestedPrimaryIds.add(primaryPoiId);
         });
         PlatformSearchResult v2Result = null;
-        if (!secondCallUsed && !v2RequestedPrimaryIds.isEmpty()) {
-            baiduCallCount++;
+        if (!supplementalRecallUsed && !v2RequestedPrimaryIds.isEmpty()
+                && recallBudget.tryAcquire()) {
             v2Result = safeSearchV2(center, radiusMeters);
         }
         if (v2Result != null && v2Result.status() != EvidenceStatus.UNAVAILABLE) {
@@ -167,14 +204,25 @@ public class EvidenceAggregator {
             }
             matches.replaceAll((primaryPoiId, match) -> enrich(match, byId));
         }
-        log.info("百度 Evidence 编排完成 callCount={} v3Pages={} v2Called={} unresolvedCount={}",
-                baiduCallCount, v3PagesRequested, v2Result != null, unresolved.size());
+        long matchedCount = matches.values().stream()
+                .filter(match -> match.status() == EntityMatchStatus.MATCHED).count();
+        long noMatchCount = matches.values().stream()
+                .filter(match -> match.status() == EntityMatchStatus.NO_MATCH).count();
+        long ambiguousCount = matches.values().stream()
+                .filter(match -> match.status() == EntityMatchStatus.AMBIGUOUS).count();
+        log.info("百度 Evidence 编排完成 callCount={} maxCalls={} v3Pages={} v2Called={} unresolvedCount={} matched={} noMatch={} ambiguous={} nameRequests={} processedStores={} completedStores={} skippedStores={} recallTruncated={} namePlatformUnavailable={}",
+                recallBudget.calls(), recallBudget.maxCalls(), v3PagesRequested, v2Result != null,
+                unresolved.size(), matchedCount, noMatchCount, ambiguousCount,
+                nameRecall.requestCount(), nameRecall.processedRestaurantCount(),
+                nameRecall.completedRestaurantCount(), nameRecall.skippedRestaurantCount(),
+                recallTruncated, nameRecall.platformUnavailable());
 
         for (Restaurant restaurant : unresolved) {
             EntityMatchResult match = matches.getOrDefault(restaurant.sourcePoiId(),
                     EntityMatchResult.noMatch());
+            boolean cacheNoMatch = !incompleteRecallPrimaryIds.contains(restaurant.sourcePoiId());
             persistMapping(restaurant, match, v3Result, v2Result,
-                    stored.get(restaurant.sourcePoiId()), now, completeV3Recall);
+                    stored.get(restaurant.sourcePoiId()), now, cacheNoMatch);
         }
         // V2 可能刷新了原本命中的缓存映射。
         if (v2Result != null && v2Result.status() != EvidenceStatus.UNAVAILABLE) {
@@ -249,6 +297,146 @@ public class EvidenceAggregator {
     private boolean hasFineRatings(PlatformEvidence evidence) {
         return evidence.tasteRating() != null || evidence.serviceRating() != null
                 || evidence.environmentRating() != null;
+    }
+
+    private NameRecallOutcome recallUnmatchedByName(List<Restaurant> stillUnmatched,
+                                                     RecallBudget recallBudget,
+                                                     Set<String> reservedProviderIds) {
+        List<PlatformEvidence> extra = new ArrayList<>();
+        Set<String> incompletePrimaryIds = new HashSet<>();
+        List<String> completedPrimaryIds = new ArrayList<>();
+        List<String> skippedPrimaryIds = new ArrayList<>();
+        int maxRestaurants = Math.max(0, baiduProperties.getNameRecallMaxRestaurants());
+        int maxRequests = Math.max(0, baiduProperties.getNameRecallMaxRequests());
+        int radius = Math.max(50, baiduProperties.getNameRecallRadiusMeters());
+        Set<String> reserved = reservedProviderIds == null ? Set.of() : reservedProviderIds;
+        int requestCount = 0;
+        int processedRestaurantCount = 0;
+        int completedRestaurantCount = 0;
+        int skippedRestaurantCount = 0;
+        boolean truncated = false;
+        boolean platformUnavailable = false;
+
+        for (int index = 0; index < stillUnmatched.size(); index++) {
+            if (processedRestaurantCount >= maxRestaurants
+                    || requestCount >= maxRequests || !recallBudget.canAcquire()) {
+                truncated = true;
+                skippedRestaurantCount += stillUnmatched.size() - index;
+                List<Restaurant> skipped = stillUnmatched.subList(index, stillUnmatched.size());
+                addPrimaryIds(incompletePrimaryIds, skipped);
+                skipped.stream().map(Restaurant::sourcePoiId).forEach(skippedPrimaryIds::add);
+                break;
+            }
+            Restaurant restaurant = stillUnmatched.get(index);
+            processedRestaurantCount++;
+            List<String> queries = EntityResolver.searchQueries(restaurant.name(), restaurant.address());
+            if (queries.isEmpty()) {
+                skippedRestaurantCount++;
+                skippedPrimaryIds.add(restaurant.sourcePoiId());
+                incompletePrimaryIds.add(restaurant.sourcePoiId());
+                continue;
+            }
+            Location storeLocation = new Location(restaurant.latitude(), restaurant.longitude());
+            boolean matched = false;
+            boolean storeIncomplete = false;
+            boolean storeBudgetTruncated = false;
+
+            // 精确的完整归一化店名优先，品牌短名其次。
+            for (String query : queries) {
+                if (requestCount >= maxRequests || !recallBudget.tryAcquire()) {
+                    truncated = true;
+                    storeIncomplete = true;
+                    storeBudgetTruncated = true;
+                    break;
+                }
+                requestCount++;
+                PlatformSearchResult named = safeSearchNearby(storeLocation, radius, query);
+                if (named.status() == EvidenceStatus.UNAVAILABLE) {
+                    platformUnavailable = true;
+                    storeIncomplete = true;
+                } else {
+                    extra.addAll(named.evidence());
+                    if (wouldMatch(restaurant, named.evidence(), reserved)) {
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+
+            // suggestion 仅作为完整名、品牌短名周边检索之后的兜底。
+            if (!matched && !storeBudgetTruncated && !baiduProperties.getRegion().isBlank()) {
+                if (requestCount >= maxRequests || !recallBudget.tryAcquire()) {
+                    truncated = true;
+                    storeIncomplete = true;
+                    storeBudgetTruncated = true;
+                } else {
+                    requestCount++;
+                    String suggestionQuery = queries.get(queries.size() - 1);
+                    PlatformSearchResult suggested = safeSearchSuggestion(
+                            storeLocation, suggestionQuery, baiduProperties.getRegion());
+                    if (suggested.status() == EvidenceStatus.UNAVAILABLE) {
+                        platformUnavailable = true;
+                        storeIncomplete = true;
+                    } else {
+                        extra.addAll(suggested.evidence());
+                        matched = wouldMatch(restaurant, suggested.evidence(), reserved);
+                    }
+                }
+            }
+
+            if (matched || !storeIncomplete) {
+                completedRestaurantCount++;
+                completedPrimaryIds.add(restaurant.sourcePoiId());
+            } else {
+                incompletePrimaryIds.add(restaurant.sourcePoiId());
+            }
+
+            if (truncated && !recallBudget.canAcquire()) {
+                int remainingStart = index + 1;
+                skippedRestaurantCount += stillUnmatched.size() - remainingStart;
+                List<Restaurant> skipped = stillUnmatched.subList(remainingStart,
+                        stillUnmatched.size());
+                addPrimaryIds(incompletePrimaryIds, skipped);
+                skipped.stream().map(Restaurant::sourcePoiId).forEach(skippedPrimaryIds::add);
+                break;
+            }
+        }
+        log.info("百度店名补召回 requests={} processedStores={} completedStores={} skippedStores={} extraResults={} truncated={} platformUnavailable={} completedPrimaryIds={} skippedPrimaryIds={} incompletePrimaryIds={}",
+                requestCount, processedRestaurantCount, completedRestaurantCount,
+                skippedRestaurantCount, extra.size(), truncated, platformUnavailable,
+                completedPrimaryIds, skippedPrimaryIds, incompletePrimaryIds);
+        return new NameRecallOutcome(List.copyOf(extra), requestCount,
+                processedRestaurantCount, completedRestaurantCount, skippedRestaurantCount,
+                truncated, platformUnavailable, Set.copyOf(incompletePrimaryIds),
+                List.copyOf(completedPrimaryIds), List.copyOf(skippedPrimaryIds));
+    }
+
+    private List<Restaurant> unmatchedRestaurants(List<Restaurant> restaurants,
+                                                   Map<String, EntityMatchResult> matches) {
+        return restaurants.stream()
+                .filter(restaurant -> matches.get(restaurant.sourcePoiId()) != null
+                        && matches.get(restaurant.sourcePoiId()).status()
+                        == EntityMatchStatus.NO_MATCH)
+                .sorted(Comparator.comparingInt(Restaurant::distanceMeters))
+                .toList();
+    }
+
+    private void addNoMatchPrimaryIds(Set<String> target, List<Restaurant> restaurants,
+                                      Map<String, EntityMatchResult> matches) {
+        unmatchedRestaurants(restaurants, matches).stream()
+                .map(Restaurant::sourcePoiId).forEach(target::add);
+    }
+
+    private void addPrimaryIds(Set<String> target, List<Restaurant> restaurants) {
+        restaurants.stream().map(Restaurant::sourcePoiId).forEach(target::add);
+    }
+
+    private boolean wouldMatch(Restaurant restaurant, List<PlatformEvidence> evidence,
+                               Set<String> reservedProviderIds) {
+        if (evidence == null || evidence.isEmpty()) return false;
+        EntityMatchResult result = entityResolver.resolve(List.of(restaurant), evidence,
+                reservedProviderIds).get(restaurant.sourcePoiId());
+        return result != null && result.status() == EntityMatchStatus.MATCHED;
     }
 
     private boolean shouldFetchSecondV3Page(PlatformSearchResult firstPage,
@@ -365,12 +553,49 @@ public class EvidenceAggregator {
     }
 
     private PlatformSearchResult safeSearchV3(Location center, int radiusMeters, int pageNumber) {
+        return safeSearchV3(center, radiusMeters, pageNumber, null);
+    }
+
+    private PlatformSearchResult safeSearchV3(Location center, int radiusMeters, int pageNumber,
+                                              String query) {
         try {
-            PlatformSearchResult result = baiduProvider.searchV3(center, radiusMeters, pageNumber);
+            PlatformSearchResult result = query == null
+                    ? baiduProvider.searchV3(center, radiusMeters, pageNumber)
+                    : baiduProvider.searchV3(center, radiusMeters, pageNumber, query);
             return result == null ? PlatformSearchResult.unavailable() : result;
         } catch (RuntimeException exception) {
             log.warn("百度 V3 Evidence 获取失败 page={}，已按高德数据继续推荐 errorType={}",
                     pageNumber, exception.getClass().getSimpleName());
+            return PlatformSearchResult.unavailable();
+        }
+    }
+
+    private PlatformSearchResult safeSearchRegion(String query, String region) {
+        try {
+            PlatformSearchResult result = baiduProvider.searchRegion(query, region);
+            return result == null ? PlatformSearchResult.unavailable() : result;
+        } catch (RuntimeException exception) {
+            log.warn("百度城市补召回失败 errorType={}", exception.getClass().getSimpleName());
+            return PlatformSearchResult.unavailable();
+        }
+    }
+
+    private PlatformSearchResult safeSearchSuggestion(Location center, String query, String region) {
+        try {
+            PlatformSearchResult result = baiduProvider.searchSuggestion(center, query, region);
+            return result == null ? PlatformSearchResult.unavailable() : result;
+        } catch (RuntimeException exception) {
+            log.warn("百度地点提示补召回失败 errorType={}", exception.getClass().getSimpleName());
+            return PlatformSearchResult.unavailable();
+        }
+    }
+
+    private PlatformSearchResult safeSearchNearby(Location center, int radiusMeters, String query) {
+        try {
+            PlatformSearchResult result = baiduProvider.searchNearby(center, radiusMeters, query);
+            return result == null ? PlatformSearchResult.unavailable() : result;
+        } catch (RuntimeException exception) {
+            log.warn("百度店名补召回失败 errorType={}", exception.getClass().getSimpleName());
             return PlatformSearchResult.unavailable();
         }
     }
@@ -411,5 +636,48 @@ public class EvidenceAggregator {
         } catch (JsonProcessingException exception) {
             return Map.of();
         }
+    }
+
+    private record NameRecallOutcome(
+            List<PlatformEvidence> evidence,
+            int requestCount,
+            int processedRestaurantCount,
+            int completedRestaurantCount,
+            int skippedRestaurantCount,
+            boolean truncated,
+            boolean platformUnavailable,
+            Set<String> incompletePrimaryIds,
+            List<String> completedPrimaryIds,
+            List<String> skippedPrimaryIds
+    ) {
+        private static NameRecallOutcome empty() {
+            return new NameRecallOutcome(List.of(), 0, 0, 0, 0,
+                    false, false, Set.of(), List.of(), List.of());
+        }
+    }
+
+    private static final class RecallBudget {
+        private final int maxCalls;
+        private final long deadlineNanos;
+        private int calls;
+
+        private RecallBudget(int maxCalls, int timeBudgetMs) {
+            this.maxCalls = Math.max(1, maxCalls);
+            long safeBudgetNanos = Math.max(1L, timeBudgetMs) * 1_000_000L;
+            this.deadlineNanos = System.nanoTime() + safeBudgetNanos;
+        }
+
+        private boolean canAcquire() {
+            return calls < maxCalls && System.nanoTime() < deadlineNanos;
+        }
+
+        private boolean tryAcquire() {
+            if (!canAcquire()) return false;
+            calls++;
+            return true;
+        }
+
+        private int calls() { return calls; }
+        private int maxCalls() { return maxCalls; }
     }
 }

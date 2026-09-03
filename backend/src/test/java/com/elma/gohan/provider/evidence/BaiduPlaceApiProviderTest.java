@@ -1,6 +1,10 @@
 package com.elma.gohan.provider.evidence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.elma.gohan.config.BaiduProperties;
 import com.elma.gohan.domain.restaurant.Location;
@@ -37,7 +41,7 @@ class BaiduPlaceApiProviderTest {
 
     @Test
     void mapsStringNumbersAndUsesGcj02BatchParameters() {
-        BaiduPlaceApiProvider provider = new BaiduPlaceApiProvider(properties());
+        BaiduPlaceApiProvider provider = provider(properties());
 
         PlatformSearchResult v3 = provider.searchV3(new Location(28.2291, 112.9412), 1200, 1);
         PlatformSearchResult v2 = provider.searchV2(new Location(28.2291, 112.9412), 1200);
@@ -69,17 +73,69 @@ class BaiduPlaceApiProviderTest {
     @Test
     void businessErrorAndMissingAkDegradeWithoutThrowing() {
         responseBody = "{\"status\":2,\"message\":\"invalid request\"}";
-        BaiduPlaceApiProvider provider = new BaiduPlaceApiProvider(properties());
+        BaiduPlaceApiProvider provider = provider(properties());
 
         assertThat(provider.searchV3(new Location(28.2, 112.9), 1000, 0).status())
                 .isEqualTo(EvidenceStatus.UNAVAILABLE);
 
         BaiduProperties disabled = properties();
         disabled.setAk("");
-        assertThat(new BaiduPlaceApiProvider(disabled)
+        assertThat(provider(disabled)
                 .searchV3(new Location(28.2, 112.9), 1000, 0).status())
                 .isEqualTo(EvidenceStatus.UNAVAILABLE);
         assertThat(requests).hasSize(1);
+    }
+
+    @Test
+    void nearbyNameRecallUsesStrictRadiusAndDistanceOrder() {
+        BaiduPlaceApiProvider provider = provider(properties());
+
+        provider.searchNearby(new Location(28.2291, 112.9412), 500,
+                "湘味小馆麓谷店");
+
+        assertThat(requests).hasSize(1);
+        String query = URLDecoder.decode(requests.get(0), StandardCharsets.UTF_8);
+        assertThat(query).contains("/place/v3/around?")
+                .contains("query=湘味小馆麓谷店")
+                .contains("radius=500")
+                .contains("radius_limit=true")
+                .contains("filter=industry_type:cater|sort_name:distance|sort_rule:1")
+                .doesNotContain("radius_limit=false");
+    }
+
+    @Test
+    void everyPlaceEndpointSharesTheSameGlobalRateLimiter() {
+        BaiduProperties properties = properties();
+        BaiduPlaceRateLimiter limiter = mock(BaiduPlaceRateLimiter.class);
+        when(limiter.acquire()).thenReturn(new BaiduPlaceRateLimiter.Permit(true, 0));
+        BaiduPlaceApiProvider provider = new BaiduPlaceApiProvider(properties, limiter);
+        Location center = new Location(28.2291, 112.9412);
+
+        provider.searchV3(center, 1000, 0);
+        provider.searchNearby(center, 500, "湘味小馆");
+        provider.searchRegion("湘味小馆", "长沙");
+        provider.searchSuggestion(center, "湘味小馆", "长沙");
+        provider.searchV2(center, 1000);
+
+        verify(limiter, times(5)).acquire();
+        assertThat(requests).hasSize(5);
+    }
+
+    @Test
+    void rejectedGlobalPermitDoesNotCallBaiduAndReturnsUnavailable() {
+        BaiduPlaceRateLimiter limiter = mock(BaiduPlaceRateLimiter.class);
+        when(limiter.acquire()).thenReturn(new BaiduPlaceRateLimiter.Permit(false, 1000));
+        BaiduPlaceApiProvider provider = new BaiduPlaceApiProvider(properties(), limiter);
+
+        PlatformSearchResult result = provider.searchV3(
+                new Location(28.2291, 112.9412), 1000, 0);
+
+        assertThat(result.status()).isEqualTo(EvidenceStatus.UNAVAILABLE);
+        assertThat(requests).isEmpty();
+    }
+
+    private BaiduPlaceApiProvider provider(BaiduProperties properties) {
+        return new BaiduPlaceApiProvider(properties, new BaiduPlaceRateLimiter(properties));
     }
 
     private BaiduProperties properties() {
@@ -88,6 +144,8 @@ class BaiduPlaceApiProviderTest {
         properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
         properties.setConnectTimeoutMs(500);
         properties.setReadTimeoutMs(500);
+        properties.setRateLimitPerSecond(1000);
+        properties.setRateLimitMaxWaitMs(100);
         return properties;
     }
 
