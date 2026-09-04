@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none';">
+  <title>ELMA · 产品与算法演示</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #182018;
+      --muted: #647064;
+      --paper: #f5f2e9;
+      --surface: rgba(255, 255, 252, .88);
+      --surface-solid: #fffef9;
+      --line: rgba(24, 32, 24, .13);
+      --green: #1f6f54;
+      --green-soft: #dcebdc;
+      --lime: #c9f06a;
+      --orange: #ef7f4d;
+      --orange-soft: #f8e0d3;
+      --blue: #526ee8;
+      --blue-soft: #e1e6ff;
+      --shadow: 0 18px 55px rgba(38, 48, 35, .09);
+      --serif: Georgia, "Noto Serif SC", "Songti SC", serif;
+      --sans: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 8% 5%, rgba(201, 240, 106, .34), transparent 27rem),
+        radial-gradient(circle at 92% 22%, rgba(82, 110, 232, .13), transparent 28rem),
+        var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.6;
+    }
+    button, a { font: inherit; }
+    button { color: inherit; }
+    a { color: inherit; text-decoration: none; }
+    button:focus-visible, a:focus-visible { outline: 3px solid rgba(82, 110, 232, .35); outline-offset: 3px; }
+
+    .shell { width: min(1160px, calc(100% - 36px)); margin: 0 auto; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--line);
+      background: rgba(245, 242, 233, .82);
+      backdrop-filter: blur(16px);
+    }
+    .topbar-inner { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 820; letter-spacing: -.02em; }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px 11px 11px 3px;
+      background: var(--ink);
+      color: var(--lime);
+      box-shadow: 0 7px 18px rgba(24, 32, 24, .18);
+    }
+    .brand small { color: var(--muted); font-weight: 560; letter-spacing: .04em; }
+    .nav { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+    .nav a { padding: 7px 10px; border-radius: 999px; }
+    .nav a:hover { background: rgba(255,255,255,.7); color: var(--ink); }
+
+    .hero { padding: 82px 0 56px; display: grid; grid-template-columns: 1.08fr .92fr; gap: 56px; align-items: center; }
+    .eyebrow { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 20px; }
+    .chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; background: rgba(255,255,255,.58); color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+    .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+    .chip.shadow::before { background: var(--orange); }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 22px; font-size: clamp(44px, 6.4vw, 78px); line-height: .99; letter-spacing: -.065em; }
+    h1 em { display: block; color: var(--green); font-family: var(--serif); font-weight: 520; }
+    .hero-copy > p { max-width: 650px; color: var(--muted); font-size: 17px; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 17px; border: 1px solid var(--ink); border-radius: 13px; font-size: 13px; font-weight: 760; transition: transform .16s ease, box-shadow .16s ease; }
+    .button:hover { transform: translateY(-2px); box-shadow: 0 9px 20px rgba(24,32,24,.12); }
+    .button.primary { background: var(--ink); color: white; }
+    .button.secondary { background: rgba(255,255,255,.62); }
+
+    .decision-card { position: relative; padding: 20px; border: 1px solid var(--line); border-radius: 28px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+    .decision-card::after { content: ""; position: absolute; width: 180px; height: 180px; border-radius: 50%; right: -80px; top: -90px; background: var(--lime); opacity: .55; filter: blur(2px); }
+    .decision-head { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 20px; color: var(--muted); font-size: 11px; }
+    .decision-live { display: inline-flex; align-items: center; gap: 6px; color: var(--green); font-weight: 800; }
+    .decision-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(31,111,84,.12); }
+    .restaurant { position: relative; z-index: 1; margin: 34px 0 20px; padding: 21px; border-radius: 19px; background: var(--ink); color: white; }
+    .restaurant small { color: rgba(255,255,255,.6); }
+    .restaurant h2 { margin: 5px 0 4px; font: 600 30px/1.2 var(--serif); }
+    .restaurant p { margin: 0; color: rgba(255,255,255,.68); font-size: 12px; }
+    .confidence { display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: center; margin-top: 20px; }
+    .confidence-track { height: 7px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.14); }
+    .confidence-track i { display: block; width: 84%; height: 100%; background: var(--lime); border-radius: inherit; }
+    .confidence strong { color: var(--lime); }
+    .reason-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .reason { border: 1px solid var(--line); border-radius: 14px; padding: 10px; background: rgba(255,255,255,.58); }
+    .reason span { display: block; color: var(--muted); font-size: 10px; }
+    .reason strong { font-size: 13px; }
+
+    .metric-strip { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,.52); overflow: hidden; }
+    .metric-strip article { padding: 18px 20px; border-right: 1px solid var(--line); }
+    .metric-strip article:last-child { border-right: 0; }
+    .metric-strip strong { display: block; font-size: 25px; letter-spacing: -.035em; }
+    .metric-strip span { color: var(--muted); font-size: 11px; }
+
+    section { padding: 92px 0 0; }
+    .section-head { display: grid; grid-template-columns: .75fr 1.25fr; gap: 40px; align-items: end; margin-bottom: 30px; }
+    .section-index { color: var(--green); font: 700 12px var(--sans); letter-spacing: .12em; text-transform: uppercase; }
+    .section-head h2 { margin: 7px 0 0; font: 600 clamp(34px, 4vw, 52px)/1.05 var(--serif); letter-spacing: -.04em; }
+    .section-head p { margin-bottom: 3px; color: var(--muted); max-width: 620px; }
+
+    .pipeline { display: grid; grid-template-columns: 1fr .92fr; gap: 16px; }
+    .pipeline-list { display: grid; gap: 8px; }
+    .pipeline-step { width: 100%; display: grid; grid-template-columns: 38px 1fr auto; gap: 13px; align-items: center; padding: 13px 15px; border: 1px solid var(--line); border-radius: 15px; background: rgba(255,255,255,.56); text-align: left; cursor: pointer; transition: background .15s ease, transform .15s ease, border-color .15s ease; }
+    .pipeline-step:hover { transform: translateX(3px); }
+    .pipeline-step[aria-pressed="true"] { background: var(--ink); color: white; border-color: var(--ink); }
+    .step-number { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 10px; background: var(--green-soft); color: var(--green); font-size: 11px; font-weight: 800; }
+    .pipeline-step[aria-pressed="true"] .step-number { background: var(--lime); color: var(--ink); }
+    .pipeline-step small { display: block; color: var(--muted); }
+    .pipeline-step[aria-pressed="true"] small { color: rgba(255,255,255,.58); }
+    .pipeline-step > span:last-child { color: var(--muted); }
+    .pipeline-detail { min-height: 100%; padding: 28px; border-radius: 24px; background: var(--green); color: white; box-shadow: var(--shadow); }
+    .pipeline-detail .overline { color: var(--lime); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .pipeline-detail h3 { margin: 14px 0 8px; font: 600 32px/1.15 var(--serif); }
+    .pipeline-detail > p { color: rgba(255,255,255,.72); }
+    .io-grid { display: grid; gap: 10px; margin-top: 26px; }
+    .io-row { padding: 13px 14px; border: 1px solid rgba(255,255,255,.16); border-radius: 13px; background: rgba(255,255,255,.07); }
+    .io-row span { display: block; color: var(--lime); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+    .io-row strong { font-size: 13px; font-weight: 600; }
+
+    .demo-grid { display: grid; grid-template-columns: .7fr 1.3fr; gap: 16px; }
+    .candidate-list, .score-panel { border: 1px solid var(--line); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); }
+    .candidate-list { padding: 14px; }
+    .candidate-list > p { margin: 5px 7px 12px; color: var(--muted); font-size: 11px; }
+    .candidate-button { width: 100%; padding: 14px; border: 0; border-radius: 14px; background: transparent; text-align: left; cursor: pointer; }
+    .candidate-button + .candidate-button { margin-top: 4px; }
+    .candidate-button[aria-pressed="true"] { background: var(--ink); color: white; }
+    .candidate-button strong { display: flex; justify-content: space-between; gap: 12px; }
+    .candidate-button small { color: var(--muted); }
+    .candidate-button[aria-pressed="true"] small { color: rgba(255,255,255,.58); }
+    .score-panel { padding: 24px; }
+    .score-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+    .score-top small { color: var(--muted); }
+    .score-top h3 { margin: 3px 0 0; font: 600 28px var(--serif); }
+    .score-total { min-width: 80px; text-align: right; }
+    .score-total strong { display: block; color: var(--green); font-size: 39px; line-height: 1; }
+    .score-total span { color: var(--muted); font-size: 10px; }
+    .bars { display: grid; gap: 12px; margin-top: 27px; }
+    .bar-row { display: grid; grid-template-columns: 74px 1fr 32px; align-items: center; gap: 10px; font-size: 12px; }
+    .bar-row > span { color: var(--muted); }
+    .bar-track { height: 8px; overflow: hidden; border-radius: 99px; background: #e7e5dc; }
+    .bar-fill { height: 100%; width: var(--score); border-radius: inherit; background: linear-gradient(90deg, var(--green), #64a36e); transition: width .36s cubic-bezier(.2,.7,.2,1); }
+    .bar-row.penalty .bar-fill { background: var(--orange); }
+    .score-reason { margin-top: 24px; padding: 15px; border-radius: 14px; background: var(--green-soft); color: #31523e; font-size: 12px; }
+    .score-reason strong { display: block; color: var(--green); margin-bottom: 2px; }
+
+    .algorithm-shell { padding: 18px; border: 1px solid var(--line); border-radius: 26px; background: rgba(255,255,255,.52); }
+    .algorithm-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .algorithm-tab { border: 1px solid var(--line); border-radius: 999px; padding: 8px 13px; background: white; color: var(--muted); cursor: pointer; font-size: 12px; }
+    .algorithm-tab[aria-pressed="true"] { background: var(--ink); color: white; border-color: var(--ink); }
+    .algorithm-card { display: grid; grid-template-columns: .82fr 1.18fr; gap: 26px; padding: 24px; border-radius: 20px; background: var(--surface-solid); }
+    .algorithm-copy h3 { margin: 7px 0 9px; font: 600 31px var(--serif); }
+    .algorithm-copy p { color: var(--muted); font-size: 13px; }
+    .algorithm-status { display: inline-flex; border-radius: 999px; padding: 4px 9px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 800; }
+    .algorithm-status.shadow { background: var(--orange-soft); color: #a14a26; }
+    .algorithm-points { margin: 19px 0 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+    .algorithm-points li { display: grid; grid-template-columns: 16px 1fr; gap: 7px; font-size: 12px; }
+    .algorithm-points li::before { content: "✓"; color: var(--green); font-weight: 900; }
+    .dimension-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; align-content: center; }
+    .dimension { min-height: 118px; padding: 16px; border-radius: 15px; background: var(--paper); }
+    .dimension span { color: var(--muted); font-size: 10px; }
+    .dimension strong { display: block; margin-top: 8px; font-size: 20px; }
+    .dimension p { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+
+    .evidence-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .evidence-card { min-height: 190px; padding: 20px; border: 1px solid var(--line); border-radius: 19px; background: var(--surface); }
+    .evidence-card.accent { background: var(--ink); color: white; border-color: var(--ink); }
+    .evidence-card .metric-type { color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .evidence-card.accent .metric-type { color: var(--lime); }
+    .evidence-card strong { display: block; margin: 18px 0 5px; font-size: 36px; line-height: 1; letter-spacing: -.04em; }
+    .evidence-card h3 { margin-bottom: 7px; font-size: 14px; }
+    .evidence-card p { color: var(--muted); font-size: 11px; }
+    .evidence-card.accent p { color: rgba(255,255,255,.6); }
+    .metric-warning { display: inline-flex; border-radius: 999px; padding: 3px 7px; background: var(--orange-soft); color: #8d3b1d; font-size: 9px; font-weight: 800; }
+
+    .architecture { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; align-items: stretch; }
+    .arch-node { position: relative; min-height: 140px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.62); }
+    .arch-node:not(:last-child)::after { content: "→"; position: absolute; right: -15px; top: 50%; z-index: 2; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--paper); color: var(--green); font-weight: 900; transform: translateY(-50%); }
+    .arch-node span { color: var(--green); font-size: 10px; font-weight: 800; }
+    .arch-node h3 { margin: 8px 0 5px; font-size: 14px; }
+    .arch-node p { margin: 0; color: var(--muted); font-size: 10px; }
+    .proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .proof { padding: 20px; border-radius: 18px; background: var(--blue-soft); color: #34438d; }
+    .proof.orange { background: var(--orange-soft); color: #814326; }
+    .proof h3 { margin-bottom: 6px; font-size: 15px; }
+    .proof p { margin: 0; font-size: 11px; }
+
+    .limits { display: grid; grid-template-columns: .8fr 1.2fr; gap: 24px; padding: 30px; border-radius: 26px; background: var(--ink); color: white; }
+    .limits h2 { margin: 5px 0 0; font: 600 38px/1.1 var(--serif); }
+    .limit-list { display: grid; gap: 8px; }
+    .limit-item { display: grid; grid-template-columns: 24px 1fr; gap: 10px; padding: 12px; border-radius: 12px; background: rgba(255,255,255,.07); }
+    .limit-item span { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: var(--orange); color: white; font-size: 10px; font-weight: 900; }
+    .limit-item strong { display: block; font-size: 12px; }
+    .limit-item small { color: rgba(255,255,255,.56); }
+
+    footer { padding: 72px 0 36px; color: var(--muted); font-size: 11px; }
+    .footer-inner { display: flex; justify-content: space-between; gap: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+
+    @media (max-width: 900px) {
+      .hero, .section-head, .pipeline, .demo-grid, .algorithm-card, .limits { grid-template-columns: 1fr; }
+      .metric-strip { grid-template-columns: repeat(2, 1fr); }
+      .metric-strip article:nth-child(2) { border-right: 0; }
+      .metric-strip article:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .evidence-grid { grid-template-columns: repeat(2, 1fr); }
+      .architecture { grid-template-columns: 1fr 1fr; }
+      .arch-node::after { display: none !important; }
+    }
+    @media (max-width: 620px) {
+      .shell { width: min(100% - 22px, 1160px); }
+      .nav { display: none; }
+      .hero { padding-top: 50px; gap: 34px; }
+      h1 { font-size: 46px; }
+      section { padding-top: 72px; }
+      .reason-grid, .dimension-grid, .evidence-grid, .architecture, .proof-grid { grid-template-columns: 1fr; }
+      .metric-strip { grid-template-columns: 1fr; }
+      .metric-strip article { border-right: 0; border-bottom: 1px solid var(--line); }
+      .metric-strip article:last-child { border-bottom: 0; }
+      .score-top { align-items: center; }
+      .bar-row { grid-template-columns: 64px 1fr 28px; }
+      .footer-inner { flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="#top" aria-label="返回顶部">
+        <span class="brand-mark">E</span>
+        <span>ELMA <small>/ 产品与算法演示</small></span>
+      </a>
+      <nav class="nav" aria-label="页面导航">
+        <a href="#pipeline">推荐流程</a>
+        <a href="#explain">推荐依据</a>
+        <a href="#algorithm">算法版本</a>
+        <a href="#evidence">运行数据</a>
+        <a href="#engineering">工程实现</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top" class="shell">
+    <div class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">
+          <span class="chip">v0.4.1 当前线上版本</span>
+          <span class="chip shadow">v0.5 当前 Shadow 版本</span>
+        </div>
+        <h1>一次只推荐一家餐厅，<em>并说明推荐依据。</em></h1>
+        <p>ELMA 是一个单结果餐厅推荐系统。它会处理真实 POI、信息缺失、口味反馈较少和风险判断不确定等情况，再根据质量、安全、口味、距离和预算选择一家餐厅。每次推荐都会保留决策数据，便于解释、重放和比较算法版本。</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#pipeline">查看推荐流程</a>
+          <a class="button secondary" href="#evidence">查看运行数据</a>
+        </div>
+      </div>
+
+      <aside class="decision-card" aria-label="推荐结果示例">
+        <div class="decision-head">
+          <span>DECISION / 2026-09</span>
+          <span class="decision-live">SERVING</span>
+        </div>
+        <div class="restaurant">
+          <small>今天中午 · 1.2 km · ¥45–65</small>
+          <h2>湘味小馆</h2>
+          <p>它的公开评分不是最高，但综合安全、口味、距离和预算以后，本次得分更高。</p>
+          <div class="confidence">
+            <div class="confidence-track"><i></i></div>
+            <strong>84</strong>
+          </div>
+        </div>
+        <div class="reason-grid">
+          <div class="reason"><span>风险</span><strong>可信 LOW</strong></div>
+          <div class="reason"><span>口味</span><strong>匹配 88</strong></div>
+          <div class="reason"><span>近期重复</span><strong>无惩罚</strong></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="metric-strip" aria-label="当前项目概览">
+      <article><strong>515</strong><span>当前生产快照中的餐厅 POI</span></article>
+      <article><strong>298</strong><span>最近 30 天推荐会话，包含调试流量</span></article>
+      <article><strong>90</strong><span>已经保存的 SafeRegret Shadow 快照</span></article>
+      <article><strong>0</strong><span>当前 Shadow 样本中的无可选候选</span></article>
+    </div>
+
+    <section id="pipeline">
+      <div class="section-head">
+        <div><span class="section-index">01 / Decision Pipeline</span><h2>一次推荐的处理过程</h2></div>
+        <p>点击步骤可以查看每个阶段的输入、处理和输出。系统会在首次推荐时保存候选池。后续重选沿用这组候选，不会再次查询或者改变原有排序，因此同一个会话可以重放和审计。</p>
+      </div>
+      <div class="pipeline">
+        <div id="pipeline-list" class="pipeline-list" aria-label="推荐决策步骤"></div>
+        <article id="pipeline-detail" class="pipeline-detail" aria-live="polite"></article>
+      </div>
+    </section>
+
+    <section id="explain">
+      <div class="section-head">
+        <div><span class="section-index">02 / Explainability</span><h2>推荐结果的分项说明</h2></div>
+        <p>本节使用脱敏演示数据，不对应任何生产用户。切换候选以后，可以比较质量、安全、口味、距离、预算和近期重复惩罚对 LowRegret 得分的影响。</p>
+      </div>
+      <div class="demo-grid">
+        <div class="candidate-list">
+          <p>演示候选池，所有候选均已通过硬过滤</p>
+          <div id="candidate-buttons"></div>
+        </div>
+        <article id="score-panel" class="score-panel" aria-live="polite"></article>
+      </div>
+    </section>
+
+    <section id="algorithm">
+      <div class="section-head">
+        <div><span class="section-index">03 / Algorithm Versions</span><h2>v0.4.1 与 v0.5 的关系</h2></div>
+        <p>线上结果目前由 v0.4.1 生成。系统会在响应提交以后异步计算 v0.5 Shadow。Shadow 任务失败时不会回滚原有请求。v0.5 需要完成离线重放、指标门禁和小流量灰度以后，才会考虑参与线上响应。</p>
+      </div>
+      <div class="algorithm-shell">
+        <div class="algorithm-tabs" role="group" aria-label="算法版本">
+          <button class="algorithm-tab" type="button" data-algorithm="v04" aria-pressed="true">v0.4.1 · Serving</button>
+          <button class="algorithm-tab" type="button" data-algorithm="v05" aria-pressed="false">v0.5 · Shadow</button>
+        </div>
+        <article id="algorithm-card" class="algorithm-card" aria-live="polite"></article>
+      </div>
+    </section>
+
+    <section id="evidence">
+      <div class="section-head">
+        <div><span class="section-index">04 / Runtime Data</span><h2>当前可以确认的运行数据</h2></div>
+        <p>以下数据来自 2026 年 9 月 4 日 10:32 生成的 30 天只读快照，可以说明系统当时的运行情况。由于正式渠道和内部调试流量还没有分离，这些数据不能用于证明算法已经带来业务提升。</p>
+      </div>
+      <div class="evidence-grid">
+        <article class="evidence-card accent"><span class="metric-type">Product baseline</span><strong>7.05%</strong><h3>接受会话率</h3><p>298 个推荐会话中有 21 个发生了接受行为。由于当前数据包含内部调试流量，不能直接将它作为真实用户转化率。</p></article>
+        <article class="evidence-card"><span class="metric-type">Action baseline</span><strong>6.04%</strong><h3>导航会话率</h3><p>298 个推荐会话中有 18 个发生了导航行为。</p></article>
+        <article class="evidence-card"><span class="metric-type">Reroll signal</span><strong>35.9%</strong><h3>发生重选的会话</h3><p>298 个推荐会话中有 107 个发生了重选，共产生 374 次重选。后续需要结合候选和反馈分析具体原因。</p></article>
+        <article class="evidence-card"><span class="metric-type">Feedback coverage</span><strong>4.03%</strong><h3>反馈会话覆盖</h3><p>12 个会话产生了 17 条显式反馈，目前的反馈样本仍然较少。</p></article>
+        <article class="evidence-card"><span class="metric-type">Shadow coverage</span><strong>30.2%</strong><h3>V9 快照覆盖</h3><p>298 个推荐会话中有 90 个保存了 V9 快照。这个比例只表示快照覆盖，不代表 Shadow 成功率。</p></article>
+        <article class="evidence-card"><span class="metric-type">Algorithm disagreement</span><strong>61.1%</strong><h3>新旧首选不同</h3><p>90 个 Shadow 快照中有 55 个出现了不同的首选。<span class="metric-warning">分歧 ≠ 提升</span> 这个结果说明两个版本的判断存在差异，不能说明 v0.5 的效果更好。</p></article>
+      </div>
+    </section>
+
+    <section id="engineering">
+      <div class="section-head">
+        <div><span class="section-index">05 / Engineering Implementation</span><h2>算法进入生产系统后的工程处理</h2></div>
+        <p>我在项目中同时处理了接口边界、数据保存、失败隔离和发布控制。当前线上响应保持不变，新算法可以独立比较，每次决策可以重放，运营页面只读取聚合数据。</p>
+      </div>
+      <div class="architecture" aria-label="系统架构">
+        <article class="arch-node"><span>CLIENT</span><h3>uni-app</h3><p>位置、条件、匿名身份、结果反馈；不承载服务端排序逻辑。</p></article>
+        <article class="arch-node"><span>CONTRACT</span><h3>OpenAPI</h3><p>单结果推荐、有限重选、反馈和数据删除边界。</p></article>
+        <article class="arch-node"><span>APPLICATION</span><h3>Spring Boot</h3><p>Spring Boot 负责组织事务、保存候选池、处理用户行为并调度 Shadow 任务。</p></article>
+        <article class="arch-node"><span>DOMAIN</span><h3>Risk + Regret</h3><p>硬过滤、RiskPosterior、TasteProfile、SafeRegret 与多样性。</p></article>
+        <article class="arch-node"><span>EVIDENCE</span><h3>PostgreSQL</h3><p>POI、行为、反馈、画像和 V9 决策快照。</p></article>
+      </div>
+      <div class="proof-grid">
+        <article class="proof"><h3>Shadow 不改变原有响应</h3><p>系统在主事务提交以后触发异步计算。查重和保存分别使用短事务，任务失败、超时或者队列拒绝都不会回滚 v0.4.1 的响应。</p></article>
+        <article class="proof orange"><h3>保存重放所需的数据</h3><p>V9 快照会保存候选、分项、排序、选择概率、随机种子、选择原因和配置哈希，为离线比较和审计提供数据。</p></article>
+      </div>
+    </section>
+
+    <section>
+      <div class="limits">
+        <div><span class="section-index" style="color:var(--lime)">06 / Current Limits</span><h2>当前限制</h2></div>
+        <div class="limit-list">
+          <div class="limit-item"><span>1</span><div><strong>正式流量尚未独立计量</strong><small>下一步需要增加 client_channel。现阶段不能把 64 个匿名标识称为真实用户。</small></div></div>
+          <div class="limit-item"><span>2</span><div><strong>反馈样本仍然较少</strong><small>当前数据只能用于描述行为基线，不能用于宣称 v0.5 已经提升接受率。</small></div></div>
+          <div class="limit-item"><span>3</span><div><strong>v0.5 尚未参与线上响应</strong><small>项目需要先完成离线重放、分层诊断和指标门禁，再单独评审灰度方案。</small></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-inner">
+      <span>ELMA 产品与算法演示，页面可以作为离线单文件打开。</span>
+      <span>示例候选已脱敏；量化基线包含内部调试流量，不能用于说明算法提升。</span>
+    </div>
+  </footer>
+
+  <script>
+    const pipelineSteps = [
+      { title: '条件输入', subtitle: 'Location + intent', copy: '客户端只提交完成本次推荐所需的条件，不要求用户登录。匿名 UUID 用于关联推荐会话和反馈，不代表自然人身份。', input: 'GCJ-02 位置、时间、预算、距离、品类', action: '校验字段并保存请求条件', output: '可以重放的 SearchCondition' },
+      { title: '真实 POI 召回', subtitle: 'Recall', copy: '服务端从地图服务获取附近的真实餐厅，先扩大有效候选范围，再统一餐厅身份和字段。', input: '位置、半径和品类条件', action: '分层检索并合并候选', output: '标准化的 Restaurant 候选' },
+      { title: '餐饮身份校验', subtitle: 'Identity confidence', copy: '名称相似不能证明两个记录属于同一家餐厅。系统会结合来源 ID、名称、地址、距离和多平台 Evidence 判断实体关系，减少错误实体进入排序的情况。', input: '高德 POI 与百度等 Evidence', action: '匹配实体、识别冲突并记录可信度', output: '可用、冲突或者未知的餐厅身份' },
+      { title: '硬条件过滤', subtitle: 'Hard constraints', copy: '预算、距离、品类和明确排除项属于硬条件。候选不满足这些条件时，后续得分不能抵消对应问题。', input: '候选餐厅与请求条件', action: '逐条应用硬条件和排除规则', output: '满足全部硬条件的候选集合' },
+      { title: '风险与证据', subtitle: 'Risk evidence', copy: '证据缺失不能直接说明餐厅安全。线上版本使用现有风险规则，v0.5 Shadow 使用 RiskPosterior 表达不确定性，并且只阻断证据充分的高风险候选。', input: '评分、评论、营业信息和跨平台 Evidence', action: '计算风险等级、置信度和保守风险', output: 'RiskResult / RiskPosterior' },
+      { title: '个性化画像', subtitle: 'TasteProfile', copy: '系统根据显式反馈和部分隐式行为更新 TasteProfile。行为数量较少时，偏好结果会向中性值收缩，减少冷启动阶段的过度个性化。', input: '匿名反馈、行为和近期饮食历史', action: '计算品类、价格、距离和风味偏好', output: '包含可信度的 TasteMatch' },
+      { title: '低后悔排序', subtitle: 'LowRegret / SafeRegret', copy: '排序会综合质量、安全、口味、距离、预算和近期重复惩罚。v0.5 还会比较候选的稳健遗憾，并且只在候选近似并列时进行可重放的随机选择。', input: '过滤后的候选和全部分项', action: '计算得分和排序，再处理近似并列与多样性', output: '首选餐厅和有限候选池' },
+      { title: '保存与反馈', subtitle: 'Replayable loop', copy: '系统会保存一次会话的候选、排序和随机种子。重选只在已有候选池中继续，反馈会影响下一次推荐，不会改变当前会话已经产生的结果。', input: '排序结果、seed 和选择原因', action: '保存候选快照、行为、反馈和 Shadow 决策', output: '可以审计的推荐记录' },
+    ];
+
+    const candidates = [
+      { id: 'xiang', name: '湘味小馆', meta: '1.2 km · ¥45–65 · 湘菜', total: 84, scores: {质量: 78, 安全: 92, 口味: 88, 距离: 82, 预算: 86, 重复惩罚: 0}, reason: '这家餐厅的安全证据较完整，口味和预算符合当前条件，距离在可接受范围内，近期也没有选择过相同品类。' },
+      { id: 'noodle', name: '老街粉馆', meta: '0.6 km · ¥20–35 · 粉面', total: 77, scores: {质量: 84, 安全: 76, 口味: 70, 距离: 94, 预算: 90, 重复惩罚: 6}, reason: '这家餐厅在距离和预算方面得分较高，但跨平台证据较少，而且近期已经选择过相似品类。' },
+      { id: 'bbq', name: '炭火烧肉', meta: '2.4 km · ¥95–130 · 烧烤', total: 69, scores: {质量: 91, 安全: 61, 口味: 83, 距离: 58, 预算: 54, 重复惩罚: 8}, reason: '这家餐厅的公开评分最高，但距离和预算不符合当前条件，风险证据也存在较多不确定性，因此没有成为本次首选。' },
+    ];
+
+    const algorithms = {
+      v04: {
+        version: 'recommendation-v0.4.1', status: '当前线上 Serving', shadow: false,
+        title: 'LowRegret 个性化决策',
+        copy: '系统先过滤不满足硬条件的候选，再综合质量、安全、口味、距离和预算计算得分。它使用稳定 seed 生成可以重放的候选池，并通过有限探索减少画像固化。',
+        points: ['行为较少时，TasteProfile 会向中性值收缩', '80% 使用个性化选择，20% 探索低风险新类型', '当前会话保存以后，反馈只影响下一次推荐'],
+        dimensions: [['安全表达','规则评分','缺失 Evidence 透明标记'], ['选择策略','Top-K 稳定抽取','seed 支持确定性重放'], ['多样性','分组候选池','限制相同类型连续出现'], ['发布状态','100% Serving','当前用户响应来源']],
+      },
+      v05: {
+        version: 'recommendation-v0.5', status: '仅 Shadow，不影响响应', shadow: true,
+        title: 'SafeRegret 稳健决策',
+        copy: '系统使用后验分布表示风险不确定性，并在候选的乐观预算和保守预算之间计算稳健遗憾。它只对近似并列的候选使用 seeded softmax，再通过质量受限 MMR 选择差异较大的候选。',
+        points: ['RiskPosterior 区分无数据、不确定和可信高风险', '系统保存真实 propensity、选择原因和配置哈希', 'Shadow 在事务外的有界线程池中执行，失败时不改变 v0.4.1 响应'],
+        dimensions: [['安全表达','后验风险','不把缺失证据伪装为低风险'], ['选择策略','稳健遗憾','随机只发生在近似并列区间'], ['多样性','质量受限 MMR','在质量底线内减少重复'], ['发布状态','0% Serving','完成验证前由安全闩阻止启用']],
+      },
+    };
+
+    function htmlElement(name, className, text) {
+      const element = document.createElement(name);
+      if (className) element.className = className;
+      if (text !== undefined) element.textContent = String(text);
+      return element;
+    }
+
+    function renderPipeline(index = 0) {
+      const list = document.getElementById('pipeline-list');
+      const detail = document.getElementById('pipeline-detail');
+      list.replaceChildren();
+      pipelineSteps.forEach((step, stepIndex) => {
+        const button = htmlElement('button', 'pipeline-step');
+        button.type = 'button';
+        button.dataset.step = String(stepIndex);
+        button.setAttribute('aria-pressed', stepIndex === index ? 'true' : 'false');
+        const label = htmlElement('span');
+        label.append(htmlElement('strong', '', step.title), htmlElement('small', '', step.subtitle));
+        button.append(htmlElement('span', 'step-number', String(stepIndex + 1).padStart(2, '0')), label, htmlElement('span', '', '→'));
+        button.addEventListener('click', () => renderPipeline(stepIndex));
+        list.appendChild(button);
+      });
+      const step = pipelineSteps[index];
+      detail.replaceChildren(htmlElement('span', 'overline', `Step ${String(index + 1).padStart(2, '0')} / ${step.subtitle}`), htmlElement('h3', '', step.title), htmlElement('p', '', step.copy));
+      const io = htmlElement('div', 'io-grid');
+      for (const [label, value] of [['输入', step.input], ['决策动作', step.action], ['输出', step.output]]) {
+        const row = htmlElement('div', 'io-row');
+        row.append(htmlElement('span', '', label), htmlElement('strong', '', value));
+        io.appendChild(row);
+      }
+      detail.appendChild(io);
+    }
+
+    function renderCandidate(candidateId = candidates[0].id) {
+      const selected = candidates.find(candidate => candidate.id === candidateId) || candidates[0];
+      const buttons = document.getElementById('candidate-buttons');
+      const panel = document.getElementById('score-panel');
+      buttons.replaceChildren();
+      candidates.forEach(candidate => {
+        const button = htmlElement('button', 'candidate-button');
+        button.type = 'button';
+        button.dataset.candidate = candidate.id;
+        button.setAttribute('aria-pressed', candidate.id === selected.id ? 'true' : 'false');
+        const title = htmlElement('strong');
+        title.append(htmlElement('span', '', candidate.name), htmlElement('span', '', candidate.total));
+        button.append(title, htmlElement('small', '', candidate.meta));
+        button.addEventListener('click', () => renderCandidate(candidate.id));
+        buttons.appendChild(button);
+      });
+
+      const top = htmlElement('div', 'score-top');
+      const identity = htmlElement('div');
+      identity.append(htmlElement('small', '', selected.meta), htmlElement('h3', '', selected.name));
+      const total = htmlElement('div', 'score-total');
+      total.append(htmlElement('strong', '', selected.total), htmlElement('span', '', '演示 LowRegretScore'));
+      top.append(identity, total);
+      const bars = htmlElement('div', 'bars');
+      Object.entries(selected.scores).forEach(([label, score]) => {
+        const row = htmlElement('div', `bar-row${label === '重复惩罚' ? ' penalty' : ''}`);
+        const track = htmlElement('div', 'bar-track');
+        const fill = htmlElement('div', 'bar-fill');
+        fill.style.setProperty('--score', `${score}%`);
+        track.appendChild(fill);
+        row.append(htmlElement('span', '', label), track, htmlElement('strong', '', score));
+        bars.appendChild(row);
+      });
+      const reason = htmlElement('div', 'score-reason');
+      reason.append(htmlElement('strong', '', selected.id === 'xiang' ? '本次推荐理由' : '没有成为首选的原因'), document.createTextNode(selected.reason));
+      panel.replaceChildren(top, bars, reason);
+    }
+
+    function renderAlgorithm(key = 'v04') {
+      const algorithm = algorithms[key] || algorithms.v04;
+      document.querySelectorAll('[data-algorithm]').forEach(button => button.setAttribute('aria-pressed', button.dataset.algorithm === key ? 'true' : 'false'));
+      const card = document.getElementById('algorithm-card');
+      const copy = htmlElement('div', 'algorithm-copy');
+      copy.append(htmlElement('span', `algorithm-status${algorithm.shadow ? ' shadow' : ''}`, algorithm.status), htmlElement('h3', '', algorithm.title), htmlElement('p', '', algorithm.copy));
+      const points = htmlElement('ul', 'algorithm-points');
+      algorithm.points.forEach(point => points.appendChild(htmlElement('li', '', point)));
+      copy.appendChild(points);
+      const dimensions = htmlElement('div', 'dimension-grid');
+      algorithm.dimensions.forEach(([label, value, description]) => {
+        const dimension = htmlElement('div', 'dimension');
+        dimension.append(htmlElement('span', '', label), htmlElement('strong', '', value), htmlElement('p', '', description));
+        dimensions.appendChild(dimension);
+      });
+      card.replaceChildren(copy, dimensions);
+    }
+
+    document.querySelectorAll('[data-algorithm]').forEach(button => button.addEventListener('click', () => renderAlgorithm(button.dataset.algorithm)));
+    renderPipeline();
+    renderCandidate();
+    renderAlgorithm();
+  </script>
+</body>
+</html>

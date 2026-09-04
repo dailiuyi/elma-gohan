@@ -21,3 +21,5 @@ __pycache__/
 *.py[cod]
 output/database-guide/dashboard.local.html
 output/database-guide/dashboard-*.html
+output/merged-console/index.html
+output/merged-console/.deploy-credentials
