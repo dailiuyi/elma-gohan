@@ -340,7 +340,7 @@
     #trend-chart { display: block; width: 100%; height: auto; min-height: 250px; overflow: visible; }
     .chart-grid-line { stroke: var(--chart-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
     .chart-axis-label { fill: var(--muted); font: 11px var(--sans); }
-    .trend-line { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw-line 1s cubic-bezier(.2,.7,.2,1) forwards; }
+    .trend-line { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
     .trend-area { opacity: 0; animation: fade-area .7s .25s ease forwards; }
     .trend-point { stroke: var(--surface); stroke-width: 2; vector-effect: non-scaling-stroke; opacity: 0; animation: pop-point .35s ease forwards; }
     .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; min-height: 24px; color: var(--muted); font-size: 12px; }
@@ -437,22 +437,86 @@
       .funnel-row, .bar-row { grid-template-columns: minmax(86px, .9fr) minmax(80px, 1.1fr) auto; }
       .map-controls { top: 10px; right: 10px; }
     }
+
+    .shell { width: min(1700px, calc(100% - 40px)); display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 28px; padding-top: 24px; }
+    .admin-sidebar { position: sticky; top: 80px; align-self: start; padding: 10px 8px; }
+    .admin-brand { color: var(--text); font-weight: 800; font-size: 25px; letter-spacing: .06em; margin: 0 12px 26px; }
+    .admin-brand span { display: block; font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .1em; }
+    .nav-caption { font-size: 11px; color: var(--muted); margin: 0 12px 12px; }
+    .admin-sidebar .tabs { flex-direction: column; }
+    .admin-sidebar .tab { text-align: left; border-color: transparent; background: transparent; padding: 10px 14px; font-size: 14px; }
+    .admin-sidebar .tab[aria-selected="true"] { color: var(--primary); background: var(--primary-soft); border-color: var(--border); font-weight: 700; }
+    .sidebar-note { border-top: 1px solid var(--border); margin: 28px 12px 0; padding-top: 18px; color: var(--muted); font-size: 12px; line-height: 2; }
+    .admin-workspace { min-width: 0; }
+    .hero h1 { font-size: 28px; margin-bottom: 10px; }
+    .hero p { font-size: 13px; max-width: 620px; }
+    .panel, .stat { border-radius: 12px; box-shadow: 0 2px 8px rgba(31,42,68,.025); }
+    .evidence-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 10px; }
+    .evidence-stats strong { font-size: 22px; }
+    .acceptance-note { margin: 0 0 18px; font-size: 12px; color: var(--muted); }
+    summary { cursor: pointer; }
+    .data-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; font-size: 12px; }
+    .data-controls label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+    select { padding: 7px 9px; font: inherit; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); }
+    .control-hint { color: var(--muted); font-size: 11px; margin-bottom: 12px; }
+    .trend-tooltip { position: absolute; z-index: 4; width: 205px; padding: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--shadow); pointer-events: none; font-size: 12px; }
+    .trend-tooltip[hidden] { display: none; }
+    .trend-tooltip strong { display: block; margin-bottom: 6px; }
+    .tooltip-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
+    .trend-cursor { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; pointer-events: none; }
+    .trend-details { color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+    .table-scroll { overflow: auto; max-height: 310px; }
+    .table-scroll table { width: 100%; border-collapse: collapse; }
+    .table-scroll th, .table-scroll td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .table-scroll th:first-child, .table-scroll td:first-child { text-align: left; }
+    .catalog { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .table-card { border-radius: 10px; background: var(--surface); padding: 16px; }
+    .table-card strong { font-size: 13px; overflow-wrap: anywhere; }
+    .table-card p { font-size: 12px; }
+    dialog { width: min(760px, calc(100% - 32px)); max-height: 85vh; overflow: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); padding: 24px; box-shadow: var(--shadow); }
+    dialog::backdrop { background: rgba(15,23,42,.45); }
+    dialog h2 { overflow-wrap: anywhere; padding-right: 60px; font-size: 20px; }
+    dialog p { color: var(--muted); margin-bottom: 24px; font-size: 13px; }
+    .dialog-close { float: right; }
+    @media (max-width: 1200px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } .evidence-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 760px) { .shell { display: block; width: calc(100% - 24px); } .admin-sidebar { position: static; padding: 0; margin-bottom: 20px; } .admin-sidebar .tabs { flex-direction: row; } .admin-brand, .nav-caption, .sidebar-note { display: none; } .catalog { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   </style>
 </head>
 <body>
   <main class="shell">
+    <aside class="admin-sidebar">
+      <div class="admin-brand">ELMA<span>运营工作台</span></div>
+      <p class="nav-caption">数据与运营</p>
+      <nav class="tabs" aria-label="页面视图">
+        <button class="tab" type="button" data-view="overview" aria-selected="true">运营总览</button>
+        <button class="tab" type="button" data-view="locations" aria-selected="false">用户地图</button>
+        <button class="tab" type="button" data-view="schema" aria-selected="false">关系图</button>
+        <button class="tab" type="button" data-view="catalog" aria-selected="false">表目录</button>
+        <button class="tab" type="button" data-view="guide" aria-selected="false">人工连接</button>
+        <button class="tab" type="button" data-view="queries" aria-selected="false">常用查询</button>
+      </nav>
+      <div class="sidebar-note">快照查看模式<br>筛选 · 排序 · 导出<br><small>以页面快照时间为准</small></div>
+    </aside>
+    <div class="admin-workspace">
     <header class="hero">
       <div>
-        <div class="eyebrow">PostgreSQL · read-only snapshot</div>
-        <h1>离线运营数据看板</h1>
-        <p>用一次只读聚合查询，把推荐、活跃、反馈、风险、实验和地域分布封装进本地 HTML；不依赖在线后台，也不携带用户明细。</p>
+        <div class="eyebrow">ELMA / Operations</div>
+        <h1>推荐系统运营数据</h1>
+        <p>集中查看推荐表现、用户反馈和证据补数；筛选趋势、导出汇总，或查看各表的查询语句。</p>
       </div>
       <div class="snapshot-stack">
-        <span class="offline-badge">离线单文件</span>
+        <span class="offline-badge">运营快照</span>
         <div id="snapshot-label" class="snapshot">正在读取快照…</div>
       </div>
     </header>
 
+    <section class="stats evidence-stats" aria-label="证据链路运行状态">
+      <div class="stat"><strong id="evidence-queue">—</strong><span>待补数任务</span><small>持久去重队列</small></div>
+      <div class="stat"><strong id="evidence-retries">—</strong><span>已重试任务</span><small>不等同调用失败率</small></div>
+      <div class="stat"><strong id="evidence-cache">—</strong><span>有效查询缓存</span><small>共享缓存，五分钟有效</small></div>
+      <div class="stat"><strong id="evidence-lane">—</strong><span>百度调用出口</span><small>快照状态，非实时监控</small></div>
+    </section>
+    <details class="acceptance-note"><summary>匹配验收口径与数据说明</summary><p>匹配验收目标：正确覆盖率 ≥80%、自动接受正确率 ≥98%。队列数量与缓存命中不代表匹配正确率；人工标注验收尚未完成。V10 新增 baidu_call_state、baidu_query_cache、baidu_enrichment_task，映射缓存增加 match_algorithm_version。</p></details>
     <section class="stats" aria-label="运营概况">
       <div class="stat"><strong id="kpi-total-recommendations">—</strong><span>累计推荐</span><small>当前保留数据</small></div>
       <div class="stat"><strong id="kpi-total-users">—</strong><span>累计匿名标识</span><small>不等同自然人</small></div>
@@ -463,14 +527,7 @@
     </section>
 
     <div class="toolbar">
-      <nav class="tabs" aria-label="页面视图">
-        <button class="tab" type="button" data-view="overview" aria-selected="true">运营总览</button>
-        <button class="tab" type="button" data-view="locations" aria-selected="false">用户地图</button>
-        <button class="tab" type="button" data-view="schema" aria-selected="false">关系图</button>
-        <button class="tab" type="button" data-view="catalog" aria-selected="false">表目录</button>
-        <button class="tab" type="button" data-view="guide" aria-selected="false">人工连接</button>
-        <button class="tab" type="button" data-view="queries" aria-selected="false">常用查询</button>
-      </nav>
+<strong id="active-view-title">运营总览</strong>
       <input id="search" class="search" type="search" placeholder="搜索表名或用途，例如：反馈、risk、用户" aria-label="搜索表">
     </div>
 
@@ -497,10 +554,17 @@
               <button class="segment" type="button" data-trend-mode="actions" aria-pressed="false">行动</button>
             </div>
           </header>
-          <div id="trend-legend" class="chart-legend"></div>
+          <div class="data-controls">
+              <label>趋势时间范围 <select id="trend-range"><option value="0">全部快照日期</option><option value="7">最近 7 天</option><option value="14">最近 14 天</option></select></label>
+              <button id="export-trend" class="copy" type="button">导出趋势 CSV</button>
+            </div>
+            <p id="trend-window-label" class="control-hint"></p>
+            <div id="trend-legend" class="chart-legend"></div>
           <div id="trend-stage" class="chart-stage">
-            <svg id="trend-chart" viewBox="0 0 760 270" role="img" aria-label="每日运营趋势图"></svg>
+            <svg id="trend-chart" viewBox="0 0 760 270" role="img" tabindex="0" aria-label="每日运营趋势图，悬浮或左右方向键查看每日数值"></svg>
+            <div id="trend-tooltip" class="trend-tooltip" role="status" aria-live="polite" hidden></div>
           </div>
+        <details class="trend-details"><summary>查看每日数值</summary><div class="table-scroll"><table id="trend-data"></table></div></details>
         </article>
 
         <article class="dashboard-card panel">
@@ -613,7 +677,20 @@
     </section>
 
     <section id="catalog-view" class="view panel" data-module="database-guide" hidden>
+      <div class="data-controls catalog-controls">
+        <label>业务模块 <select id="catalog-group"><option value="">全部模块</option><option value="core">推荐主链路</option><option value="user">用户与反馈</option><option value="evidence">餐厅与证据</option><option value="ops">运维</option></select></label>
+        <label>排序 <select id="catalog-sort"><option value="name">表名 A–Z</option><option value="rows-desc">行数从多到少</option><option value="rows-asc">行数从少到多</option></select></label>
+        <span id="catalog-count" class="control-hint"></span>
+        <button id="export-catalog" type="button" class="copy">导出目录 CSV</button>
+      </div>
+      <p class="control-hint">行数来自当前快照；未采集行数不表示数据库故障。点击数据表查看只读查询。</p>
       <div id="catalog" class="catalog"></div>
+      <dialog id="catalog-dialog" aria-labelledby="catalog-dialog-title">
+        <button id="close-catalog-dialog" class="copy dialog-close" type="button" autofocus>关闭</button>
+        <h2 id="catalog-dialog-title"></h2><p id="catalog-dialog-purpose"></p>
+        <h3>只读查询</h3><pre><code id="catalog-dialog-sql"></code></pre>
+        <div class="data-controls"><button id="copy-catalog-sql" class="copy" type="button">复制 SQL</button><button id="catalog-relations" class="copy" type="button">查看字段与关系</button></div>
+      </dialog>
     </section>
 
     <section id="guide-view" class="view panel" data-module="database-guide" hidden>
@@ -738,6 +815,7 @@ ORDER BY n_live_tup DESC;</code></pre>
       </div>
     </section>
     <footer class="page-footer">本文件不连接网络；重新运行 generate_dashboard.py 才会刷新数据。</footer>
+  </div>
   </main>
 
   <script>
@@ -972,12 +1050,30 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       }
     ];
 
+    tables.push(
+      {name: 'baidu_enrichment_task', type: 'table', group: 'ops', rows: null,
+        purpose: '百度后台补数队列。查看待处理数量、尝试次数和下一次可执行时间。',
+        fields: [['attempts', '已尝试次数'], ['available_at', '下次可领取时间'], ['expires_at', '任务有效期']],
+        relations: ['通过应用逻辑更新 external_entity_mapping'],
+        sql: 'SELECT attempts, available_at, expires_at, created_at\nFROM baidu_enrichment_task\nORDER BY available_at\nLIMIT 50;'},
+      {name: 'baidu_query_cache', type: 'table', group: 'ops', rows: null,
+        purpose: '各实例共享的百度查询缓存，减少相同查询的重复调用。',
+        fields: [['query_hash', '查询参数摘要'], ['expires_at', '缓存有效期']], relations: ['由百度共享调用出口维护'],
+        sql: 'SELECT expires_at, count(*) AS cached_queries\nFROM baidu_query_cache\nGROUP BY expires_at\nORDER BY expires_at DESC\nLIMIT 50;'},
+      {name: 'baidu_call_state', type: 'table', group: 'ops', rows: null,
+        purpose: '百度调用节流和冷却状态。队列与前台共享同一个调用出口。',
+        fields: [['next_allowed_at', '下一次允许调用时间'], ['blocked_until', '冷却截止时间'], ['failure_reason', '限流或配额原因']],
+        relations: ['控制百度前后台调用节奏'],
+        sql: 'SELECT next_allowed_at, blocked_until, failure_reason\nFROM baidu_call_state\nWHERE id = 1;'}
+    );
     const generatedTableRows = dashboardData.tableRows || {};
     for (const table of tables) {
-      if (Object.prototype.hasOwnProperty.call(generatedTableRows, table.name)) {
-        table.rows = Number(generatedTableRows[table.name]);
+      const legacyKey = table.name.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      const value = generatedTableRows[table.name] ?? generatedTableRows[legacyKey];
+      if (value != null && Number.isFinite(Number(value)) && Number(value) >= 0) {
+        table.rows = Number(value);
         table.available = true;
-      } else if (dashboardData.meta?.sourceMode === 'database' && table.type === 'table') {
+      } else if (table.type === 'table') {
         table.rows = null;
         table.available = false;
       }
@@ -985,7 +1081,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
 
     function tableCountLabel(table, compact = false) {
       if (table.type === 'view') return compact ? '动态聚合' : 'VIEW · 聚合视图';
-      if (table.available === false) return compact ? '当前库不可用' : '当前库不可用';
+      if (table.available === false) return '快照未包含行数';
       return compact ? `${table.rows.toLocaleString('zh-CN')} 行` : `${table.rows.toLocaleString('zh-CN')} 行 · ${table.type.toUpperCase()}`;
     }
 
@@ -995,7 +1091,8 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       recommendation_decision_snapshot: [360, 90], recommendation_log: [360, 300], recommendation_candidate: [360, 500],
       external_entity_mapping: [710, 70], risk_result: [710, 190], restaurant: [710, 340],
       restaurant_deep_evidence: [710, 500], restaurant_deep_analysis: [710, 620],
-      flyway_schema_history: [1050, 90]
+      flyway_schema_history: [1010, 90], baidu_enrichment_task: [1010, 210],
+      baidu_query_cache: [1010, 330], baidu_call_state: [1010, 450]
     };
 
     const edges = [
@@ -1140,12 +1237,44 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       ],
     };
 
+    let trendInteraction = {};
+    function trendRows() {
+      const rows = [...(Array.isArray(dashboardData.daily) ? dashboardData.daily : [])]
+        .sort((a, b) => String(a.metricDate).localeCompare(String(b.metricDate)));
+      const days = Number(document.getElementById('trend-range').value);
+      return days ? rows.slice(-days) : rows;
+    }
+
+    function csvText(rows) {
+      return '\uFEFF' + rows.map(row => row.map(value => {
+        let text = String(value ?? '');
+        if (/^\s*[=+@-]/.test(text)) text = "'" + text;
+        return '"' + text.replaceAll('"', '""') + '"';
+      }).join(',')).join('\r\n');
+    }
+
+    function downloadCsv(name, rows) {
+      const url = URL.createObjectURL(new Blob([csvText(rows)], {type: 'text/csv;charset=utf-8'}));
+      const link = document.createElement('a');
+      link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     function renderTrendChart(mode = 'traffic') {
-      const rows = Array.isArray(dashboardData.daily) ? dashboardData.daily : [];
+      const rows = trendRows();
       const series = trendModes[mode] || trendModes.traffic;
       const chart = document.getElementById('trend-chart');
       const stage = document.getElementById('trend-stage');
       const legend = document.getElementById('trend-legend');
+      const tooltip = document.getElementById('trend-tooltip');
+      tooltip.hidden = true;
+      trendInteraction = {};
+      const detail = document.getElementById('trend-data');
+      detail.innerHTML = `<thead><tr><th>日期</th>${series.map(item => `<th>${item.label}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr><td>${escapeHtml(row.metricDate)}</td>${series.map(item => `<td>${formatNumber(row[item.key])}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      document.getElementById('trend-window-label').textContent = rows.length
+        ? `${rows[0].metricDate} 至 ${rows.at(-1).metricDate} · ${rows.length} 天（仅趋势与明细）` : '暂无每日数据';
+      document.getElementById('export-trend').onclick = () => downloadCsv(`ELMA-trend-${mode}.csv`,
+        [['日期', ...series.map(item => item.label)], ...rows.map(row => [row.metricDate, ...series.map(item => row[item.key])])]);
       stage.querySelector('.empty-state')?.remove();
       chart.replaceChildren();
       legend.replaceChildren();
@@ -1205,7 +1334,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
           });
           chart.appendChild(area);
         }
-        chart.appendChild(svgEl('path', {d: pathData, stroke: item.color, class: 'trend-line', pathLength: '1'}));
+        chart.appendChild(svgEl('path', {d: pathData, stroke: item.color, class: 'trend-line'}));
         points.forEach(([x, y], index) => {
           const point = svgEl('circle', {cx: x, cy: y, r: 4, fill: item.color, class: 'trend-point'});
           point.style.animationDelay = `${Math.min(index * 18 + seriesIndex * 80, 500)}ms`;
@@ -1215,6 +1344,45 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
           chart.appendChild(point);
         });
       });
+      const cursor = svgEl('line', {y1: top, y2: top + plotHeight, class: 'trend-cursor', visibility: 'hidden'});
+      chart.appendChild(cursor);
+      let selectedIndex = rows.length - 1;
+      function showValue(index) {
+        selectedIndex = Math.max(0, Math.min(rows.length - 1, index));
+        const row = rows[selectedIndex];
+        tooltip.replaceChildren(htmlEl('strong', '', row.metricDate));
+        for (const item of series) {
+          const entry = htmlEl('div', 'tooltip-row');
+          const label = htmlEl('span', '', item.label); label.style.color = item.color;
+          entry.append(label, htmlEl('b', '', formatNumber(row[item.key]))); tooltip.append(entry);
+        }
+        tooltip.hidden = false;
+        const rect = chart.getBoundingClientRect();
+        const stageRect = stage.getBoundingClientRect();
+        const scale = Math.min(rect.width / width, rect.height / height);
+        const x = (rect.width - width * scale) / 2 + xAt(selectedIndex) * scale;
+        tooltip.style.left = `${Math.max(0, Math.min(stageRect.width - 215, rect.left - stageRect.left + x + 12))}px`;
+        tooltip.style.top = '8px';
+        cursor.setAttribute('x1', xAt(selectedIndex)); cursor.setAttribute('x2', xAt(selectedIndex));
+        cursor.setAttribute('visibility', 'visible');
+      }
+      function fromPointer(event) {
+        const rect = chart.getBoundingClientRect();
+        const scale = Math.min(rect.width / width, rect.height / height);
+        if (!scale) return;
+        const x = (event.clientX - rect.left - (rect.width - width * scale) / 2) / scale;
+        showValue(Math.round((x - left) / plotWidth * (rows.length - 1)));
+      }
+      function hideValue() { tooltip.hidden = true; cursor.setAttribute('visibility', 'hidden'); }
+      trendInteraction.pointermove = trendInteraction.pointerdown = fromPointer;
+      trendInteraction.pointerleave = trendInteraction.blur = hideValue;
+      trendInteraction.focus = () => showValue(selectedIndex);
+      trendInteraction.keydown = event => {
+        if (event.key === 'Escape') { hideValue(); return; }
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        showValue(event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1 : selectedIndex + (event.key === 'ArrowLeft' ? -1 : 1));
+      };
     }
 
     function translatedLabel(value) {
@@ -1391,6 +1559,11 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
     }
 
     function renderOverview() {
+      const evidence = dashboardData.evidenceReliability || {};
+      document.getElementById('evidence-queue').textContent = evidence.queuedTasks ?? '待 V10 快照';
+      document.getElementById('evidence-retries').textContent = evidence.retryingTasks ?? '—';
+      document.getElementById('evidence-cache').textContent = evidence.freshQueries ?? '—';
+      document.getElementById('evidence-lane').textContent = evidence.coolingDown === undefined ? '—' : evidence.coolingDown ? '冷却中' : '可调用';
       renderSnapshotHeader();
       renderTrendChart('traffic');
       renderFunnel();
@@ -1462,20 +1635,41 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       document.getElementById('copy-table-sql').textContent = '复制 SQL';
     }
 
-    function renderCatalog(filter = '') {
+    function filteredTables(filter = document.getElementById('search').value) {
       const normalized = filter.trim().toLowerCase();
-      const matches = tables.filter(table => `${table.name} ${table.purpose} ${table.group}`.toLowerCase().includes(normalized));
+      const group = document.getElementById('catalog-group').value;
+      const sort = document.getElementById('catalog-sort').value;
+      const matches = tables.filter(table => (!group || table.group === group)
+        && `${table.name} ${table.purpose} ${table.group}`.toLowerCase().includes(normalized));
+      return matches.sort((a, b) => {
+        if (sort !== 'name') {
+          if (a.rows == null) return b.rows == null ? 0 : 1;
+          if (b.rows == null) return -1;
+          if (a.rows !== b.rows) return (sort === 'rows-desc' ? -1 : 1) * (a.rows - b.rows);
+        }
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    function renderCatalog(filter) {
+      const matches = filteredTables(filter);
+      document.getElementById('catalog-count').textContent = `${matches.length} / ${tables.length} 项`;
       const catalog = document.getElementById('catalog');
       catalog.innerHTML = matches.map(table => `
         <button type="button" class="table-card" data-table="${table.name}">
           <strong>${escapeHtml(table.name)}</strong>
           <p>${escapeHtml(table.purpose)}</p>
-          <footer><span>${table.type === 'view' ? '视图' : '表'}</span><span>${tableCountLabel(table, true)}</span></footer>
+          <footer><span>${table.type === 'view' ? '视图' : '表'} · 查看 SQL →</span><span>${tableCountLabel(table, true)}</span></footer>
         </button>`).join('') || '<p>没有匹配的表。</p>';
       catalog.querySelectorAll('[data-table]').forEach(button => button.addEventListener('click', () => {
-        activateView('schema');
-        showDetail(button.dataset.table);
-        document.getElementById('detail').scrollIntoView({behavior: 'smooth', block: 'center'});
+        const table = byName[button.dataset.table];
+        const dialog = document.getElementById('catalog-dialog');
+        dialog.dataset.table = table.name;
+        document.getElementById('catalog-dialog-title').textContent = table.name;
+        document.getElementById('catalog-dialog-purpose').textContent = `${tableCountLabel(table, true)} · ${table.purpose}`;
+        document.getElementById('catalog-dialog-sql').textContent = table.sql;
+        document.getElementById('copy-catalog-sql').textContent = '复制 SQL';
+        if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
       }));
     }
 
@@ -1860,6 +2054,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       document.querySelectorAll('.view').forEach(panel => panel.hidden = panel.id !== `${view}-view`);
       document.querySelectorAll('.tab').forEach(tab => tab.setAttribute('aria-selected', tab.dataset.view === view ? 'true' : 'false'));
       document.getElementById('search').hidden = view !== 'catalog';
+      document.getElementById('active-view-title').textContent = document.querySelector(`[data-view="${view}"]`)?.textContent || '运营总览';
       if (view === 'overview') renderTrendChart(document.querySelector('[data-trend-mode][aria-pressed="true"]')?.dataset.trendMode || 'traffic');
       if (view === 'locations' && !locationMapRendered) renderLocationMap(currentLocationMetric);
     }
@@ -1872,13 +2067,36 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       renderTrendChart(button.dataset.trendMode);
     }));
     document.getElementById('search').addEventListener('input', event => renderCatalog(event.target.value));
+    for (const type of ['pointermove', 'pointerdown', 'pointerleave', 'focus', 'blur', 'keydown']) {
+      document.getElementById('trend-chart').addEventListener(type, event => trendInteraction[type]?.(event));
+    }
+    document.getElementById('trend-range').addEventListener('change', () =>
+      renderTrendChart(document.querySelector('[data-trend-mode][aria-pressed="true"]')?.dataset.trendMode || 'traffic'));
+    for (const id of ['catalog-group', 'catalog-sort']) document.getElementById(id).addEventListener('change', () => renderCatalog());
+    document.getElementById('export-catalog').addEventListener('click', () => downloadCsv('ELMA-table-catalog.csv',
+      [['表名', '类型', '模块', '行数', '用途'], ...filteredTables().map(table => [table.name, table.type, table.group, table.available ? table.rows : '', table.purpose])]));
+    function closeCatalog() {
+      const dialog = document.getElementById('catalog-dialog');
+      if (dialog.close) dialog.close(); else dialog.removeAttribute('open');
+    }
+    document.getElementById('close-catalog-dialog').onclick = closeCatalog;
+    document.getElementById('catalog-relations').onclick = () => {
+      const name = document.getElementById('catalog-dialog').dataset.table;
+      closeCatalog(); activateView('schema'); showDetail(name);
+    };
+    document.getElementById('copy-catalog-sql').onclick = async event => {
+      const button = event.currentTarget;
+      try { await navigator.clipboard.writeText(document.getElementById('catalog-dialog-sql').textContent); button.textContent = '已复制'; }
+      catch { button.textContent = '请选中查询语句手动复制'; }
+    };
     document.getElementById('copy-table-sql').addEventListener('click', async event => {
+      const button = event.currentTarget;
       try {
         await navigator.clipboard.writeText(document.getElementById('table-sql').textContent);
-        event.currentTarget.textContent = '已复制';
-        event.currentTarget.classList.add('done');
+        button.textContent = '已复制';
+        button.classList.add('done');
       } catch {
-        event.currentTarget.textContent = '请手动复制';
+        button.textContent = '请手动复制';
       }
     });
 

@@ -50,6 +50,83 @@ async function openDashboard(snapshot: unknown = fixture) {
 }
 
 describe('offline database dashboard', () => {
+  it('draws the entire line and shows exact values on hover and keyboard navigation', async () => {
+    const { dom, errors } = await openDashboard()
+    const { document, MouseEvent, KeyboardEvent } = dom.window
+    const chart = document.querySelector<SVGElement>('#trend-chart')!
+    Object.defineProperty(chart, 'getBoundingClientRect', { value: () => ({left: 0, top: 0, width: 760, height: 270}) })
+    Object.defineProperty(document.getElementById('trend-stage'), 'getBoundingClientRect', { value: () => ({left: 0, top: 0, width: 760, height: 270}) })
+    expect(chart.querySelector('.trend-line')?.hasAttribute('pathLength')).toBe(false)
+    expect(template.match(/\.trend-line\s*\{([^}]+)\}/)?.[1]).not.toMatch(/stroke-dash|animation/)
+    chart.dispatchEvent(new MouseEvent('pointermove', {clientX: 742, clientY: 120}))
+    const tooltip = document.getElementById('trend-tooltip')!
+    expect(tooltip.hidden).toBe(false)
+    expect(tooltip.textContent).toContain('2026-09-03')
+    expect(tooltip.querySelector('b')?.textContent).toBe('3')
+    chart.dispatchEvent(new KeyboardEvent('keydown', {key: 'Home'}))
+    expect(tooltip.textContent).toContain('2026-08-28')
+    expect(tooltip.querySelector('b')?.textContent).toBe('0')
+    document.querySelector<HTMLButtonElement>('[data-trend-mode="users"]')!.click()
+    chart.dispatchEvent(new KeyboardEvent('keydown', {key: 'End'}))
+    expect(tooltip.querySelectorAll('.tooltip-row')).toHaveLength(2)
+    expect([...tooltip.querySelectorAll('b')].map(node => node.textContent)).toEqual(['3', '0'])
+    chart.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))
+    expect(tooltip.hidden).toBe(true)
+    expect(errors).toEqual([])
+    dom.window.close()
+  })
+
+  it('filters the trend and exports precisely the visible dates as CSV', async () => {
+    const snapshot = structuredClone(fixture)
+    snapshot.daily = Array.from({length: 14}, (_, i) => ({...fixture.daily[0], metricDate: `2026-08-${String(i + 1).padStart(2, '0')}`, recommendations: i}))
+    const { dom, errors } = await openHtml(withSnapshot(snapshot))
+    const { document } = dom.window
+    const range = document.querySelector<HTMLSelectElement>('#trend-range')!
+    range.value = '7'; range.dispatchEvent(new dom.window.Event('change'))
+    expect(document.querySelectorAll('#trend-data tbody tr')).toHaveLength(7)
+    expect(document.querySelector('#trend-data tbody tr')?.textContent).toContain('2026-08-08')
+    let exported: Blob | undefined
+    Object.defineProperty(dom.window.URL, 'createObjectURL', {value: (blob: Blob) => { exported = blob; return 'blob:test' }})
+    Object.defineProperty(dom.window.URL, 'revokeObjectURL', {value: () => {}})
+    dom.window.HTMLAnchorElement.prototype.click = () => {}
+    document.getElementById('export-trend')!.click()
+    const csv = await new Promise<string>(resolveCsv => {
+      const reader = new dom.window.FileReader()
+      reader.onload = () => resolveCsv(String(reader.result))
+      reader.readAsText(exported!)
+    })
+    expect(csv).toContain('2026-08-08')
+    expect(csv).not.toContain('2026-08-07')
+    expect(csv.trim().split('\r\n')).toHaveLength(8)
+    expect(errors).toEqual([])
+    dom.window.close()
+  })
+
+  it('resolves both table key formats, preserves zero counts, and opens the selected SQL', async () => {
+    const snapshot = structuredClone(fixture)
+    snapshot.meta.sourceMode = 'database'
+    snapshot.tableRows = {recommendation_log: 42, userFeedback: 0, restaurant: 12}
+    const { dom, errors } = await openHtml(withSnapshot(snapshot))
+    const { document } = dom.window
+    expect(document.querySelector('[data-table="recommendation_log"]')?.textContent).toContain('42 行')
+    expect(document.querySelector('[data-table="user_feedback"]')?.textContent).toContain('0 行')
+    expect(document.querySelector('[data-table="risk_result"]')?.textContent).toContain('快照未包含行数')
+    expect(document.body.textContent).not.toContain('当前库不可用')
+    const sort = document.querySelector<HTMLSelectElement>('#catalog-sort')!
+    sort.value = 'rows-desc'; sort.dispatchEvent(new dom.window.Event('change'))
+    expect(document.querySelector('#catalog [data-table]')?.getAttribute('data-table')).toBe('recommendation_log')
+    document.querySelector<HTMLButtonElement>('#catalog [data-table="user_feedback"]')!.click()
+    expect(document.getElementById('catalog-dialog')?.hasAttribute('open')).toBe(true)
+    expect(document.getElementById('catalog-dialog-sql')?.textContent).toContain('FROM user_feedback')
+    document.getElementById('close-catalog-dialog')!.click()
+    const group = document.querySelector<HTMLSelectElement>('#catalog-group')!
+    group.value = 'ops'; group.dispatchEvent(new dom.window.Event('change'))
+    expect(document.querySelector('#catalog [data-table="baidu_enrichment_task"]')).not.toBeNull()
+    expect(document.querySelector('#catalog [data-table="recommendation_log"]')).toBeNull()
+    expect(errors).toEqual([])
+    dom.window.close()
+  })
+
   it('remains a self-contained file and preserves all database guide modules', () => {
     expect(template).toContain('connect-src \'none\'')
     expect(template).not.toMatch(/<script\b[^>]*\bsrc\s*=/i)

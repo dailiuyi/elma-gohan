@@ -10,7 +10,7 @@
 
 合页只做一件事：用顶栏在「产品演示」和「运营数据」之间切换。两边的 CSS、正文和脚本都从上面的源页原样拼进来，再用选择器前缀隔开，避免样式互相覆盖。
 
-不要大修源页风格和正文。用户已经审过并表示喜欢。不要再用 `output/elma-merged-demo*.jpg` 或旧的压缩看板稿当设计依据，那是 skill 测试稿。
+运营源页已按用户要求改为侧栏工作台，默认进入运营数据。后续视觉调整以当前源页和用户反馈为准。不要再用 `output/elma-merged-demo*.jpg` 或旧的压缩看板稿当设计依据，那是 skill 测试稿。
 
 ## 不要做的事
 
@@ -22,6 +22,10 @@
 - 不要为了合页去改博客根目录 `/var/www/blog`，也不要改 API 的 `/api/v1/`。
 
 ## 本地怎么用
+
+运营工作台支持趋势悬浮数值、键盘左右选择日期、最近 7/14 天筛选、每日明细与 CSV 导出。日期筛选只作用于趋势和明细，其他总览数字仍采用整个快照窗口。表目录支持关键词和分组筛选、名称/行数排序、目录 CSV 导出；点击表可查看并复制只读查询语句，再跳转字段关系说明。
+
+这些功能使用页面内嵌的聚合快照，不提供数据库记录编辑或在线 SQL 执行。表行数为零时显示 `0 行`；旧快照没有对应统计时显示 `快照未包含行数`。生成器保留真实表名，并兼容早期快照里的驼峰键名，避免把序列化差异误报为数据库不可用。
 
 源页改完后，在仓库根目录组装：
 
@@ -145,3 +149,13 @@ curl.exe -sI -u elma:密码 https://elma-gohan.xyz/console/
 - 只改发布路径或认证方式：改 `deploy/nginx/elma-console.conf`、`install-remote.sh`、`deploy.ps1`。
 
 合页不是第二套产品文案源。源页和合页出现差异时，以两份源页为准，重新组装。
+
+## 证据链路 v0.4 发布
+
+`/console/app/` 是沿用现有认证的 H5 验收入口，通过同源 `/console/api/v1/` 代理访问后端。首页明确显示长沙商圈固定位置，点击后才调用真实接口。普通小程序不设置验收开关。
+
+H5 构建设置 `VITE_APP_BASE=/console/app/`、`VITE_API_BASE_URL=/console/api/v1`、`VITE_ACCEPTANCE_MODE=true`。小程序构建移除前后两个变量，API 使用既有 API 域名。
+
+联合发布入口为 `release-remote.sh /opt/elma-gohan/incoming/evidence-<release-id>`。上传目录须含 `app.jar`、来自 `deploy/nginx/elma-console.conf` 的 `snippet.conf`、`console/index.html` 及 `console/app/` H5 文件。脚本备份数据库、旧包和站点，检查 Nginx 后重启应用；健康失败恢复旧包和站点，V10 增量表不自动回滚。备份位于非公开的 `/opt/elma-gohan/backups/`。
+
+运营页新增队列、重试、有效查询缓存和冷却状态快照。升级 V10 后重新运行原只读生成器并组装；无 V10 时显示等待快照。队列数量不能证明匹配正确率达标。

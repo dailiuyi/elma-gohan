@@ -27,6 +27,7 @@ CAPABILITIES = QuerySpec(
       to_regclass('public.external_entity_mapping') IS NOT NULL AS has_external_mapping,
       to_regclass('public.restaurant_deep_evidence') IS NOT NULL AS has_deep_evidence,
       to_regclass('public.restaurant_deep_analysis') IS NOT NULL AS has_deep_analysis,
+      to_regclass('public.baidu_enrichment_task') IS NOT NULL AS has_baidu_enrichment,
       to_regclass('public.recommendation_decision_snapshot') IS NOT NULL AS has_shadow_snapshot,
       to_regclass('public.flyway_schema_history') IS NOT NULL AS has_flyway_history,
       to_regclass('public.v_recommendation_metrics') IS NOT NULL AS has_recommendation_metrics_view,
@@ -755,7 +756,31 @@ TABLE_COUNTS_V9 = QuerySpec(
 )
 
 
+EVIDENCE_RELIABILITY = QuerySpec(
+    "evidence_reliability",
+    """
+    SELECT
+      (SELECT count(*) FROM baidu_enrichment_task WHERE expires_at > now()) AS queued_tasks,
+      (SELECT count(*) FROM baidu_enrichment_task WHERE attempts > 0 AND expires_at > now()) AS retrying_tasks,
+      (SELECT count(*) FROM baidu_query_cache WHERE expires_at > now()) AS fresh_queries,
+      (SELECT blocked_until > now() FROM baidu_call_state WHERE id = 1) AS cooling_down
+    """,
+    1,
+)
+
+TABLE_COUNTS_V10 = QuerySpec(
+    "table_counts_v10",
+    """
+    SELECT 'baidu_enrichment_task' AS table_name, count(*) AS row_count FROM baidu_enrichment_task
+    UNION ALL SELECT 'baidu_query_cache', count(*) FROM baidu_query_cache
+    UNION ALL SELECT 'baidu_call_state', count(*) FROM baidu_call_state
+    """,
+    3,
+)
+
 ALL_QUERY_SPECS = (
+    EVIDENCE_RELIABILITY,
+    TABLE_COUNTS_V10,
     CAPABILITIES,
     CONNECTION_META,
     FLYWAY_VERSION,

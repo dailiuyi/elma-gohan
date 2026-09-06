@@ -236,7 +236,7 @@ SWITCHER_SCRIPT = """
       const opsPane = document.getElementById('elma-ops');
 
       function paneFromHash() {
-        return location.hash === '#ops' ? 'ops' : 'product';
+        return location.hash && location.hash !== '#' && productHashes.has(location.hash) ? 'product' : 'ops';
       }
 
       function show(pane) {
@@ -257,7 +257,7 @@ SWITCHER_SCRIPT = """
         button.addEventListener('click', () => {
           const pane = button.dataset.pane;
           if (pane === 'ops') location.hash = 'ops';
-          else if (!productHashes.has(location.hash) || location.hash === '#ops') location.hash = 'product';
+          else location.hash = 'product';
           show(pane);
         });
       });
@@ -287,7 +287,7 @@ def build(ops_path: Path) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>ELMA · 产品演示与运营数据</title>
+  <title>ELMA · 运营工作台</title>
   <style>
 {SWITCHER_CSS}
 {scope_css(product_css, "elma-product")}
@@ -295,17 +295,17 @@ def build(ops_path: Path) -> str:
     #elma-product .topbar {{ top: 42px; }}
   </style>
 </head>
-<body data-elma-pane="product">
+<body data-elma-pane="ops">
   <div class="elma-switch" role="tablist" aria-label="页面切换">
     <div class="elma-switch-group">
-      <button type="button" role="tab" data-pane="product" aria-controls="elma-product" aria-selected="true">产品演示</button>
-      <button type="button" role="tab" data-pane="ops" aria-controls="elma-ops" aria-selected="false">运营数据</button>
+      <button type="button" role="tab" data-pane="ops" aria-controls="elma-ops" aria-selected="true">运营数据</button>
+      <button type="button" role="tab" data-pane="product" aria-controls="elma-product" aria-selected="false">产品演示</button>
     </div>
   </div>
-  <div id="elma-product" class="elma-pane" role="tabpanel">
+  <div id="elma-product" class="elma-pane" role="tabpanel" hidden>
 {product_body}
   </div>
-  <div id="elma-ops" class="elma-pane" role="tabpanel" hidden>
+  <div id="elma-ops" class="elma-pane" role="tabpanel">
 {ops_body}
   </div>
   <script>

@@ -47,6 +47,14 @@ async function openDemo(url = 'file:///elma-merged-console.html') {
   return { dom, errors }
 }
 
+it('opens the operations workspace by default', async () => {
+  const { dom, errors } = await openDemo()
+  expect(dom.window.document.body.dataset.elmaPane).toBe('ops')
+  expect(dom.window.document.querySelector('#elma-ops .admin-sidebar')).not.toBeNull()
+  expect(errors).toEqual([])
+  dom.window.close()
+})
+
 describe('merged product demo and ops dashboard', () => {
   it('keeps both reviewed pages as scoped panes in one offline file', () => {
     expect(template).toContain("connect-src 'none'")
@@ -67,7 +75,7 @@ describe('merged product demo and ops dashboard', () => {
   })
 
   it('switches panes without dropping product or dashboard interactions', async () => {
-    const { dom, errors } = await openDemo()
+    const { dom, errors } = await openDemo('file:///elma-merged-console.html#product')
     const { document } = dom.window
 
     expect(document.getElementById('elma-product')?.hidden).toBe(false)

@@ -143,6 +143,14 @@ class RendererTest(unittest.TestCase):
         self.assertEqual(decoded["categories"][0]["label"], payload_text)
         self.assertEqual(decoded["meta"]["warnings"][0], payload_text)
 
+    def test_table_identifiers_keep_underscores_in_rendered_snapshot(self):
+        self.snapshot["tableRows"] = {"recommendation_log": 42, "user_feedback": 0}
+        rendered = generator.render_dashboard_html(self.template, self.snapshot)
+        parser = DataIslandParser()
+        parser.feed(rendered)
+        self.assertEqual(json.loads("".join(parser.parts))["tableRows"],
+                         {"recommendation_log": 42, "user_feedback": 0})
+
     def test_full_uuid_and_secret_fields_are_rejected(self):
         uuid_payload = deepcopy(self.snapshot)
         uuid_payload["meta"]["warning"] = "123e4567-e89b-42d3-a456-426614174000"
@@ -283,6 +291,15 @@ class CollectorTest(unittest.TestCase):
         self.assertTrue(any("V6" in warning for warning in snapshot["meta"]["warnings"]))
         self.assertNotIn("behavior_distribution", runner.calls)
         self.assertNotIn("shadow_summary", runner.calls)
+        self.assertEqual(snapshot["evidenceReliability"], {})
+        results["capabilities"][0]["has_baidu_enrichment"] = True
+        results["table_counts_v10"] = [{"table_name": "baidu_enrichment_task", "row_count": 7}]
+        results["evidence_reliability"] = [{"queued_tasks": 7, "retrying_tasks": 2,
+                                             "fresh_queries": 4, "cooling_down": True}]
+        upgraded = generator.collect_snapshot(FakeRunner(results), generator.DashboardConfig(days=1))
+        self.assertEqual(upgraded["evidenceReliability"]["queuedTasks"], 7)
+        self.assertTrue(upgraded["evidenceReliability"]["coolingDown"])
+        self.assertEqual(upgraded["tableRows"]["baidu_enrichment_task"], 7)
 
     def test_query_runner_rejects_oversized_result(self):
         class Cursor:

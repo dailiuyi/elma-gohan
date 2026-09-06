@@ -43,6 +43,8 @@ from dashboard_queries import (
     TABLE_COUNTS_V4,
     TABLE_COUNTS_V6,
     TABLE_COUNTS_V9,
+    TABLE_COUNTS_V10,
+    EVIDENCE_RELIABILITY,
     QuerySpec,
     validate_read_only_query,
     validate_registry,
@@ -96,7 +98,11 @@ def _camel_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 def _safe_json_dumps(payload: Mapping[str, Any]) -> str:
-    raw = json.dumps(_json_value(payload), ensure_ascii=False, separators=(",", ":"))
+    normalized = _json_value(payload)
+    # Table identifiers are dictionary keys, not DTO field names.
+    if isinstance(payload.get("tableRows"), Mapping):
+        normalized["tableRows"] = {str(key): _json_value(value) for key, value in payload["tableRows"].items()}
+    raw = json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
     return (
         raw.replace("&", "\\u0026")
         .replace("<", "\\u003c")
@@ -207,6 +213,8 @@ def _table_counts(runner: Any, caps: Mapping[str, Any]) -> tuple[dict[str, int],
         specs.append(TABLE_COUNTS_V6)
     if _capability(caps, "has_shadow_snapshot"):
         specs.append(TABLE_COUNTS_V9)
+    if _capability(caps, "has_baidu_enrichment"):
+        specs.append(TABLE_COUNTS_V10)
     if _capability(caps, "has_flyway_history"):
         # Flyway's own row count is already the installed migration count.
         specs.append(FLYWAY_VERSION)
@@ -399,6 +407,8 @@ def collect_snapshot(runner: Any, config: DashboardConfig) -> dict[str, Any]:
         }
 
     snapshot_at = meta.get("snapshot_at")
+    evidence_reliability = (_camel_row(runner.run(EVIDENCE_RELIABILITY)[0])
+                            if _capability(caps, "has_baidu_enrichment") else {})
     period_start = daily[0].get("metric_date") if daily else None
     period_end = daily[-1].get("metric_date") if daily else None
     query_count = getattr(runner, "query_count", None)
@@ -424,6 +434,7 @@ def collect_snapshot(runner: Any, config: DashboardConfig) -> dict[str, Any]:
             "warnings": warnings,
         },
         "overview": _camel_row(overview),
+        "evidenceReliability": evidence_reliability,
         "funnel": _camel_row(funnel),
         "daily": [_camel_row(row) for row in daily],
         "behaviors": [_camel_row(row) for row in behaviors],

@@ -261,7 +261,7 @@
     <div class="hero">
       <div class="hero-copy">
         <div class="eyebrow">
-          <span class="chip">v0.4.1 当前线上版本</span>
+          <span class="chip">推荐 v0.4.1 · 证据链路 v0.4</span>
           <span class="chip shadow">v0.5 当前 Shadow 版本</span>
         </div>
         <h1>一次只推荐一家餐厅，<em>并说明推荐依据。</em></h1>
@@ -269,6 +269,7 @@
         <div class="hero-actions">
           <a class="button primary" href="#pipeline">查看推荐流程</a>
           <a class="button secondary" href="#evidence">查看运行数据</a>
+          <a class="button secondary" href="/console/app/">进入真实应用验收</a>
         </div>
       </div>
 
@@ -294,8 +295,20 @@
       </aside>
     </div>
 
-    <div class="metric-strip" aria-label="当前项目概览">
-      <article><strong>515</strong><span>当前生产快照中的餐厅 POI</span></article>
+    <section id="evidence-release">
+      <div class="section-head">
+        <div><span class="section-index">Evidence v0.4 / 2026-09-06</span><h2>先给出推荐，再补全证据</h2></div>
+        <p>本次验收覆盖百度补数、分店匹配和深挖消费参考。可从上方入口体验真实应用；下方推荐卡仍为演示数据。</p>
+      </div>
+      <div class="evidence-grid">
+        <article class="evidence-card"><span class="metric-type">百度 POI</span><strong>2 次 / 2 秒</strong><h3>实时补数有预算</h3><p>优先复用缓存，剩余补数进入持久队列。所有实例共享调用出口，至少间隔 400ms、最多一个在途请求；限流冷却、日配额耗尽暂停。后台完成供后续推荐使用，换一家保留原快照。</p></article>
+        <article class="evidence-card"><span class="metric-type">同店确认</span><strong>80% / 98%</strong><h3>验收目标，尚未实测达标</h3><p>分别对应正确匹配覆盖率与自动匹配正确率。保留品牌、分店、商场、楼层和门牌差异，一对一分配允许第二候选，无法确认时保留未匹配。等待至少 300 家人工标注样本验证。</p></article>
+        <article class="evidence-card"><span class="metric-type">深挖一下</span><strong>出处 + 时间</strong><h3>优先展示具体消费参考</h3><p>沿用线上百度 AI 搜索，扩大不限时间的店名与商圈召回；摘要标为公开线索。没有同店内容时可复制搜索词，失败与空结果分开显示。三平台总预算 4 秒，不保证完整正文。</p></article>
+      </div>
+    </section>
+    <p>以下为历史基线快照；本次部署后的聚合数据请切换到「运营数据」，以该页快照时间为准。</p>
+    <div class="metric-strip" aria-label="历史项目概览">
+      <article><strong>515</strong><span>历史生产快照中的餐厅 POI</span></article>
       <article><strong>298</strong><span>最近 30 天推荐会话，包含调试流量</span></article>
       <article><strong>90</strong><span>已经保存的 SafeRegret Shadow 快照</span></article>
       <article><strong>0</strong><span>当前 Shadow 样本中的无可选候选</span></article>
