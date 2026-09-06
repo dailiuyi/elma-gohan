@@ -14,6 +14,11 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "external_entity_mapping")
 public class ExternalEntityMappingEntity {
 
+    @Column(name = "match_algorithm_version", length = 64)
+    private String matchAlgorithmVersion;
+    public String getMatchAlgorithmVersion() { return matchAlgorithmVersion; }
+    public void setMatchAlgorithmVersion(String version) { matchAlgorithmVersion = version; }
+
     @Id
     private UUID id;
     @Column(name = "primary_source", length = 16, nullable = false)

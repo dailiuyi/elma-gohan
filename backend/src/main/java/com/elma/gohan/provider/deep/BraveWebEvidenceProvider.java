@@ -25,7 +25,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
-/** 只消费 Brave Search 正式 API 的索引结果，不访问结果网页。 */
+/** 消费正式搜索 API 的索引结果；兼容生产百度 AI 搜索和 Brave，不访问结果网页。 */
 @Component
 public class BraveWebEvidenceProvider implements DeepEvidenceProvider {
 
@@ -45,52 +45,72 @@ public class BraveWebEvidenceProvider implements DeepEvidenceProvider {
         restClient = RestClient.builder().baseUrl(properties.getBaseUrl())
                 .requestFactory(factory).build();
         if (properties.isEnabled() && properties.getApiKey().isBlank()) {
-            log.warn("BRAVE_SEARCH_API_KEY 未配置，按需深挖将降级为 UNAVAILABLE");
+            log.warn("Deep search API key missing; deep evidence is UNAVAILABLE");
         }
     }
 
     @Override
     public DeepEvidenceBatch fetch(DeepEvidenceSource source, Restaurant restaurant) {
+        return fetch(source, restaurant, System.nanoTime() + properties.getOverallTimeoutMs() * 1_000_000L);
+    }
+
+    @Override
+    public DeepEvidenceBatch fetch(DeepEvidenceSource source, Restaurant restaurant, long deadlineNanos) {
         Instant now = Instant.now();
-        if (!properties.isEnabled() || properties.getApiKey().isBlank()) {
-            return DeepEvidenceBatch.unavailable(source, now);
-        }
-        long started = System.nanoTime();
-        try {
-            SearchAttempt recent = search(source, restaurant, now, true, "RECENT_31_DAYS");
-            List<WebEvidenceItem> items = recent.items();
-            if (items.isEmpty()) {
-                try {
-                    SearchAttempt allTime = search(source, restaurant, now, false, "ALL_TIME_FALLBACK");
-                    items = allTime.items();
-                } catch (RestClientException fallbackException) {
-                    log.warn("Brave 深挖回退失败 source={} durationMs={} errorType={}", source,
-                            elapsedMillis(started), fallbackException.getClass().getSimpleName());
-                }
+        if (!properties.isEnabled() || properties.getApiKey().isBlank()) return DeepEvidenceBatch.unavailable(source, now);
+        boolean failed = false;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            if (System.nanoTime() >= deadlineNanos || Thread.currentThread().isInterrupted()) {
+                failed = true;
+                break;
             }
-            EvidenceStatus status = items.isEmpty()
-                    ? EvidenceStatus.NO_DATA : EvidenceStatus.AVAILABLE;
-            log.info("Brave 深挖完成 source={} status={} matchedResultCount={} durationMs={}",
-                    source, status, items.size(), elapsedMillis(started));
-            return new DeepEvidenceBatch(source, status, items, now);
-        } catch (RestClientResponseException exception) {
-            log.warn("Brave 深挖失败 source={} httpStatus={} validationField={} durationMs={}",
-                    source, exception.getStatusCode().value(),
-                    validationField(exception.getResponseBodyAsString()), elapsedMillis(started));
-            return DeepEvidenceBatch.unavailable(source, now);
-        } catch (RestClientException exception) {
-            log.warn("Brave 深挖失败 source={} durationMs={} errorType={}", source,
-                    elapsedMillis(started), exception.getClass().getSimpleName());
-            return DeepEvidenceBatch.unavailable(source, now);
+            try {
+                var found = search(source, restaurant, now, attempt == 0,
+                        attempt == 0 ? "EXACT_LOCATION" : "BRAND_LOCATION", deadlineNanos);
+                if (!found.items().isEmpty()) return new DeepEvidenceBatch(source, EvidenceStatus.AVAILABLE, found.items(), now);
+            } catch (RestClientException e) {
+                failed = true;
+                log.warn("Deep search attempt failed source={} attempt={} errorType={}", source, attempt, e.getClass().getSimpleName());
+            }
         }
+        return new DeepEvidenceBatch(source, failed ? EvidenceStatus.UNAVAILABLE : EvidenceStatus.NO_DATA, List.of(), now);
     }
 
     private SearchAttempt search(DeepEvidenceSource source, Restaurant restaurant,
-                                 Instant fetchedAt, boolean recentOnly, String phase) {
+                                 Instant fetchedAt, boolean recentOnly, String phase, long deadlineNanos) {
         long started = System.nanoTime();
-        JsonNode body = restClient.get().uri(uriBuilder -> {
+        long remaining = (deadlineNanos - System.nanoTime()) / 1_000_000;
+        if (remaining <= 0) throw new RestClientException("Deep evidence deadline exceeded");
+        var factory = new org.springframework.http.client.JdkClientHttpRequestFactory(
+                java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofMillis(Math.max(1,
+                        Math.min(remaining, properties.getConnectTimeoutMs())))).build());
+        factory.setReadTimeout(Duration.ofMillis(Math.max(1, Math.min(remaining, properties.getReadTimeoutMs()))));
+        JsonNode body;
+        if (properties.isBaiduAiSearchEnabled()) {
+            String domain = source.siteQuery().replace("site:", "").split("/")[0].trim();
+            var resources = new java.util.ArrayList<Map<String, Object>>();
+            int count = Math.min(20, Math.max(1, properties.getResultCount()));
+            resources.add(Map.of("type", "web", "top_k", count));
+            if (source == DeepEvidenceSource.BILIBILI) resources.add(Map.of("type", "video", "top_k", count));
+            Map<String, Object> request = new LinkedHashMap<>();
+            request.put("messages", List.of(Map.of("role", "user", "content",
+                    buildQuery(source, restaurant, !recentOnly).replace(source.siteQuery(), "").trim())));
+            request.put("search_source", "baidu_search_v2");
+            request.put("edition", "turbo");
+            request.put("resource_type_filter", resources);
+            request.put("search_filter", Map.of("match", Map.of("site", List.of(domain))));
+            if (recentOnly && !properties.isImprovedSearchEnabled()) request.put("search_recency_filter", "month");
+            body = restClient.mutate().baseUrl(properties.getBaiduAiBaseUrl()).requestFactory(factory).build()
+                    .post().uri("/v2/ai_search/web_search").contentType(MediaType.APPLICATION_JSON)
+                    .header("Authorization", "Bearer " + properties.getApiKey())
+                    .header("X-Appbuilder-Authorization", "Bearer " + properties.getApiKey())
+                    .body(request).retrieve().body(JsonNode.class);
+            if (body != null && body.has("code") && !"0".equals(body.path("code").asText()))
+                throw new RestClientException("Baidu AI search business failure");
+        } else {
+        body = restClient.mutate().requestFactory(factory).build().get().uri(uriBuilder -> {
                     var builder = uriBuilder.path("/res/v1/web/search")
-                            .queryParam("q", buildQuery(source, restaurant))
+                            .queryParam("q", buildQuery(source, restaurant, !recentOnly))
                             .queryParam("count", Math.min(20, Math.max(1, properties.getResultCount())))
                             .queryParam("offset", 0)
                             .queryParam("country", "CN")
@@ -98,17 +118,20 @@ public class BraveWebEvidenceProvider implements DeepEvidenceProvider {
                             .queryParam("ui_lang", "zh-CN")
                             .queryParam("safesearch", "moderate")
                             .queryParam("spellcheck", false)
-                            .queryParam("extra_snippets", false);
-                    if (recentOnly) builder.queryParam("freshness", "pm");
+                            .queryParam("extra_snippets", properties.isImprovedSearchEnabled());
+                    if (recentOnly && !properties.isImprovedSearchEnabled()) builder.queryParam("freshness", "pm");
                     return builder.build();
                 })
                 .accept(MediaType.APPLICATION_JSON)
                 .header("X-Subscription-Token", properties.getApiKey())
                 .retrieve().body(JsonNode.class);
-        JsonNode results = body == null ? null : body.path("web").path("results");
+        }
+        JsonNode results = body == null ? null : properties.isBaiduAiSearchEnabled()
+                ? body.path("references") : body.path("web").path("results");
+        if (results == null || !results.isArray()) throw new RestClientException("Invalid search response");
         int rawResultCount = results != null && results.isArray() ? results.size() : 0;
         List<WebEvidenceItem> items = map(source, restaurant, results, fetchedAt);
-        log.info("Brave 深挖检索 source={} phase={} rawResultCount={} matchedResultCount={} durationMs={}",
+        log.info("Deep search source={} phase={} rawResultCount={} matchedResultCount={} durationMs={}",
                 source, phase, rawResultCount, items.size(), elapsedMillis(started));
         return new SearchAttempt(items);
     }
@@ -126,10 +149,13 @@ public class BraveWebEvidenceProvider implements DeepEvidenceProvider {
         }
     }
 
-    private String buildQuery(DeepEvidenceSource source, Restaurant restaurant) {
+    private String buildQuery(DeepEvidenceSource source, Restaurant restaurant, boolean fallback) {
         String safeName = restaurant.name().replace('"', ' ').trim();
         String location = matcher.searchLocationKeyword(restaurant.name(), restaurant.address());
-        return (source.siteQuery() + " \"" + safeName + "\" " + location).trim();
+        if (!properties.isImprovedSearchEnabled())
+            return (source.siteQuery() + " \"" + safeName + "\" " + location).trim();
+        String term = fallback ? com.elma.gohan.provider.evidence.EntityResolver.brandName(safeName) : safeName;
+        return (source.siteQuery() + " " + term + " " + properties.getCity() + " " + location).trim();
     }
 
     private record SearchAttempt(List<WebEvidenceItem> items) { }
@@ -142,6 +168,17 @@ public class BraveWebEvidenceProvider implements DeepEvidenceProvider {
             String title = truncate(text(result, "title"), 200);
             String rawUrl = text(result, "url");
             String snippet = truncate(text(result, "description"), 500);
+            if (properties.isBaiduAiSearchEnabled() && text(result, "content") != null)
+                snippet = truncate(text(result, "content"), 2500);
+            if (properties.isImprovedSearchEnabled() && result.path("extra_snippets").isArray()) {
+                StringBuilder context = new StringBuilder(snippet == null ? "" : snippet);
+                int count = 0;
+                for (JsonNode extra : result.path("extra_snippets")) {
+                    if (++count > 5) break;
+                    context.append(" ").append(truncate(extra.asText(""), 500));
+                }
+                snippet = context.toString();
+            }
             String url = canonicalUrl(source, rawUrl);
             if (title == null || url == null) continue;
             double matchConfidence = matcher.match(restaurant, title, snippet);

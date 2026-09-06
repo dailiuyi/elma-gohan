@@ -8,13 +8,22 @@ public record PlatformSearchResult(
         List<PlatformEvidence> evidence,
         Integer total,
         int pageNumber,
-        int pageSize
+        int pageSize,
+        String failureReason
 ) {
     public PlatformSearchResult {
         status = status == null ? EvidenceStatus.UNAVAILABLE : status;
         evidence = evidence == null ? List.of() : List.copyOf(evidence);
         pageNumber = Math.max(0, pageNumber);
         pageSize = Math.max(0, pageSize);
+    }
+
+    public PlatformSearchResult(EvidenceStatus status, List<PlatformEvidence> evidence,
+                                Integer total, int pageNumber, int pageSize) {
+        this(status, evidence, total, pageNumber, pageSize, null);
+    }
+    public static PlatformSearchResult unavailable(String reason) {
+        return new PlatformSearchResult(EvidenceStatus.UNAVAILABLE, List.of(), null, 0, 0, reason);
     }
 
     public PlatformSearchResult(EvidenceStatus status, List<PlatformEvidence> evidence) {

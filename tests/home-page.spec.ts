@@ -55,6 +55,21 @@ describe('home page tonight boot', () => {
     recommendationStore.clear()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
+  it('requires an explicit click before using the web acceptance location', async () => {
+    vi.stubEnv('VITE_ACCEPTANCE_MODE', 'true')
+    const locationSpy = vi.spyOn(LocationService, 'getCurrentLocation')
+    const createSpy = vi.spyOn(recommendationApi, 'createRecommendation').mockResolvedValue(response)
+    const wrapper = mount(HomePage)
+    await flushPromises()
+    expect(wrapper.text()).toContain('长沙五一商圈固定位置')
+    expect(createSpy).not.toHaveBeenCalled()
+    await wrapper.find('.go-button').trigger('click')
+    await flushPromises()
+    expect(locationSpy).not.toHaveBeenCalled()
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ latitude: 28.1948, longitude: 112.9768 }))
   })
 
   it('writes tonight automatically with the V0.4 range defaults', async () => {

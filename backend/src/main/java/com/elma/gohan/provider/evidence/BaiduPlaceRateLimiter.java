@@ -26,7 +26,7 @@ public class BaiduPlaceRateLimiter {
     /** 在最大排队时间内取得许可；失败时不占用未来时隙。 */
     public Permit acquire() {
         long started = System.nanoTime();
-        long deadline = started + maxWaitNanos;
+        long deadline = started + Math.min(maxWaitNanos, BaiduCallContext.remainingMillis() * 1_000_000L);
         while (true) {
             long now = System.nanoTime();
             long next = nextPermitNanos.get();

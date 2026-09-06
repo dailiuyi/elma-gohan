@@ -9,6 +9,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class DeepEvidenceProperties {
 
     private boolean enabled;
+    private boolean baiduAiSearchEnabled;
+    private String baiduAiBaseUrl = "https://qianfan.baidubce.com";
+    public boolean isBaiduAiSearchEnabled() { return baiduAiSearchEnabled; }
+    public void setBaiduAiSearchEnabled(boolean value) { baiduAiSearchEnabled = value; }
+    public String getBaiduAiBaseUrl() { return baiduAiBaseUrl; }
+    public void setBaiduAiBaseUrl(String value) { baiduAiBaseUrl = value; }
     private String apiKey = "";
     private String baseUrl = "https://api.search.brave.com";
     private int connectTimeoutMs = 1500;
@@ -20,7 +26,7 @@ public class DeepEvidenceProperties {
     private int analysisCacheHours = 6;
     private int maxLinksPerSource = 3;
     private double entityMatchThreshold = 0.72;
-    private String queryVersion = "brave-query-v0.2";
+    private String queryVersion = "brave-query-v0.3";
     private String analysisAlgorithmVersion = "deep-evidence-v0.1";
     private String riskAlgorithmVersion = "deep-risk-v0.1";
     private List<String> storeSuffixes = new ArrayList<>(List.of(
@@ -33,6 +39,16 @@ public class DeepEvidenceProperties {
             "排队", "等位", "上菜慢", "人多"));
     private List<String> marketingPhrases = new ArrayList<>(List.of(
             "探店", "打卡", "网红", "种草", "必吃", "团购"));
+
+    private boolean improvedSearchEnabled = true;
+    private int emptyCacheMinutes = 30;
+    private String city = "长沙";
+    public boolean isImprovedSearchEnabled() { return improvedSearchEnabled; }
+    public void setImprovedSearchEnabled(boolean value) { improvedSearchEnabled = value; }
+    public int getEmptyCacheMinutes() { return emptyCacheMinutes; }
+    public void setEmptyCacheMinutes(int value) { emptyCacheMinutes = value; }
+    public String getCity() { return city; }
+    public void setCity(String value) { city = value; }
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -58,7 +74,7 @@ public class DeepEvidenceProperties {
     public void setMaxLinksPerSource(int maxLinksPerSource) { this.maxLinksPerSource = maxLinksPerSource; }
     public double getEntityMatchThreshold() { return entityMatchThreshold; }
     public void setEntityMatchThreshold(double entityMatchThreshold) { this.entityMatchThreshold = entityMatchThreshold; }
-    public String getQueryVersion() { return queryVersion; }
+    public String getQueryVersion() { return (baiduAiSearchEnabled ? "baidu-ai-query-v0.3" : queryVersion) + (improvedSearchEnabled ? "-improved" : "-legacy"); }
     public void setQueryVersion(String queryVersion) { this.queryVersion = queryVersion; }
     public String getAnalysisAlgorithmVersion() { return analysisAlgorithmVersion; }
     public void setAnalysisAlgorithmVersion(String analysisAlgorithmVersion) { this.analysisAlgorithmVersion = analysisAlgorithmVersion; }

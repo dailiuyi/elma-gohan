@@ -22,6 +22,14 @@ public class EntityResolutionProperties {
     private int evidenceTtlHours = 6;
     private int v2EvidenceTtlHours = 24;
 
+    private double strictAcceptThreshold = 0.68;
+    public double getStrictAcceptThreshold() { return strictAcceptThreshold; }
+    public void setStrictAcceptThreshold(double value) { strictAcceptThreshold = value; }
+    private boolean strictMatchingEnabled = true;
+    public boolean isStrictMatchingEnabled() { return strictMatchingEnabled; }
+    public void setStrictMatchingEnabled(boolean value) { strictMatchingEnabled = value; }
+    public String getAlgorithmVersion() { return strictMatchingEnabled ? "entity-v0.4" : "entity-v0.3-legacy"; }
+
     public double getNameWeight() { return nameWeight; }
     public void setNameWeight(double value) { nameWeight = value; }
     public double getCoordinateWeight() { return coordinateWeight; }

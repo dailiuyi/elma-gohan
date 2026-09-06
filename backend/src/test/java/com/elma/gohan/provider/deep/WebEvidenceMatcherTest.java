@@ -13,6 +13,14 @@ class WebEvidenceMatcherTest {
             new WebEvidenceMatcher(new DeepEvidenceProperties());
 
     @Test
+    void excludesOtherBranchesAndMallCollections() {
+        var restaurant = TestRestaurants.full("a", "老王湘菜馆(大学城店)", 4.6, 50, 40);
+        assertThat(matcher.match(restaurant, "老王湘菜馆(五一广场店)", "大学城也有，麓山南路")).isZero();
+        assertThat(matcher.match(restaurant, "大学城美食合集：老王湘菜馆", "麓山南路")).isZero();
+        assertThat(matcher.match(restaurant, "老王湘菜馆探店", "好吃")).isZero();
+    }
+
+    @Test
     void exactNormalizedNameMatchesAndUnrelatedRestaurantDoesNot() {
         Restaurant restaurant = TestRestaurants.full("a", "老王湘菜馆（大学城店）",
                 4.6, 500, 42);

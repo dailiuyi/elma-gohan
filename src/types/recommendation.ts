@@ -145,6 +145,8 @@ export interface DeepEvidenceResponse {
   signals: DeepSignalSummary
   consistency: DeepConsistency
   links: DeepEvidenceLink[]
+  consumptionReferences?: ConsumptionReference[]
+  suggestedSearchTerm?: string
   cacheStatus: DeepCacheStatus
   generatedAt: string
   expiresAt: string
@@ -172,4 +174,13 @@ export interface DeepEvidenceLink {
   title: string
   url: string
   publishedAt: string | null
+}
+
+export interface ConsumptionReference {
+  kind: 'PRICE' | 'HOURS' | 'PUBLIC_CLUE'
+  text: string
+  source: DeepEvidenceSource
+  url: string | null
+  publishedAt: string | null
+  observedAt: string | null
 }

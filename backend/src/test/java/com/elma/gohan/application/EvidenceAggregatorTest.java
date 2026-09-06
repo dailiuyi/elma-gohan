@@ -60,7 +60,7 @@ class EvidenceAggregatorTest {
         assertThat(provider.v2Calls).isEqualTo(1);
         assertThat(result.get("a1").entityMatch().status()).isEqualTo(EntityMatchStatus.MATCHED);
         assertThat(result.get("a1").baidu().tasteRating()).isEqualTo(4.0);
-        verify(repository).save(any(ExternalEntityMappingEntity.class));
+        verify(repository).store(any(ExternalEntityMappingEntity.class));
     }
 
     @Test
@@ -109,6 +109,7 @@ class EvidenceAggregatorTest {
         ExternalEntityMappingEntity cached = new ExternalEntityMappingEntity(UUID.randomUUID(),
                 "AMAP", "a1", "BAIDU", LocalDateTime.now(ZoneOffset.UTC).minusHours(1));
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        cached.setMatchAlgorithmVersion(entityProperties.getAlgorithmVersion());
         cached.refresh("b1", "MATCHED", 0.95, "{\"name\":1.0}",
                 objectMapper.writeValueAsString(cachedEvidence), null,
                 now.minusHours(1), null, now.plusDays(20), now.minusHours(1));
@@ -135,6 +136,7 @@ class EvidenceAggregatorTest {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         ExternalEntityMappingEntity cached = new ExternalEntityMappingEntity(UUID.randomUUID(),
                 "AMAP", "a1", "BAIDU", now.minusDays(1));
+        cached.setMatchAlgorithmVersion(entityProperties.getAlgorithmVersion());
         cached.refresh("b1", "MATCHED", 0.95, "{\"name\":1.0}",
                 objectMapper.writeValueAsString(cachedV3),
                 objectMapper.writeValueAsString(cachedV2), now.minusHours(7),
@@ -153,7 +155,7 @@ class EvidenceAggregatorTest {
         assertThat(provider.v3Calls).isEqualTo(1);
         assertThat(provider.v2Calls).isZero();
         assertThat(result.baidu().tasteRating()).isEqualTo(4.0);
-        verify(repository).save(any(ExternalEntityMappingEntity.class));
+        verify(repository).store(any(ExternalEntityMappingEntity.class));
     }
 
     @Test
@@ -268,7 +270,7 @@ class EvidenceAggregatorTest {
         aggregator(provider, repository, baiduProperties).collect(List.of(queried, skipped),
                 new Location(28.2291, 112.9412), 1200, 48);
 
-        verify(repository, times(2)).save(saved.capture());
+        verify(repository, times(2)).store(saved.capture());
         Map<String, ExternalEntityMappingEntity> mappings = saved.getAllValues().stream()
                 .collect(java.util.stream.Collectors.toMap(
                         ExternalEntityMappingEntity::getPrimaryPoiId, value -> value));
@@ -325,7 +327,7 @@ class EvidenceAggregatorTest {
         assertThat(provider.v2Calls).isZero();
         assertThat(result.get("a1").entityMatch().status()).isEqualTo(EntityMatchStatus.MATCHED);
         assertThat(result.get("a2").entityMatch().status()).isEqualTo(EntityMatchStatus.NO_MATCH);
-        verify(repository, times(2)).save(saved.capture());
+        verify(repository, times(2)).store(saved.capture());
         ExternalEntityMappingEntity missedMapping = saved.getAllValues().stream()
                 .filter(value -> "NO_MATCH".equals(value.getMatchStatus()))
                 .findFirst().orElseThrow();
@@ -341,6 +343,8 @@ class EvidenceAggregatorTest {
     private EvidenceAggregator aggregator(PlatformEvidenceProvider provider,
                                            ExternalEntityMappingRepository repository,
                                            BaiduProperties baiduProperties) {
+        // These tests exercise full background recall; foreground budgets are tested separately.
+        baiduProperties.setAsyncEnrichmentEnabled(false);
         return new EvidenceAggregator(restaurant -> RestaurantEvidence.empty(), provider,
                 new AmapEvidenceAdapter(), new EntityResolver(entityProperties),
                 new CrossPlatformConsistencyAnalyzer(new RiskProperties()), repository,

@@ -16,8 +16,12 @@ public record DeepEvidenceResponse(
         List<EvidenceLink> links,
         String cacheStatus,
         String generatedAt,
-        String expiresAt
+        String expiresAt,
+        List<ConsumptionReference> consumptionReferences,
+        String suggestedSearchTerm
 ) {
+    public record ConsumptionReference(String kind, String text, String source, String url,
+                                       String publishedAt, String observedAt) { }
     public record SourceCoverage(String source, String status, Integer resultCount) { }
     public record SignalSummary(List<String> positive, List<String> negative,
                                 List<String> cautions) { }

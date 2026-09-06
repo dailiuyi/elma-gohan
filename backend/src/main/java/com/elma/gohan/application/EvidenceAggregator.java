@@ -77,6 +77,17 @@ public class EvidenceAggregator {
         this.baiduProperties = baiduProperties;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<BaiduEnrichmentQueue> enrichmentQueue;
+    private static final ThreadLocal<Boolean> BACKGROUND = ThreadLocal.withInitial(() -> false);
+
+    public Map<String, EvidenceBundle> enrichInBackground(List<Restaurant> restaurants,
+                                                          Location center, int radius) {
+        BACKGROUND.set(true);
+        try { return collect(restaurants, center, radius, Map.of()); }
+        finally { BACKGROUND.remove(); }
+    }
+
     public Map<String, EvidenceBundle> collect(List<Restaurant> restaurants, Location center,
                                                 int radiusMeters, double poolAveragePrice) {
         Map<String, Double> priceBaselines = new HashMap<>();
@@ -91,6 +102,15 @@ public class EvidenceAggregator {
     public Map<String, EvidenceBundle> collect(List<Restaurant> restaurants, Location center,
                                                 int radiusMeters,
                                                 Map<String, Double> priceBaselines) {
+        boolean realtime = baiduProperties.isAsyncEnrichmentEnabled() && !BACKGROUND.get();
+        int budget = realtime ? baiduProperties.getRealtimeBudgetMs() : baiduProperties.getRecallTimeBudgetMs();
+        try (var ignored = new com.elma.gohan.provider.evidence.BaiduCallContext(budget)) {
+            return collectWithinBudget(restaurants, center, radiusMeters, priceBaselines, realtime);
+        }
+    }
+
+    private Map<String, EvidenceBundle> collectWithinBudget(List<Restaurant> restaurants, Location center,
+            int radiusMeters, Map<String, Double> priceBaselines, boolean realtime) {
         Instant observedAt = Instant.now();
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         Map<String, PlatformEvidence> amap = new LinkedHashMap<>();
@@ -119,8 +139,8 @@ public class EvidenceAggregator {
         boolean supplementalRecallUsed = false;
         boolean recallTruncated = false;
         Set<String> incompleteRecallPrimaryIds = new HashSet<>();
-        RecallBudget recallBudget = new RecallBudget(baiduProperties.getRecallMaxCalls(),
-                baiduProperties.getRecallTimeBudgetMs());
+        RecallBudget recallBudget = new RecallBudget(realtime ? baiduProperties.getRealtimeMaxCalls() : baiduProperties.getRecallMaxCalls(),
+                realtime ? baiduProperties.getRealtimeBudgetMs() : baiduProperties.getRecallTimeBudgetMs());
         NameRecallOutcome nameRecall = NameRecallOutcome.empty();
         List<Integer> v3PagesRequested = new ArrayList<>();
         if (!unresolved.isEmpty()) {
@@ -165,8 +185,12 @@ public class EvidenceAggregator {
                 }
 
                 List<Restaurant> stillUnmatched = unmatchedRestaurants(unresolved, currentMatches);
-                nameRecall = recallUnmatchedByName(stillUnmatched, recallBudget,
-                        reservedProviderIds);
+                if (!realtime) {
+                    nameRecall = recallUnmatchedByName(stillUnmatched, recallBudget, reservedProviderIds);
+                } else {
+                    addPrimaryIds(incompleteRecallPrimaryIds, stillUnmatched);
+                    recallTruncated = !stillUnmatched.isEmpty();
+                }
                 supplementalRecallUsed = supplementalRecallUsed || nameRecall.requestCount() > 0;
                 recallTruncated = recallTruncated || nameRecall.truncated();
                 incompleteRecallPrimaryIds.addAll(nameRecall.incompletePrimaryIds());
@@ -193,7 +217,7 @@ public class EvidenceAggregator {
             if (needsV2(match)) v2RequestedPrimaryIds.add(primaryPoiId);
         });
         PlatformSearchResult v2Result = null;
-        if (!supplementalRecallUsed && !v2RequestedPrimaryIds.isEmpty()
+        if (!realtime && !supplementalRecallUsed && !v2RequestedPrimaryIds.isEmpty()
                 && recallBudget.tryAcquire()) {
             v2Result = safeSearchV2(center, radiusMeters);
         }
@@ -217,6 +241,14 @@ public class EvidenceAggregator {
                 nameRecall.completedRestaurantCount(), nameRecall.skippedRestaurantCount(),
                 recallTruncated, nameRecall.platformUnavailable());
 
+        for (String id : incompleteRecallPrimaryIds) {
+            matches.computeIfPresent(id, (ignored, match) -> {
+                if (match.status() == EntityMatchStatus.MATCHED) return match;
+                var features = new LinkedHashMap<>(match.features());
+                features.put("reasonBudgetOrAvailability", 1.0);
+                return new EntityMatchResult(match.status(), match.confidence(), match.evidence(), features);
+            });
+        }
         for (Restaurant restaurant : unresolved) {
             EntityMatchResult match = matches.getOrDefault(restaurant.sourcePoiId(),
                     EntityMatchResult.noMatch());
@@ -251,6 +283,13 @@ public class EvidenceAggregator {
             bundles.put(restaurant.sourcePoiId(), new EvidenceBundle(review,
                     amap.get(restaurant.sourcePoiId()), baidu, match, consistency));
         }
+        if (realtime && enrichmentQueue != null && !unresolved.isEmpty()) {
+            try {
+                enrichmentQueue.getObject().enqueue(restaurants, center, radiusMeters);
+            } catch (RuntimeException e) {
+                log.warn("Baidu enrichment enqueue failed errorType={}", e.getClass().getSimpleName());
+            }
+        }
         return Map.copyOf(bundles);
     }
 
@@ -264,7 +303,8 @@ public class EvidenceAggregator {
     }
 
     private EntityMatchResult cachedMatch(ExternalEntityMappingEntity mapping, LocalDateTime now) {
-        if (mapping == null || mapping.getExpiresAt().isBefore(now)) return null;
+        if (mapping == null || !mapping.getExpiresAt().isAfter(now)
+                || !properties.getAlgorithmVersion().equals(mapping.getMatchAlgorithmVersion())) return null;
         EntityMatchStatus status = EntityMatchStatus.valueOf(mapping.getMatchStatus());
         if (status != EntityMatchStatus.MATCHED) {
             return new EntityMatchResult(status, mapping.getMatchConfidence(), null,
@@ -278,7 +318,7 @@ public class EvidenceAggregator {
         boolean v2Fresh = mapping.getV2ObservedAt() != null
                 && !mapping.getV2ObservedAt().plusHours(properties.getV2EvidenceTtlHours())
                 .isBefore(now);
-        if (!hasFineRatings(v3) && !v2Fresh) return null;
+
         PlatformEvidence merged = v3.mergeOptionalDetails(
                 v2Fresh ? fromEvidenceJson(mapping.getV2EvidenceJson()) : null);
         Map<String, Double> features = new LinkedHashMap<>(
@@ -496,16 +536,17 @@ public class EvidenceAggregator {
                                 PlatformSearchResult v3Result, PlatformSearchResult v2Result,
                                 ExternalEntityMappingEntity existing, LocalDateTime now,
                                 boolean cacheNoMatch) {
-        ExternalEntityMappingEntity entity = existing == null
-                ? new ExternalEntityMappingEntity(UUID.randomUUID(), PRIMARY_SOURCE,
-                restaurant.sourcePoiId(), EVIDENCE_SOURCE, now) : existing;
+        ExternalEntityMappingEntity entity = new ExternalEntityMappingEntity(
+                existing == null ? UUID.randomUUID() : existing.getId(), PRIMARY_SOURCE,
+                restaurant.sourcePoiId(), EVIDENCE_SOURCE, existing == null ? now : existing.getCreatedAt());
         PlatformEvidence evidence = match.evidence();
         boolean v3Refreshed = v3Result != null;
         String v3Json = v3Refreshed
                 ? (evidence == null ? null : toJson(withoutFineRatings(evidence)))
                 : existing == null ? null : existing.getV3EvidenceJson();
         LocalDateTime evidenceObservedAt = v3Refreshed
-                ? (evidence == null ? null : now)
+                ? (evidence == null || evidence.observedAt() == null ? null
+                    : LocalDateTime.ofInstant(evidence.observedAt(), ZoneOffset.UTC))
                 : existing == null ? null : existing.getEvidenceObservedAt();
         String v2Json = null;
         LocalDateTime v2ObservedAt = null;
@@ -531,7 +572,8 @@ public class EvidenceAggregator {
         entity.refresh(evidence == null ? null : evidence.providerPoiId(), match.status().name(),
                 match.confidence(), toJson(match.features()), v3Json, v2Json,
                 evidenceObservedAt, v2ObservedAt, expiresAt, now);
-        mappingRepository.save(entity);
+        entity.setMatchAlgorithmVersion(properties.getAlgorithmVersion());
+        mappingRepository.store(entity);
     }
 
     private PlatformEvidence withoutFineRatings(PlatformEvidence evidence) {

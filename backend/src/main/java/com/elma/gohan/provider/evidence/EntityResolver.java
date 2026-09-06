@@ -36,6 +36,8 @@ public class EntityResolver {
     public Map<String, EntityMatchResult> resolve(List<Restaurant> restaurants,
                                                    List<PlatformEvidence> evidence,
                                                    Set<String> reservedProviderIds) {
+        if (properties.isStrictMatchingEnabled())
+            return StrictEntityResolver.resolve(restaurants, evidence, reservedProviderIds, properties);
         Map<String, List<ScoredCandidate>> candidates = new HashMap<>();
         for (Restaurant restaurant : restaurants) {
             List<ScoredCandidate> scores = new ArrayList<>();

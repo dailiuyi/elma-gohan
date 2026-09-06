@@ -1,5 +1,7 @@
 # ELMA 今天吃什么 V1.0.0 后端
 
+当前百度异步补数、严格匹配与深挖检索配置以 [Evidence v0.4](../docs/evidence-reliability-v0.4.md) 为准。正文中的 V0.3 示例保留作历史说明。
+
 Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德与百度提供结构化 Evidence，`risk-v0.3.1` 只表达客观风险；`taste-v0.1` 和 `recommendation-v0.4.1` 负责匿名用户画像、近期历史、有限探索、个性化排序与确定性选择重放。Brave Web Search 仍只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，个性化规则见 [`../docs/V0.4-personalized-decision-loop.md`](../docs/V0.4-personalized-decision-loop.md)。
 
 ## 构建与测试

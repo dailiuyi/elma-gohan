@@ -61,6 +61,25 @@ import com.elma.gohan.provider.poi.PoiRecallCache;
 @Import(RecommendationApiTest.ThrowingEvidenceConfiguration.class)
 class RecommendationApiTest {
 
+    @Autowired
+    private com.elma.gohan.infrastructure.persistence.ExternalEntityMappingRepository mappingCache;
+
+    @org.junit.jupiter.api.Test
+    void lateIncompleteMappingCannotEraseFreshBackgroundMatch() {
+        var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        String poi = "concurrency-" + java.util.UUID.randomUUID();
+        var matched = new com.elma.gohan.infrastructure.persistence.ExternalEntityMappingEntity(
+                java.util.UUID.randomUUID(), "AMAP", poi, "BAIDU", now);
+        matched.refresh("baidu-test", "MATCHED", .95, "{}", null, null, now, null, now.plusDays(1), now);
+        matched.setMatchAlgorithmVersion("entity-v0.4"); mappingCache.store(matched);
+        var incomplete = new com.elma.gohan.infrastructure.persistence.ExternalEntityMappingEntity(
+                java.util.UUID.randomUUID(), "AMAP", poi, "BAIDU", now);
+        incomplete.refresh(null, "NO_MATCH", null, "{}", null, null, null, null, now.plusSeconds(1), now.plusSeconds(1));
+        incomplete.setMatchAlgorithmVersion("entity-v0.4"); mappingCache.store(incomplete);
+        org.assertj.core.api.Assertions.assertThat(mappingCache.findByPrimarySourceAndPrimaryPoiIdAndEvidenceSource(
+                "AMAP", poi, "BAIDU").orElseThrow().getMatchStatus()).isEqualTo("MATCHED");
+    }
+
     private static final String USER = "11111111-1111-1111-1111-111111111111";
     private static final String OTHER_USER = "22222222-2222-2222-2222-222222222222";
     private static final ObjectMapper JSON = new ObjectMapper();

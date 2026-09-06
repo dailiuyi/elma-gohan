@@ -155,7 +155,13 @@ public class DeepEvidenceService {
                 new DeepEvidenceResponse.Consistency(analysis.consistencyLevel(),
                         analysis.consistencyReason()),
                 List.copyOf(links), collected.cacheStatus(),
-                analysis.generatedAt().toString(), analysis.expiresAt().toString());
+                analysis.generatedAt().toString(), analysis.expiresAt().toString(),
+                ConsumptionReferenceBuilder.build(restaurant,
+                        restaurantEntity.getUpdatedAt() == null ? null : restaurantEntity.getUpdatedAt().toInstant(ZoneOffset.UTC),
+                        java.util.Arrays.stream(DeepEvidenceSource.values())
+                                .flatMap(source -> collected.materials().get(source).batch().items().stream()
+                                        .limit(properties.getMaxLinksPerSource())).toList()),
+                new com.elma.gohan.provider.deep.WebEvidenceMatcher(properties).suggestedSearch(restaurant));
     }
 
     private CollectedEvidence collectSingleFlight(Restaurant restaurant) {
@@ -182,6 +188,7 @@ public class DeepEvidenceService {
 
     private CollectedEvidence collect(Restaurant restaurant) {
         Instant now = Instant.now();
+        long deadlineNanos = System.nanoTime() + properties.getOverallTimeoutMs() * 1_000_000L;
         Map<DeepEvidenceSource, SourceMaterial> materials =
                 new EnumMap<>(DeepEvidenceSource.class);
         Map<DeepEvidenceSource, CompletableFuture<SourceMaterial>> pending =
@@ -193,7 +200,7 @@ public class DeepEvidenceService {
             } else {
                 try {
                     pending.put(source, CompletableFuture.supplyAsync(
-                            () -> fetchAndCache(restaurant, source), executor));
+                            () -> fetchAndCache(restaurant, source, deadlineNanos), executor));
                 } catch (RuntimeException exception) {
                     materials.put(source, unavailableMaterial(source, now));
                 }
@@ -204,9 +211,9 @@ public class DeepEvidenceService {
             CompletableFuture<Void> all = CompletableFuture.allOf(
                     pending.values().toArray(CompletableFuture[]::new));
             try {
-                all.get(properties.getOverallTimeoutMs(), TimeUnit.MILLISECONDS);
+                all.get(Math.max(1, deadlineNanos - System.nanoTime()), TimeUnit.NANOSECONDS);
             } catch (Exception exception) {
-                pending.values().forEach(future -> future.cancel(true));
+                pending.values().stream().filter(future -> !future.isDone()).forEach(future -> future.cancel(true));
                 log.warn("Brave 深挖批次超时 sourceCalls={} errorType={}", pending.size(),
                         exception.getClass().getSimpleName());
             }
@@ -247,11 +254,11 @@ public class DeepEvidenceService {
                 .orElse(null);
     }
 
-    private SourceMaterial fetchAndCache(Restaurant restaurant, DeepEvidenceSource source) {
+    private SourceMaterial fetchAndCache(Restaurant restaurant, DeepEvidenceSource source, long deadlineNanos) {
         Instant fetchedAt = Instant.now();
         DeepEvidenceBatch batch;
         try {
-            batch = provider.fetch(source, restaurant);
+            batch = provider.fetch(source, restaurant, deadlineNanos);
             if (batch == null) batch = DeepEvidenceBatch.unavailable(source, fetchedAt);
         } catch (RuntimeException exception) {
             log.warn("深挖 Provider 异常 source={} errorType={}", source,
@@ -260,7 +267,9 @@ public class DeepEvidenceService {
         }
         Instant expiresAt = batch.status() == EvidenceStatus.UNAVAILABLE
                 ? fetchedAt.plus(properties.getFailureCacheMinutes(), ChronoUnit.MINUTES)
-                : fetchedAt.plus(properties.getEvidenceCacheHours(), ChronoUnit.HOURS);
+                : batch.status() == EvidenceStatus.NO_DATA
+                    ? fetchedAt.plus(properties.getEmptyCacheMinutes(), ChronoUnit.MINUTES)
+                    : fetchedAt.plus(properties.getEvidenceCacheHours(), ChronoUnit.HOURS);
         try {
             LocalDateTime now = toLocal(fetchedAt);
             RestaurantDeepEvidenceEntity entity = evidenceRepository

@@ -69,9 +69,9 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         String safeRegion = region == null || region.isBlank() ? "长沙" : region;
         long started = System.nanoTime();
         int pageSize = Math.min(20, Math.max(10, properties.getPageSize()));
-        if (!acquirePermit("REGION")) return PlatformSearchResult.unavailable();
+        if (!acquirePermit("REGION")) return PlatformSearchResult.unavailable("LOCAL_QUEUE_TIMEOUT");
         try {
-            JsonNode body = restClient.get().uri(uriBuilder -> uriBuilder.path("/place/v3/region")
+            JsonNode body = client().get().uri(uriBuilder -> uriBuilder.path("/place/v3/region")
                     .queryParam("query", safeQuery)
                     .queryParam("region", safeRegion)
                     .queryParam("city_limit", true)
@@ -86,7 +86,8 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
                 int status = body == null ? -1 : body.path("status").asInt(-1);
                 log.warn("百度 Place REGION 返回失败状态 status={} durationMs={}",
                         status, elapsedMillis(started));
-                return PlatformSearchResult.unavailable();
+                return PlatformSearchResult.unavailable(status == 401 ? "UPSTREAM_RATE_LIMIT"
+                        : status == 302 ? "DAILY_QUOTA" : "UPSTREAM_ERROR");
             }
             List<PlatformEvidence> evidence = mapResults(body.path("results"), Instant.now());
             Integer total = integer(body, "total");
@@ -111,9 +112,9 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         String safeQuery = query == null || query.isBlank() ? properties.getQuery() : query;
         String safeRegion = region == null || region.isBlank() ? "长沙" : region;
         long started = System.nanoTime();
-        if (!acquirePermit("SUGGEST")) return PlatformSearchResult.unavailable();
+        if (!acquirePermit("SUGGEST")) return PlatformSearchResult.unavailable("LOCAL_QUEUE_TIMEOUT");
         try {
-            JsonNode body = restClient.get().uri(uriBuilder -> {
+            JsonNode body = client().get().uri(uriBuilder -> {
                 var builder = uriBuilder.path("/place/v2/suggestion")
                         .queryParam("query", safeQuery)
                         .queryParam("region", safeRegion)
@@ -131,7 +132,8 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
                 int status = body == null ? -1 : body.path("status").asInt(-1);
                 log.warn("百度 Place SUGGEST 返回失败状态 status={} durationMs={}",
                         status, elapsedMillis(started));
-                return PlatformSearchResult.unavailable();
+                return PlatformSearchResult.unavailable(status == 401 ? "UPSTREAM_RATE_LIMIT"
+                        : status == 302 ? "DAILY_QUOTA" : "UPSTREAM_ERROR");
             }
             List<PlatformEvidence> evidence = mapSuggestionResults(body.path("result"), Instant.now());
             String querySummary = safeQuery.substring(0, Math.min(safeQuery.length(), 40));
@@ -162,9 +164,9 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         long started = System.nanoTime();
         int safePageNumber = Math.max(0, pageNumber);
         int pageSize = Math.min(20, Math.max(10, properties.getPageSize()));
-        if (!acquirePermit(apiVersion)) return PlatformSearchResult.unavailable();
+        if (!acquirePermit(apiVersion)) return PlatformSearchResult.unavailable("LOCAL_QUEUE_TIMEOUT");
         try {
-            JsonNode body = restClient.get().uri(uriBuilder -> {
+            JsonNode body = client().get().uri(uriBuilder -> {
                 var builder = uriBuilder.path(path)
                         .queryParam("query", query)
                         .queryParam("location", center.latitude() + "," + center.longitude())
@@ -187,7 +189,8 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
                 int status = body == null ? -1 : body.path("status").asInt(-1);
                 log.warn("百度 Place {} 返回失败状态 page={} status={} durationMs={}", apiVersion,
                         safePageNumber, status, elapsedMillis(started));
-                return PlatformSearchResult.unavailable();
+                return PlatformSearchResult.unavailable(status == 401 ? "UPSTREAM_RATE_LIMIT"
+                        : status == 302 ? "DAILY_QUOTA" : "UPSTREAM_ERROR");
             }
             List<PlatformEvidence> evidence = mapResults(body.path("results"), Instant.now());
             Integer total = integer(body, "total");
@@ -279,7 +282,20 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         return (System.nanoTime() - started) / 1_000_000;
     }
 
+    private RestClient client() {
+        long remaining = BaiduCallContext.remainingMillis();
+        if (remaining <= 0) throw new RestClientException("Baidu deadline exceeded");
+        var factory = new org.springframework.http.client.JdkClientHttpRequestFactory(
+                java.net.http.HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofMillis(Math.max(1, Math.min(remaining,
+                                properties.getConnectTimeoutMs())))).build());
+        factory.setReadTimeout(Duration.ofMillis(Math.max(1, Math.min(remaining,
+                properties.getReadTimeoutMs()))));
+        return restClient.mutate().requestFactory(factory).build();
+    }
+
     private boolean acquirePermit(String operation) {
+        if (BaiduCallContext.remainingMillis() <= 0) return false;
         BaiduPlaceRateLimiter.Permit permit = rateLimiter.acquire();
         if (!permit.acquired()) {
             log.warn("百度 Place 全局节流拒绝 operation={} waitedMs={}",

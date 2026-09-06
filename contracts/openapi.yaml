@@ -665,6 +665,14 @@ components:
           maxItems: 9
           items:
             $ref: '#/components/schemas/DeepEvidenceLink'
+        consumptionReferences:
+          type: array
+          maxItems: 11
+          items:
+            $ref: '#/components/schemas/ConsumptionReference'
+        suggestedSearchTerm:
+          type: string
+          maxLength: 200
         cacheStatus:
           type: string
           enum: [HIT, PARTIAL_HIT, MISS]
@@ -674,6 +682,34 @@ components:
         expiresAt:
           type: string
           format: date-time
+
+    ConsumptionReference:
+      type: object
+      additionalProperties: false
+      required: [kind, text, source, url, publishedAt, observedAt]
+      properties:
+        kind:
+          type: string
+          enum: [PRICE, HOURS, PUBLIC_CLUE]
+        text:
+          type: string
+          maxLength: 240
+        source:
+          type: string
+          enum: [AMAP, BAIDU, BILIBILI, XIAOHONGSHU, DIANPING]
+        url:
+          type: string
+          format: uri
+          nullable: true
+          maxLength: 1000
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        observedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     DeepSourceCoverage:
       type: object

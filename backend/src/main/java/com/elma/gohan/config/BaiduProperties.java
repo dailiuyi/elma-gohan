@@ -22,6 +22,16 @@ public class BaiduProperties {
     private int connectTimeoutMs = 1500;
     private int readTimeoutMs = 2500;
 
+    private boolean asyncEnrichmentEnabled = true;
+    private int realtimeMaxCalls = 2;
+    private int realtimeBudgetMs = 2000;
+    public boolean isAsyncEnrichmentEnabled() { return asyncEnrichmentEnabled; }
+    public void setAsyncEnrichmentEnabled(boolean value) { asyncEnrichmentEnabled = value; }
+    public int getRealtimeMaxCalls() { return realtimeMaxCalls; }
+    public void setRealtimeMaxCalls(int value) { realtimeMaxCalls = value; }
+    public int getRealtimeBudgetMs() { return realtimeBudgetMs; }
+    public void setRealtimeBudgetMs(int value) { realtimeBudgetMs = value; }
+
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public String getAk() { return ak; }

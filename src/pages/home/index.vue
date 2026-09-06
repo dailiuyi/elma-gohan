@@ -10,6 +10,10 @@
       <text class="lede">{{ lede }}</text>
     </view>
 
+    <view v-if="acceptanceMode && !currentLocation" class="ask">
+      <text class="lede">网页版验收：使用长沙五一商圈固定位置，调用真实接口。</text>
+      <button class="go-button" :disabled="submitting" @click="startAcceptance">开始长沙商圈验收</button>
+    </view>
     <view class="wave" aria-hidden="true">
       <view class="wave-arc wave-arc--a" />
       <view class="wave-arc wave-arc--b" />
@@ -106,6 +110,7 @@ import {
 } from '@/utils/filters'
 
 
+const acceptanceMode = import.meta.env.VITE_ACCEPTANCE_MODE === 'true'
 const locationStatus = ref<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle')
 const currentLocation = ref<LocationCoordinates | null>(null)
 const submitting = ref(false)
@@ -240,6 +245,12 @@ async function openTonight(forceRefresh = false) {
   }
 }
 
+function startAcceptance() {
+  currentLocation.value = { latitude: 28.1948, longitude: 112.9768, accuracy: 0 }
+  locationStatus.value = 'success'
+  void openTonight()
+}
+
 function retryTonight() {
   void openTonight(false)
 }
@@ -269,7 +280,7 @@ function openPrivacy() {
 
 onMounted(() => {
   hydrateFilters()
-  void openTonight()
+  if (!acceptanceMode) void openTonight()
 })
 </script>
 

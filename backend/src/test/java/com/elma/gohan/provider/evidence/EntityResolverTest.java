@@ -17,7 +17,14 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 
 class EntityResolverTest {
 
-    private final EntityResolver resolver = new EntityResolver(new EntityResolutionProperties());
+    private final EntityResolver resolver = legacyResolver();
+
+    // Retain coverage of the explicit rollback switch; strict behavior has its own suite.
+    private static EntityResolver legacyResolver() {
+        var properties = new EntityResolutionProperties();
+        properties.setStrictMatchingEnabled(false);
+        return new EntityResolver(properties);
+    }
 
     @Test
     void normalizesStoreSuffixAndMatchesNearbySameAddress() {

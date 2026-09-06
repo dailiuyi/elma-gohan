@@ -95,6 +95,9 @@ elma:
     name-recall-max-restaurants: ${BAIDU_NAME_RECALL_MAX_RESTAURANTS:10}
     name-recall-max-requests: ${BAIDU_NAME_RECALL_MAX_REQUESTS:20}
     name-recall-radius-meters: ${BAIDU_NAME_RECALL_RADIUS_METERS:500}
+    async-enrichment-enabled: ${BAIDU_ASYNC_ENRICHMENT_ENABLED:true}
+    realtime-max-calls: ${BAIDU_REALTIME_MAX_CALLS:2}
+    realtime-budget-ms: ${BAIDU_REALTIME_BUDGET_MS:2000}
     recall-max-calls: ${BAIDU_RECALL_MAX_CALLS:22}
     recall-time-budget-ms: ${BAIDU_RECALL_TIME_BUDGET_MS:8000}
     rate-limit-per-second: ${BAIDU_RATE_LIMIT_PER_SECOND:3}
@@ -103,19 +106,24 @@ elma:
     connect-timeout-ms: 1500
     read-timeout-ms: 2500
   deep-evidence:
-    enabled: ${BRAVE_ENABLED:false}
-    api-key: ${BRAVE_SEARCH_API_KEY:}
+    enabled: ${BAIDU_AI_SEARCH_ENABLED:${BRAVE_ENABLED:false}}
+    baidu-ai-search-enabled: ${BAIDU_AI_SEARCH_ENABLED:false}
+    baidu-ai-base-url: ${BAIDU_AI_SEARCH_BASE_URL:https://qianfan.baidubce.com}
+    api-key: ${BAIDU_AI_SEARCH_API_KEY:${BRAVE_SEARCH_API_KEY:}}
     base-url: ${BRAVE_BASE_URL:https://api.search.brave.com}
-    connect-timeout-ms: ${BRAVE_CONNECT_TIMEOUT_MS:1500}
-    read-timeout-ms: ${BRAVE_READ_TIMEOUT_MS:3000}
+    connect-timeout-ms: ${BAIDU_AI_SEARCH_CONNECT_TIMEOUT_MS:${BRAVE_CONNECT_TIMEOUT_MS:1500}}
+    read-timeout-ms: ${BAIDU_AI_SEARCH_READ_TIMEOUT_MS:${BRAVE_READ_TIMEOUT_MS:3000}}
     overall-timeout-ms: 4000
-    result-count: ${BRAVE_RESULT_COUNT:10}
+    result-count: ${BAIDU_AI_SEARCH_RESULT_COUNT:${BRAVE_RESULT_COUNT:10}}
+    improved-search-enabled: ${DEEP_IMPROVED_SEARCH_ENABLED:true}
+    empty-cache-minutes: 30
+    city: 长沙
     evidence-cache-hours: ${DEEP_EVIDENCE_CACHE_HOURS:12}
     failure-cache-minutes: 5
     analysis-cache-hours: ${DEEP_ANALYSIS_CACHE_HOURS:6}
     max-links-per-source: 3
     entity-match-threshold: 0.72
-    query-version: brave-query-v0.2
+    query-version: brave-query-v0.3
     analysis-algorithm-version: deep-evidence-v0.1
     risk-algorithm-version: deep-risk-v0.1
     store-suffixes: [旗舰店, 总店, 分店, 门店, 店]
@@ -124,6 +132,8 @@ elma:
     operational-phrases: [排队, 等位, 上菜慢, 人多]
     marketing-phrases: [探店, 打卡, 网红, 种草, 必吃, 团购]
   entity-resolution:
+    strict-matching-enabled: ${ENTITY_STRICT_MATCHING_ENABLED:true}
+    strict-accept-threshold: 0.68
     name-weight: 0.45
     coordinate-weight: 0.30
     address-weight: 0.15

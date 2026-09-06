@@ -25,6 +25,7 @@ public class WebEvidenceMatcher {
     }
 
     public double match(Restaurant restaurant, String title, String snippet) {
+        if (properties.isImprovedSearchEnabled()) return matchStrict(restaurant, title, snippet);
         String name = normalizeName(restaurant.name());
         String content = normalize((title == null ? "" : title) + (snippet == null ? "" : snippet));
         if (name.isBlank() || content.isBlank()) return 0.0;
@@ -42,6 +43,26 @@ public class WebEvidenceMatcher {
             return Math.min(0.94, similarity);
         }
         return 0.0;
+    }
+
+    private double matchStrict(Restaurant restaurant, String title, String snippet) {
+        String content = normalize((title == null ? "" : title) + " " + (snippet == null ? "" : snippet));
+        var identity = com.elma.gohan.provider.evidence.StoreIdentity.of(restaurant.name(), restaurant.address());
+        var mentioned = com.elma.gohan.provider.evidence.StoreIdentity.of(title, null);
+        if (identity.conflicts(mentioned) || title == null || title.matches(".*(?:合集|盘点|家店|家餐厅|美食地图|攻略合集).*")) return 0;
+        if (identity.brand().length() < 2 || !content.contains(identity.brand())) return 0;
+        boolean branch = !identity.branch().isBlank() && content.contains(identity.branch());
+        boolean location = addressKeywords(restaurant.address()).stream().map(this::normalize)
+                .filter(k -> k.length() >= 2).anyMatch(content::contains);
+        // An unqualified chain name alone is not enough to establish a store.
+        if (!branch && !location) return 0;
+        if (!identity.branch().isBlank() && !branch) return 0;
+        return branch ? 0.95 : 0.85;
+    }
+
+    public String suggestedSearch(Restaurant restaurant) {
+        return (restaurant.name() + " " + properties.getCity() + " "
+                + searchLocationKeyword(restaurant.name(), restaurant.address())).trim();
     }
 
     public List<String> addressKeywords(String address) {

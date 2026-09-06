@@ -27,6 +27,26 @@
         <text class="weak-evidence-note">公开索引里的标题和摘要。不是完整评价。</text>
       </view>
 
+      <view class="reference-card">
+        <text class="section-title">去之前，先看这些</text>
+        <view v-for="(item, index) in result.consumptionReferences ?? []" :key="index" class="reference-row">
+          <text class="reference-text">{{ item.text }}</text>
+          <text class="reference-meta">{{ sourceLabel(item.source) }} · {{ item.kind === 'PUBLIC_CLUE' ? '公开线索' : '平台信息' }}</text>
+          <text v-if="item.publishedAt" class="reference-meta">发布于 {{ formatDate(item.publishedAt) }}</text>
+          <text v-if="item.observedAt" class="reference-meta">{{ item.kind === 'PUBLIC_CLUE' ? '检索于' : '记录于' }} {{ formatDate(item.observedAt) }}</text>
+          <button v-if="item.url" class="reference-link" @click="openLink(item.url)">查看出处</button>
+        </view>
+        <text v-if="!result.consumptionReferences?.length" class="empty-signals">暂时没有可核验的消费参考</text>
+      </view>
+
+      <view v-if="!result.links.length" class="search-card">
+        <text class="section-title">继续找找这家店</text>
+        <text class="reference-text">暂未找到可确认属于这家门店的公开内容。可以去 B站、小红书或大众点评继续搜索。</text>
+        <text class="search-term">{{ result.suggestedSearchTerm || result.restaurantName }}</text>
+        <button class="reference-link" @click="copySearchTerm">复制搜索词</button>
+        <text class="reference-meta">以上是搜索词，尚未找到的内容不会计入门店评价。</text>
+      </view>
+
       <view class="summary-card">
         <view class="summary-row">
           <text>综合风险</text>
@@ -54,7 +74,7 @@
       </view>
 
       <view class="signals-card">
-        <text class="section-title">最近公开结果主要提到</text>
+        <text class="section-title">公开线索中的关键词</text>
         <view v-if="!hasSignals" class="empty-signals">暂未形成明确线索</view>
         <text v-for="item in result.signals.positive" :key="`p-${item}`" class="signal signal--positive">
           + {{ item }}
@@ -213,12 +233,28 @@ function openLink(url: string) {
   })
 }
 
+function copySearchTerm() {
+  if (!result.value) return
+  uni.setClipboardData({
+    data: result.value.suggestedSearchTerm || result.value.restaurantName,
+    success: () => uni.showToast({ title: '搜索词已复制', icon: 'none' }),
+  })
+}
+
 function goBack() {
   uni.navigateBack({ delta: 1 })
 }
 </script>
 
 <style scoped>
+.reference-card, .search-card { margin: 24rpx 0; padding: 28rpx; border-radius: 24rpx; background: #fff; }
+.reference-row { padding: 18rpx 0; border-bottom: 1rpx solid #eff0f5; }
+.reference-text, .reference-meta, .search-term { display: block; margin: 10rpx 0; }
+.reference-text { font-size: 26rpx; line-height: 1.65; color: #343841; }
+.reference-meta { font-size: 21rpx; color: #727b88; }
+.reference-link { margin: 16rpx 0; font-size: 24rpx; color: #5157c4; background: #f2f3fc; }
+.search-term { font-size: 25rpx; font-weight: 600; }
+
 .deep-page {
   box-sizing: border-box;
   min-height: 100vh;
