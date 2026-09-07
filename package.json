@@ -14,7 +14,10 @@
     "build:mp-weixin": "uni build -p mp-weixin",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "dev:console": "vite --config output/admin-console/vite.config.ts",
+    "build:console": "vite build --config output/admin-console/vite.config.ts",
+    "typecheck:console": "vue-tsc --noEmit -p output/admin-console/tsconfig.json"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5020420260813003",

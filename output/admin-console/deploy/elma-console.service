@@ -1,0 +1,26 @@
+[Unit]
+Description=ELMA console read-only analytics
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=elma-console
+Group=elma-console
+WorkingDirectory=/opt/elma-console/current
+EnvironmentFile=/etc/elma-console/database.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/elma-console/current/.venv/bin/python /opt/elma-console/current/output/admin-console/server/app.py --host 127.0.0.1 --port 8092 --snapshot-dir /var/lib/elma-console/snapshots --origin https://elma-gohan.xyz
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/elma-console
+UMask=0077
+MemoryMax=384M
+
+[Install]
+WantedBy=multi-user.target

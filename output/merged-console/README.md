@@ -1,5 +1,7 @@
 # ELMA 产品演示与运营合页
 
+> 新版管理后台位于 [`../admin-console/`](../admin-console/README.md)，本合页保留为 `/console/legacy/` 导览。新版发布后使用 admin-console 的发布流程；下文旧版 deploy.ps1 会覆盖控制台首页，仅用于旧部署。
+
 给后续 Agent 的操作说明。这是把两份已经人工审过的静态页合在一起的展示页，不是第三套设计，也不是后端功能。
 
 ## 这是什么
