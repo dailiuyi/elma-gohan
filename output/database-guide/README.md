@@ -8,6 +8,29 @@
 
 它不是实时后台，不需要修改 Spring Boot，也不会增加 `/admin` API。页面没有 CDN、外部脚本、接口请求或在线地图依赖。
 
+## 本机动态看板
+
+需要在页面里点击按钮刷新生产数据时，从仓库根目录启动仅监听 `127.0.0.1` 的本机服务：
+
+```powershell
+./start-dashboard.cmd
+```
+
+也可以直接调用内部 PowerShell 入口：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File output/database-guide/start_dashboard.ps1
+```
+
+脚本会让 Windows 自动分配一个可用端口，并打开终端中显示的 `http://127.0.0.1:<端口>/`。点击右上角“刷新生产数据”后，本机服务会调用下文的一键生产刷新流程；成功后页面自动重新载入。这样可以避开 Hyper-V、WSL 或系统服务保留的端口范围。也可以直接运行：
+
+```powershell
+python output/database-guide/serve_dashboard.py --days 30 --open
+```
+
+动态服务不会部署到服务器：它固定绑定本机回环地址，使用每次启动随机生成的刷新令牌，不开放 CORS，不接受任意命令或输出路径，并且同一时间只允许一个刷新任务。数据库密码仍只由生产刷新子进程从远端服务环境读取，不进入浏览器、HTML 或仓库。直接双击 HTML 时刷新控件保持隐藏，页面仍是完全离线的单文件。
+
 ## 首次安装
 
 项目约定使用 Python 3.12；运行时只需要 Psycopg 3：

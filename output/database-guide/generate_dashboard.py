@@ -395,7 +395,7 @@ def collect_snapshot(runner: Any, config: DashboardConfig) -> dict[str, Any]:
                 _camel_row(row)
                 for row in runner.run(SHADOW_SELECTION_REASONS, (config.days,))
             ],
-            "note": "覆盖率只表示 V9 快照落盘覆盖，不等同于 shadow 成功率。",
+            "note": "覆盖率只表示已保存 V9 快照的会话占比，不表示 Shadow 算法的成功率或提升幅度。",
         }
     else:
         shadow = {

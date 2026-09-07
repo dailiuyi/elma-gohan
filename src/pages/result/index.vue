@@ -1,8 +1,8 @@
 <template>
   <view v-if="recommendation" class="result-page">
     <view class="nav">
-      <text class="brand">ELMA</text>
-      <button v-if="viewMode === 'page'" class="text-btn" @click="sheetOpen = true">改条件</button>
+      <BackToHome />
+      <button v-if="viewMode === 'page'" class="text-btn" @click="openSheet">改条件</button>
       <button v-else class="text-btn" @click="viewMode = 'page'">← 回去</button>
     </view>
 
@@ -120,8 +120,18 @@
     </view>
     <text v-if="operationError" class="operation-error">{{ operationError }}</text>
 
-    <view v-if="sheetOpen" class="sheet" @click.self="sheetOpen = false">
-      <view class="sheet-card">
+    <view
+      v-if="sheetOpen"
+      class="sheet"
+      :class="{ 'sheet--closing': sheetClosing }"
+      @click.self="closeSheet"
+    >
+      <view
+        class="sheet-card"
+        :class="{ 'sheet-card--closing': sheetClosing }"
+        @click.stop
+        @animationend="handleSheetAnimationEnd"
+      >
         <text class="sheet-title">今晚想怎么写</text>
         <text class="sheet-hint">改了条件，这一页会重写。不是翻到下一页，是另起一顿。</text>
 
@@ -166,10 +176,11 @@
           </view>
         </view>
 
+        <text v-if="operationError" class="sheet-error">{{ operationError }}</text>
         <button class="go-button" :disabled="submitting" @click="rewriteTonight">
           {{ submitting ? '正在刷新候选…' : '按这个刷新候选' }}
         </button>
-        <button class="quiet" @click="sheetOpen = false">还是现在这样</button>
+        <button class="quiet" @click="closeSheet">还是现在这样</button>
       </view>
     </view>
 
@@ -186,17 +197,18 @@
 </template>
 
 <script setup lang="ts">
-import { onLoad, onShareAppMessage, onUnload } from '@dcloudio/uni-app'
+import { onBackPress, onLoad, onShareAppMessage, onUnload } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 
 import { createRecommendation, rerollRecommendation, submitRecommendationBehavior, submitRecommendationFeedback } from '@/api/recommendation'
-import { ApiError, getUserFacingError } from '@/api/errors'
+import { ApiError, getUserFacingError, isIncompleteSearchError } from '@/api/errors'
 import { NavigationService, NavigationServiceError } from '@/services/navigation'
 import { recommendationStore } from '@/stores/recommendation'
 import { createUuidV4 } from '@/services/anonymous-user'
 import type { BehaviorType, CategoryFilterCode, FeedbackResult, FlavorTag, Radius } from '@/types/recommendation'
 import { formatEditionDate, pageIndex, pageLine, priceLine, walkingLine } from '@/utils/edition'
 import { budgetOptions, categoryOptions, radiusOptions, type BudgetOption, type RadiusOption } from '@/utils/filters'
+import BackToHome from '@/components/BackToHome.vue'
 import { parseDislikes } from '@/utils/dislikes'
 
 const feedbackOptions: Array<{ label: string; value: FeedbackResult }> = [
@@ -215,6 +227,7 @@ const flavorOptions: Array<{ label: string; value: FlavorTag }> = [
 const recommendation = computed(() => recommendationStore.state.current)
 const viewMode = ref<'page' | 'done' | 'poster'>('page')
 const sheetOpen = ref(false)
+const sheetClosing = ref(false)
 const inkPlay = ref(true)
 const rerolling = ref(false)
 const navigating = ref(false)
@@ -272,6 +285,12 @@ onShareAppMessage(() => ({
   path: '/pages/home/index',
 }))
 
+onBackPress(() => {
+  if (!sheetOpen.value) return false
+  closeSheet()
+  return true
+})
+
 onLoad(() => {
   if (!recommendation.value) {
     uni.reLaunch({ url: '/pages/home/index' })
@@ -304,6 +323,22 @@ function hydrateFilters() {
   dislikesInput.value = [...last.dislikes].join('，')
 }
 
+function openSheet() {
+  sheetClosing.value = false
+  sheetOpen.value = true
+}
+
+function closeSheet() {
+  if (!sheetOpen.value || sheetClosing.value) return
+  sheetClosing.value = true
+}
+
+function handleSheetAnimationEnd() {
+  if (!sheetClosing.value) return
+  sheetOpen.value = false
+  sheetClosing.value = false
+}
+
 function selectRadius(option: RadiusOption) {
   minDistance.value = option.minDistance
   radius.value = option.radius
@@ -334,6 +369,9 @@ function handleOperationError(error: unknown) {
   operationError.value =
     error instanceof NavigationServiceError ? error.message : getUserFacingError(error)
   operationTraceId.value = error instanceof ApiError ? error.response?.traceId ?? '' : ''
+  if (isIncompleteSearchError(error)) {
+    openSheet()
+  }
 }
 
 async function rewriteTonight() {
@@ -540,11 +578,6 @@ function reportSkipBestEffort() {
   padding: 0 36rpx 8rpx;
   min-height: 48rpx;
 }
-.brand {
-  font-size: 22rpx;
-  letter-spacing: 6rpx;
-  color: #686865;
-}
 .text-btn {
   margin: 0;
   padding: 8rpx 0;
@@ -734,6 +767,17 @@ function reportSkipBestEffort() {
   z-index: 20;
   background: rgba(23, 23, 23, 0.28);
 }
+.sheet--closing {
+  animation: sheet-fade-out 0.5s linear both;
+}
+@keyframes sheet-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
 .sheet-card {
   position: absolute;
   right: 0;
@@ -743,6 +787,28 @@ function reportSkipBestEffort() {
   padding: 48rpx 44rpx 64rpx;
   background: #f7f7f5;
   overflow: auto;
+  will-change: transform;
+  animation: sheet-slide-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes sheet-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.sheet-card--closing {
+  pointer-events: none;
+  animation: sheet-slide-down 0.5s cubic-bezier(0.64, 0, 0.78, 0) both;
+}
+@keyframes sheet-slide-down {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
 }
 .sheet-title { display: block; font-size: 32rpx; font-weight: 500; }
 .sheet-hint {
@@ -795,6 +861,13 @@ function reportSkipBestEffort() {
   font-size: 28rpx;
 }
 .field-input { height: 62rpx; }
+.sheet-error {
+  display: block;
+  margin-top: 28rpx;
+  color: #8a4b3a;
+  font-size: 23rpx;
+  line-height: 1.5;
+}
 
 .ink .name {
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;

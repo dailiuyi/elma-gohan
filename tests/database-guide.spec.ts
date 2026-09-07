@@ -133,6 +133,8 @@ describe('offline database dashboard', () => {
     expect(template).not.toMatch(/<link\b[^>]*\brel\s*=\s*["']?stylesheet/i)
     expect(template).not.toMatch(/\bfetch\s*\(/i)
     expect(template).not.toMatch(/\bXMLHttpRequest\b|\bWebSocket\b/)
+    expect(template).toContain('id="dashboard-refresh-controls" class="refresh-controls" hidden')
+    expect(template).not.toContain('ELMA_DASHBOARD_REFRESH_BRIDGE')
     expect(template).not.toMatch(/SELECT\s+(?:\w+\.)?\s*\*/i)
     expect(template).toContain('@media (prefers-reduced-motion: reduce)')
 
@@ -177,13 +179,15 @@ describe('offline database dashboard', () => {
     dom.window.close()
   })
 
-  it('renders animated charts from aggregate data without script errors', async () => {
+  it('renders charts with complete trend lines from aggregate data without script errors', async () => {
     const { dom, errors } = await openDashboard()
     const { document } = dom.window
 
     expect(errors).toEqual([])
     expect(document.querySelector('#overview-view')?.hasAttribute('hidden')).toBe(false)
     expect(document.querySelectorAll('#trend-chart .trend-line').length).toBeGreaterThan(0)
+    expect(template).not.toContain('stroke-dasharray: 1')
+    expect(template).not.toContain('@keyframes draw-line')
     expect(document.querySelectorAll('#behavior-bars .fill').length).toBe(fixture.behaviors.length)
     expect(document.querySelectorAll('#feedback-chart .donut-segment').length).toBe(fixture.feedback.length)
     expect(document.querySelectorAll('#algorithm-table-body tr').length).toBe(fixture.algorithms.length)
@@ -194,6 +198,42 @@ describe('offline database dashboard', () => {
     usersButton.click()
     expect(usersButton.getAttribute('aria-pressed')).toBe('true')
     expect(document.querySelectorAll('#trend-chart .trend-line')).toHaveLength(2)
+
+    const chart = document.querySelector<SVGSVGElement>('#trend-chart')!
+    Object.defineProperty(chart, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, right: 760, bottom: 270, width: 760, height: 270, x: 0, y: 0, toJSON: () => ({}) }),
+    })
+    chart.dispatchEvent(new dom.window.MouseEvent('mousemove', { clientX: 742, clientY: 120, bubbles: true }))
+
+    const tooltip = document.querySelector<HTMLElement>('#trend-tooltip')!
+    expect(tooltip.hidden).toBe(false)
+    expect(tooltip.textContent).toContain(fixture.daily.at(-1).metricDate)
+    expect(tooltip.textContent).toContain('活跃匿名标识')
+    expect(tooltip.textContent).toContain('新增匿名标识')
+    expect([...tooltip.querySelectorAll('.trend-tooltip-row')].map(row => row.textContent)).toEqual([
+      `活跃匿名标识${fixture.daily.at(-1).activeIds}`,
+      `新增匿名标识${fixture.daily.at(-1).newIds}`,
+    ])
+    expect(document.querySelectorAll('#trend-chart .trend-point.is-active')).toHaveLength(2)
+
+    chart.dispatchEvent(new dom.window.MouseEvent('mouseleave', { bubbles: true }))
+    expect(tooltip.hidden).toBe(true)
+    expect(document.querySelectorAll('#trend-chart .trend-point.is-active')).toHaveLength(0)
+    dom.window.close()
+  })
+
+  it('shows table counts without availability labels', async () => {
+    const snapshot = structuredClone(fixture)
+    snapshot.tableRows.recommendation_log = 4321
+    const { dom, errors } = await openDashboard(snapshot)
+    const { document } = dom.window
+    document.querySelector<HTMLButtonElement>('[data-view="catalog"]')!.click()
+
+    const recommendationLog = document.querySelector<HTMLButtonElement>('[data-table="recommendation_log"]')!
+    expect(recommendationLog.textContent).toContain('4,321 行')
+    expect(document.querySelector('#catalog-view')?.textContent).not.toContain('当前库不可用')
+    expect(document.querySelector('#schema-view')?.textContent).not.toContain('当前库不可用')
+    expect(errors).toEqual([])
     dom.window.close()
   })
 

@@ -26,6 +26,12 @@ Use 2-space indentation for YAML, JSON, Vue, and TypeScript; retain 4 spaces for
 
 Run the contract validator after every API change. Add focused tests with each new behavior, especially anonymous UUID headers, GCJ-02 location handling, reroll exhaustion, feedback submission, and loading/error states. Name TypeScript tests `*.spec.ts`. No coverage threshold exists yet; new tooling should establish one before CI enforcement.
 
+## Visual Review Guidelines
+
+For charts and other primarily visual UI work, default to user-led manual review. Complete the necessary code, build, type, and automated behavior checks, then provide a concise manual acceptance path and let the user judge appearance. Do not proactively control a browser, capture screenshots, or perform automated visual inspection unless the user explicitly identifies the work as a long-running task or asks to use Goal mode. Automated checks may still verify non-visual behavior, accessibility, and data correctness.
+
 ## Commit & Pull Request Guidelines
 
 The existing history uses Conventional Commit style (`docs: define v0.1 api contract`). Continue with concise prefixes such as `feat:`, `fix:`, `test:`, `docs:`, and `chore:`. Keep commits narrowly scoped. Pull requests should explain behavior and contract impact, link the relevant task or issue, list verification commands, and include screenshots for UI changes. Call out configuration changes and never commit secrets or generated build output.
+
+## Imported Claude Cowork project instructions

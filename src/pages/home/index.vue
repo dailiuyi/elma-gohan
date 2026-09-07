@@ -27,6 +27,9 @@
       <button class="go-button" :disabled="submitting" @click="retryTonight">再写一次</button>
       <button class="adjust-button" :disabled="submitting" @click="sheetOpen = true">调整条件</button>
     </view>
+    <view v-else-if="canOpenTonight" class="ask">
+      <button class="go-button" @click="goResult">打开这一页</button>
+    </view>
 
     <button class="privacy-link" @click="openPrivacy">关于这些数据</button>
 
@@ -90,7 +93,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import { createRecommendation } from '@/api/recommendation'
-import { ApiError, getUserFacingError } from '@/api/errors'
+import { ApiError, getUserFacingError, isIncompleteSearchError } from '@/api/errors'
 import { LocationService, LocationServiceError } from '@/services/location'
 import { PlatformService } from '@/services/platform'
 import { recommendationStore } from '@/stores/recommendation'
@@ -98,6 +101,7 @@ import type { LocationCoordinates } from '@/types/location'
 import type { CategoryFilterCode, CreateRecommendationRequest, Radius } from '@/types/recommendation'
 import { parseDislikes } from '@/utils/dislikes'
 import { currentMealSlot, slotKicker } from '@/utils/edition'
+import { consumeStayOnHome } from '@/utils/home-stay'
 import {
   budgetOptions,
   categoryOptions,
@@ -141,9 +145,13 @@ const categoryIndex = computed(() =>
   Math.max(0, categoryOptions.findIndex((option) => option.value === category.value)),
 )
 const selectedCategory = computed(() => categoryOptions[categoryIndex.value])
+const canOpenTonight = computed(
+  () => Boolean(recommendationStore.state.current) && !submitting.value,
+)
 
 function goResult() {
-  uni.redirectTo({ url: '/pages/result/index' })
+  if (recommendationStore.state.current) restored.value = true
+  uni.navigateTo({ url: '/pages/result/index' })
 }
 
 function buildRequest(location: LocationCoordinates): CreateRecommendationRequest {
@@ -240,6 +248,9 @@ async function openTonight(forceRefresh = false) {
     if (error instanceof ApiError) {
       requestError.value = error.response?.message ?? requestError.value
     }
+    if (isIncompleteSearchError(error)) {
+      sheetOpen.value = true
+    }
   } finally {
     submitting.value = false
   }
@@ -279,6 +290,11 @@ function openPrivacy() {
 }
 
 onMounted(() => {
+  if (consumeStayOnHome()) {
+    restored.value = Boolean(recommendationStore.hydrate() && recommendationStore.state.current)
+    hydrateFilters()
+    return
+  }
   hydrateFilters()
   if (!acceptanceMode) void openTonight()
 })

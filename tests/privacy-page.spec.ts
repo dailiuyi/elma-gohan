@@ -30,6 +30,7 @@ describe('privacy page', () => {
     const wrapper = mount(PrivacyPage)
 
     expect(wrapper.text()).toContain('高德地图和百度地图')
+    expect(wrapper.text()).toContain('百度 AI 搜索')
     expect(wrapper.text()).toContain('不会抓取网页正文、评论区或用户资料')
 
     await wrapper.find('.delete-button').trigger('click')

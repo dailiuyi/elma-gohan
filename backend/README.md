@@ -2,7 +2,7 @@
 
 当前百度异步补数、严格匹配与深挖检索配置以 [Evidence v0.4](../docs/evidence-reliability-v0.4.md) 为准。正文中的 V0.3 示例保留作历史说明。
 
-Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德与百度提供结构化 Evidence，`risk-v0.3.1` 只表达客观风险；`taste-v0.1` 和 `recommendation-v0.4.1` 负责匿名用户画像、近期历史、有限探索、个性化排序与确定性选择重放。Brave Web Search 仍只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，个性化规则见 [`../docs/V0.4-personalized-decision-loop.md`](../docs/V0.4-personalized-decision-loop.md)。
+Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德与百度提供结构化 Evidence，`risk-v0.3.1` 只表达客观风险；`taste-v0.1` 和 `recommendation-v0.4.1` 负责匿名用户画像、近期历史、有限探索、个性化排序与确定性选择重放。百度 AI 搜索（兼容 Brave Search）仍只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，个性化规则见 [`../docs/V0.4-personalized-decision-loop.md`](../docs/V0.4-personalized-decision-loop.md)。
 
 ## 构建与测试
 
@@ -32,10 +32,12 @@ mvn spring-boot:run   # 启动开发服务(默认 8080)
 | `BAIDU_RATE_LIMIT_MAX_WAIT_MS` | 单次百度 Place 请求等待全局限速许可的最长时间；超时按平台不可用处理 | `1000` |
 | `EVIDENCE_PROVIDER` | Evidence 实现：`file` 或 `empty` | `file` |
 | `EVIDENCE_FILE` | 标准化评论证据 JSON，可用外部文件覆盖 | `classpath:evidence/restaurant-evidence.json` |
-| `BRAVE_ENABLED` | 是否启用按需公开 Web Evidence | `false` |
-| `BRAVE_SEARCH_API_KEY` | Brave Search API Key，**只能放环境变量** | 空（自动降级） |
-| `BRAVE_CONNECT_TIMEOUT_MS` / `BRAVE_READ_TIMEOUT_MS` | Brave 连接/读取超时 | `1500` / `3000` |
-| `BRAVE_RESULT_COUNT` | 每个来源最多召回结果数 | `10` |
+| `BAIDU_AI_SEARCH_ENABLED` | 是否启用按需公开 Web Evidence | `false` |
+| `BAIDU_AI_SEARCH_API_KEY` | 百度 AI 搜索（千帆 AppBuilder）API Key，**只能放环境变量** | 空（自动降级） |
+| `BAIDU_AI_SEARCH_CONNECT_TIMEOUT_MS` / `BAIDU_AI_SEARCH_READ_TIMEOUT_MS` | 百度 AI 搜索连接/读取超时 | `1500` / `3000` |
+| `BAIDU_AI_SEARCH_BASE_URL` | 百度 AI 搜索服务地址 | `https://qianfan.baidubce.com` |
+| `DEEP_IMPROVED_SEARCH_ENABLED` | 启用店名与位置检索改进 | `true` |
+| `BAIDU_AI_SEARCH_RESULT_COUNT` | 每个来源最多召回结果数 | `10` |
 | `DEEP_EVIDENCE_CACHE_HOURS` / `DEEP_ANALYSIS_CACHE_HOURS` | Evidence / 分析缓存时长 | `12` / `6` |
 | `DB_TEST_NAME` | 测试库名(仅 `src/test/resources/application.yml`) | `elma_test` |
 
@@ -54,7 +56,7 @@ domain/
 provider/
   poi/             PoiProvider + AmapPoiProvider/AmapClient/AmapResponseMapper
   evidence/        File 评论 Evidence + 百度批量 Evidence + 实体匹配
-  deep/            Brave Search Provider + Web Entity Match
+  deep/            百度 AI / Brave Search Provider + Web Entity Match
 infrastructure/    JPA 实体/仓库、Taste/行为/历史、Evidence/深挖缓存、全局异常处理
 config/            Amap/Baidu/EntityResolution/Risk/Taste/Recommendation/DeepEvidence 配置属性
 ```
@@ -83,9 +85,9 @@ config/            Amap/Baidu/EntityResolution/Risk/Taste/Recommendation/DeepEvi
 
 ## 人工验收
 
-1. 设置 `AMAP_KEY`、`BAIDU_MAP_AK` 与 `DB_PASSWORD`；如需深挖，再设置 `BRAVE_ENABLED=true` 和 `BRAVE_SEARCH_API_KEY`，启动 `mvn spring-boot:run`。
+1. 设置 `AMAP_KEY`、`BAIDU_MAP_AK` 与 `DB_PASSWORD`；如需深挖，再设置 `BAIDU_AI_SEARCH_ENABLED=true` 和 `BAIDU_AI_SEARCH_API_KEY`，启动 `mvn spring-boot:run`。
 2. `curl -X POST localhost:8080/api/v1/recommendations -H "Content-Type: application/json" -H "X-Anonymous-User-Id: <uuid>" -d '{"latitude":28.2282,"longitude":112.9388}'` -> 201,返回一家真实餐厅。
 3. 检查响应中的 `evidenceSummary`；百度不可用时应为 `UNAVAILABLE`，推荐仍成功。
 4. 用返回的 `recommendationId` 调 `/behaviors` 记录 ACCEPT/NAVIGATE/SKIP，并调 `/feedback` 提交 `{"result":"LIKE","flavorTags":["SPICY"]}`；相同事件 ID 重试不重复落库。
-5. 对当前餐厅调用 `/api/v1/recommendations/<id>/deep-evidence`；三个来源先查询最近 31 天，严格门店匹配为 0 时各自最多追加一次不限时间查询，因此首次最多 6 次 Brave 调用；同一餐厅再次调用应命中缓存且不再查询。
+5. 对当前餐厅调用 `/api/v1/recommendations/<id>/deep-evidence`；默认按完整店名与城市/分店位置检索，空结果或失败时各来源最多回退一次品牌与位置查询；三个来源共享 4 秒预算，最多 6 次搜索调用；同一餐厅再次调用应命中缓存且不再查询。
 6. 调用 `DELETE /api/v1/users/me/data` 后，确认该匿名用户的推荐、行为、反馈、饮食历史和画像均被删除，其他用户及共享餐厅数据保留。

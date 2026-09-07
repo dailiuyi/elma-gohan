@@ -31,16 +31,31 @@ export class ApiError extends Error {
   }
 }
 
-export function isErrorResponse(value: unknown): value is ErrorResponse {
-  if (!value || typeof value !== 'object') return false
+export function parseResponseData(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return value
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return value
+  }
+}
 
-  const candidate = value as Partial<ErrorResponse>
+export function isErrorResponse(value: unknown): value is ErrorResponse {
+  const parsed = parseResponseData(value)
+  if (!parsed || typeof parsed !== 'object') return false
+
+  const candidate = parsed as Partial<ErrorResponse>
   return (
     typeof candidate.code === 'string' &&
     BACKEND_ERROR_CODES.has(candidate.code) &&
-    typeof candidate.message === 'string' &&
-    typeof candidate.traceId === 'string'
+    typeof candidate.message === 'string'
   )
+}
+
+export function isIncompleteSearchError(error: unknown): boolean {
+  return error instanceof ApiError && error.response?.code === 'POI_SEARCH_INCOMPLETE'
 }
 
 export function getUserFacingError(error: unknown): string {

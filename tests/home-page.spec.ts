@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ApiError } from '@/api/errors'
 import * as recommendationApi from '@/api/recommendation'
 import HomePage from '@/pages/home/index.vue'
 import { LocationService, LocationServiceError } from '@/services/location'
@@ -82,7 +83,7 @@ describe('home page tonight boot', () => {
     const wrapper = mount(HomePage)
 
     await flushPromises()
-    expect(wrapper.text()).toContain('先看附近')
+    expect(wrapper.text()).toContain('打开这一页')
     expect(createSpy).toHaveBeenCalledWith({
       latitude: 28.2282,
       longitude: 112.9388,
@@ -93,7 +94,7 @@ describe('home page tonight boot', () => {
       category: 'MEAL',
       dislikes: [],
     })
-    expect(uni.redirectTo).toHaveBeenCalledWith({ url: '/pages/result/index' })
+    expect(uni.navigateTo).toHaveBeenCalledWith({ url: '/pages/result/index' })
   })
 
   it('restores the same edition without creating another session', async () => {
@@ -117,7 +118,7 @@ describe('home page tonight boot', () => {
 
     expect(wrapper.text()).toContain('还是这一页')
     expect(createSpy).not.toHaveBeenCalled()
-    expect(uni.redirectTo).toHaveBeenCalledWith({ url: '/pages/result/index' })
+    expect(uni.navigateTo).toHaveBeenCalledWith({ url: '/pages/result/index' })
   })
 
   it('asks for location instead of writing a page', async () => {
@@ -175,6 +176,31 @@ describe('home page tonight boot', () => {
       category: 'MEAL',
       dislikes: ['粉', '面'],
     })
-    expect(uni.redirectTo).toHaveBeenCalledWith({ url: '/pages/result/index' })
+    expect(uni.navigateTo).toHaveBeenCalledWith({ url: '/pages/result/index' })
+  })
+
+  it('opens the filter sheet when nearby recall is incomplete', async () => {
+    vi.spyOn(LocationService, 'getCurrentLocation').mockResolvedValue({
+      latitude: 28.19197781032986,
+      longitude: 112.97924858940972,
+      accuracy: 12.4,
+    })
+    vi.spyOn(recommendationApi, 'createRecommendation').mockRejectedValue(
+      new ApiError('附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。', {
+        kind: 'BACKEND',
+        statusCode: 422,
+        response: {
+          code: 'POI_SEARCH_INCOMPLETE',
+          message: '附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。',
+          traceId: 'trace-incomplete',
+        },
+      }),
+    )
+    const wrapper = mount(HomePage)
+    await flushPromises()
+
+    expect(wrapper.find('.sheet').exists()).toBe(true)
+    expect(wrapper.find('.sheet-error').text()).toContain('还没完整翻到你选择的距离范围')
+    expect(uni.navigateTo).not.toHaveBeenCalled()
   })
 })

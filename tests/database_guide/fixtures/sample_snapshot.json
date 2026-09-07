@@ -93,7 +93,7 @@
       {"label": "LOWEST_CONSERVATIVE_RISK_FALLBACK", "selectionCount": 7},
       {"label": "SAFE_REGRET", "selectionCount": 3}
     ],
-    "note": "覆盖率只表示 V9 快照落盘覆盖，不等同于 shadow 成功率。"
+    "note": "覆盖率只表示已保存 V9 快照的会话占比，不表示 Shadow 算法的成功率或提升幅度。"
   },
   "locations": {
     "coordinateSystem": "WGS-84",

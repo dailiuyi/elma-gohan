@@ -3,9 +3,9 @@ param(
     [ValidateRange(1, 366)]
     [int]$Days = 30,
 
-    [string]$SshHost = 'root@39.108.101.149',
+    [string]$SshHost = 'elma-gohan',
 
-    [string]$SshKey = (Join-Path $env:USERPROFILE '.ssh\elma_gohan_ed25519'),
+    [string]$SshKey = '',
 
     [string]$RemoteEnvironmentFile = '/etc/elma-gohan/elma-gohan.env',
 
@@ -18,12 +18,15 @@ $ErrorActionPreference = 'Stop'
 if ($RemoteEnvironmentFile -notmatch '^/[A-Za-z0-9._/-]+$') {
     throw 'RemoteEnvironmentFile must be an absolute Linux path without spaces.'
 }
-if (-not (Test-Path -LiteralPath $SshKey -PathType Leaf)) {
+if (-not [string]::IsNullOrWhiteSpace($SshKey) -and -not (Test-Path -LiteralPath $SshKey -PathType Leaf)) {
     throw "SSH key not found: $SshKey"
 }
 
 $ssh = Get-Command ssh.exe -ErrorAction Stop
-$python = Get-Command py.exe -ErrorAction Stop
+$python = Get-Command py.exe -ErrorAction SilentlyContinue
+if ($null -eq $python) {
+    $python = Get-Command python.exe -ErrorAction Stop
+}
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $generator = Join-Path $scriptDirectory 'generate_dashboard.py'
 $outputPath = if ([System.IO.Path]::IsPathRooted($Output)) {
@@ -31,15 +34,15 @@ $outputPath = if ([System.IO.Path]::IsPathRooted($Output)) {
 } else {
     Join-Path $scriptDirectory $Output
 }
-$knownHosts = Join-Path (Split-Path -Parent $SshKey) 'known_hosts'
 $sshBaseArguments = @(
-    '-i', $SshKey,
     '-o', 'IdentitiesOnly=yes',
-    '-o', "UserKnownHostsFile=$knownHosts",
     '-o', 'StrictHostKeyChecking=accept-new',
     '-o', 'BatchMode=yes',
     '-o', 'ConnectTimeout=10'
 )
+if (-not [string]::IsNullOrWhiteSpace($SshKey)) {
+    $sshBaseArguments = @('-i', $SshKey) + $sshBaseArguments
+}
 
 function Invoke-RemoteShell {
     param([Parameter(Mandatory)][string]$Command)

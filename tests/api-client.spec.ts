@@ -86,6 +86,57 @@ describe('api client', () => {
     expect(getUserFacingError(error)).toContain('尚未完成全部检索')
   })
 
+  it('parses an incomplete POI search when WeChat returns the 422 body as a string', async () => {
+    vi.stubGlobal('uni', {
+      getStorageSync: vi.fn(() => USER_ID),
+      setStorageSync: vi.fn(),
+      request: vi.fn((options: UniApp.RequestOptions) => {
+        options.success?.({
+          statusCode: 422,
+          header: {},
+          cookies: [],
+          data: JSON.stringify({
+            code: 'POI_SEARCH_INCOMPLETE',
+            message: '附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。',
+            traceId: 'trace-string-body',
+          }),
+        })
+      }),
+    })
+
+    const error = await apiRequest({ path: '/recommendations' }).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ApiError)
+    if (!(error instanceof ApiError)) throw new Error('Expected ApiError')
+    expect(error.response?.code).toBe('POI_SEARCH_INCOMPLETE')
+    expect(getUserFacingError(error)).toContain('还没完整翻到你选择的距离范围')
+  })
+
+  it('still treats a 422 payload delivered via fail as a backend error', async () => {
+    vi.stubGlobal('uni', {
+      getStorageSync: vi.fn(() => USER_ID),
+      setStorageSync: vi.fn(),
+      request: vi.fn((options: UniApp.RequestOptions) => {
+        options.fail?.({
+          errMsg: 'request:fail',
+          statusCode: 422,
+          data: {
+            code: 'POI_SEARCH_INCOMPLETE',
+            message: '附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。',
+            traceId: 'trace-fail',
+          },
+        } as UniApp.GeneralCallbackResult)
+      }),
+    })
+
+    const error = await apiRequest({ path: '/recommendations' }).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(ApiError)
+    if (!(error instanceof ApiError)) throw new Error('Expected ApiError')
+    expect(error.kind).toBe('BACKEND')
+    expect(error.response?.code).toBe('POI_SEARCH_INCOMPLETE')
+  })
+
   it('preserves the duplicate feedback business error', async () => {
     vi.stubGlobal('uni', {
       getStorageSync: vi.fn(() => USER_ID),

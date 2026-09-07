@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ApiError } from '@/api/errors'
 import * as recommendationApi from '@/api/recommendation'
 import ResultPage from '@/pages/result/index.vue'
 import { NavigationService } from '@/services/navigation'
@@ -11,6 +12,7 @@ vi.mock('@dcloudio/uni-app', () => ({
   onLoad: (callback: () => void) => callback(),
   onUnload: vi.fn(),
   onShareAppMessage: vi.fn(),
+  onBackPress: vi.fn(),
 }))
 
 const request: CreateRecommendationRequest = {
@@ -123,6 +125,32 @@ describe('result page acceptance states', () => {
     expect(wrapper.find('.evidence-section').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('口味 4.0')
     expect(wrapper.find('.deep-evidence-button').exists()).toBe(true)
+  })
+
+  it('keeps the condition sheet open when 1km recall is incomplete', async () => {
+    recommendationStore.setCurrent(recommendation({ alternativesRemaining: 5 }), request)
+    vi.spyOn(recommendationApi, 'createRecommendation').mockRejectedValue(
+      new ApiError('附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。', {
+        kind: 'BACKEND',
+        statusCode: 422,
+        response: {
+          code: 'POI_SEARCH_INCOMPLETE',
+          message: '附近餐馆已经很多，本次还没完整翻到你选择的距离范围。试试更近一点，或选择更具体的品类。',
+          traceId: 'trace-incomplete',
+        },
+      }),
+    )
+    const wrapper = mount(ResultPage)
+
+    await wrapper.find('.text-btn').trigger('click')
+    await wrapper.findAll('.sheet .chips')[0].findAll('button')[1].trigger('click')
+    await wrapper.find('.sheet .go-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.refresh-overlay').exists()).toBe(false)
+    expect(wrapper.find('.sheet').exists()).toBe(true)
+    expect(wrapper.find('.sheet-error').text()).toContain('还没完整翻到你选择的距离范围')
+    expect(wrapper.text()).toContain('老街牛肉粉')
   })
 
   it('opens the independent deep-evidence page for the frozen restaurant', async () => {

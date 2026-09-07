@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>ELMA Gohan 离线运营数据看板</title>
+  <title>ELMA Gohan 推荐系统运营数据</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -84,6 +84,23 @@
     .hero p { color: var(--muted); max-width: 780px; }
     .snapshot-stack { display: grid; justify-items: end; gap: 7px; padding-top: 6px; }
     .snapshot { color: var(--muted); white-space: nowrap; font-size: 13px; }
+    .refresh-controls { display: grid; justify-items: end; gap: 5px; margin-bottom: 2px; }
+    .refresh-controls[hidden] { display: none; }
+    .refresh-button {
+      border: 1px solid var(--primary);
+      border-radius: 10px;
+      background: var(--primary);
+      color: white;
+      min-width: 132px;
+      padding: 8px 13px;
+      font-weight: 700;
+      transition: opacity .16s ease, transform .16s ease;
+    }
+    .refresh-button:hover:not(:disabled) { transform: translateY(-1px); }
+    .refresh-button:disabled { cursor: wait; opacity: .72; }
+    .refresh-status { color: var(--muted); font-size: 11px; max-width: 300px; text-align: right; }
+    .refresh-status.is-success { color: var(--success); }
+    .refresh-status.is-error { color: var(--danger); }
     .offline-badge {
       display: inline-flex;
       align-items: center;
@@ -337,12 +354,36 @@
     .segment[aria-pressed="true"] { background: var(--surface); color: var(--primary); box-shadow: 0 2px 8px rgba(31, 42, 68, .08); }
 
     .chart-stage { position: relative; min-height: 270px; }
-    #trend-chart { display: block; width: 100%; height: auto; min-height: 250px; overflow: visible; }
+    #trend-chart { display: block; width: 100%; height: auto; min-height: 250px; overflow: visible; cursor: crosshair; }
     .chart-grid-line { stroke: var(--chart-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
     .chart-axis-label { fill: var(--muted); font: 11px var(--sans); }
     .trend-line { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
     .trend-area { opacity: 0; animation: fade-area .7s .25s ease forwards; }
-    .trend-point { stroke: var(--surface); stroke-width: 2; vector-effect: non-scaling-stroke; opacity: 0; animation: pop-point .35s ease forwards; }
+    .trend-point { stroke: var(--surface); stroke-width: 2; vector-effect: non-scaling-stroke; opacity: 0; animation: pop-point .35s ease forwards; transition: r .12s ease, filter .12s ease; }
+    .trend-point.is-active { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--text) 42%, transparent)); }
+    .trend-hover-guide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+    .trend-tooltip {
+      position: absolute;
+      z-index: 2;
+      min-width: 138px;
+      max-width: min(230px, calc(100% - 16px));
+      padding: 9px 11px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      box-shadow: var(--shadow);
+      color: var(--text);
+      font-size: 11px;
+      line-height: 1.45;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+    .trend-tooltip[hidden] { display: none; }
+    .trend-tooltip strong { display: block; margin-bottom: 4px; font-size: 12px; }
+    .trend-tooltip-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .trend-tooltip-label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+    .trend-tooltip-label i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .trend-tooltip-row b { font-variant-numeric: tabular-nums; }
     .chart-legend { display: flex; flex-wrap: wrap; gap: 12px; min-height: 24px; color: var(--muted); font-size: 12px; }
     .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
     .chart-legend i { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
@@ -400,7 +441,6 @@
     .location-hidden-row td { color: var(--muted); font-style: italic; }
     .page-footer { color: var(--muted); text-align: center; font-size: 11px; margin-top: 18px; }
 
-    @keyframes draw-line { to { stroke-dashoffset: 0; } }
     @keyframes fade-area { to { opacity: .12; } }
     @keyframes pop-point { from { transform: scale(.4); } to { transform: scale(1); opacity: 1; } }
     @keyframes grow-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
@@ -428,6 +468,9 @@
       .dashboard-card.span-2, .dashboard-card.span-3 { grid-column: auto; }
       .toolbar { align-items: stretch; flex-direction: column; }
       .search { min-width: 0; width: 100%; }
+      .hero { flex-direction: column; }
+      .snapshot-stack, .refresh-controls { justify-items: start; }
+      .refresh-status { text-align: left; }
       .panel { padding: 14px; border-radius: 14px; }
       .field-list li { grid-template-columns: 1fr; gap: 1px; }
       .location-head { flex-direction: column; }
@@ -505,6 +548,10 @@
         <p>集中查看推荐表现、用户反馈和证据补数；筛选趋势、导出汇总，或查看各表的查询语句。</p>
       </div>
       <div class="snapshot-stack">
+        <div id="dashboard-refresh-controls" class="refresh-controls" hidden>
+          <button id="dashboard-refresh-button" class="refresh-button" type="button">刷新生产数据</button>
+          <span id="dashboard-refresh-status" class="refresh-status" aria-live="polite"></span>
+        </div>
         <span class="offline-badge">运营快照</span>
         <div id="snapshot-label" class="snapshot">正在读取快照…</div>
       </div>
@@ -518,17 +565,17 @@
     </section>
     <details class="acceptance-note"><summary>匹配验收口径与数据说明</summary><p>匹配验收目标：正确覆盖率 ≥80%、自动接受正确率 ≥98%。队列数量与缓存命中不代表匹配正确率；人工标注验收尚未完成。V10 新增 baidu_call_state、baidu_query_cache、baidu_enrichment_task，映射缓存增加 match_algorithm_version。</p></details>
     <section class="stats" aria-label="运营概况">
-      <div class="stat"><strong id="kpi-total-recommendations">—</strong><span>累计推荐</span><small>当前保留数据</small></div>
-      <div class="stat"><strong id="kpi-total-users">—</strong><span>累计匿名标识</span><small>不等同自然人</small></div>
-      <div class="stat"><strong id="kpi-period-recommendations">—</strong><span>统计期推荐</span><small id="kpi-period-label">最近窗口</small></div>
-      <div class="stat"><strong id="kpi-active-users">—</strong><span>统计期活跃</span><small>去重匿名标识</small></div>
-      <div class="stat"><strong id="kpi-acceptance-rate">—</strong><span>接受会话率</span><small>ACCEPT / 推荐会话</small></div>
-      <div class="stat"><strong id="kpi-feedback-rate">—</strong><span>反馈覆盖率</span><small>有反馈的会话</small></div>
+      <div class="stat"><strong id="kpi-total-recommendations">—</strong><span>累计推荐会话</span><small>数据库当前保留的会话</small></div>
+      <div class="stat"><strong id="kpi-total-users">—</strong><span>累计匿名标识</span><small>匿名标识不代表真实用户数</small></div>
+      <div class="stat"><strong id="kpi-period-recommendations">—</strong><span>统计期推荐会话</span><small id="kpi-period-label">当前统计窗口</small></div>
+      <div class="stat"><strong id="kpi-active-users">—</strong><span>统计期活跃标识</span><small>按匿名标识去重</small></div>
+      <div class="stat"><strong id="kpi-acceptance-rate">—</strong><span>接受会话比例</span><small>出现 ACCEPT 行为的会话占比</small></div>
+      <div class="stat"><strong id="kpi-feedback-rate">—</strong><span>反馈会话比例</span><small>出现显式反馈的会话占比</small></div>
     </section>
 
     <div class="toolbar">
 <strong id="active-view-title">运营总览</strong>
-      <input id="search" class="search" type="search" placeholder="搜索表名或用途，例如：反馈、risk、用户" aria-label="搜索表">
+      <input id="search" class="search" type="search" placeholder="搜索表名或用途，例如：反馈、risk、用户" aria-label="搜索数据表">
     </div>
 
     <section id="overview-view" class="view">
@@ -536,7 +583,7 @@
         <div class="status-main">
           <span id="snapshot-status-dot" class="status-dot"></span>
           <div class="status-copy">
-            <strong id="snapshot-status-title">快照状态</strong>
+            <strong id="snapshot-status-title">数据快照</strong>
             <span id="snapshot-status-copy">正在读取内嵌数据</span>
           </div>
         </div>
@@ -547,11 +594,11 @@
       <div class="dashboard-grid">
         <article class="dashboard-card panel span-2">
           <header class="card-head">
-            <div><div class="card-kicker">Trend</div><h2>每日运营趋势</h2><p>零值日期也会保留，避免折线误连。</p></div>
+            <div><div class="card-kicker">Trend</div><h2>每日运营趋势</h2><p>图表补全统计期内的零值日期，折线不会跨过日期连接数据点。</p></div>
             <div class="segmented" aria-label="趋势指标">
               <button class="segment" type="button" data-trend-mode="traffic" aria-pressed="true">推荐</button>
               <button class="segment" type="button" data-trend-mode="users" aria-pressed="false">用户</button>
-              <button class="segment" type="button" data-trend-mode="actions" aria-pressed="false">行动</button>
+              <button class="segment" type="button" data-trend-mode="actions" aria-pressed="false">行为</button>
             </div>
           </header>
           <div class="data-controls">
@@ -568,33 +615,33 @@
         </article>
 
         <article class="dashboard-card panel">
-          <header class="card-head"><div><div class="card-kicker">Conversion</div><h2>会话转化</h2><p>先按会话聚合，避免行为与反馈重复计数。</p></div></header>
+          <header class="card-head"><div><div class="card-kicker">Conversion</div><h2>会话行为比例</h2><p>数据先按推荐会话聚合，同一会话中的多条行为或反馈只计数一次。</p></div></header>
           <div id="funnel-list" class="funnel-list"></div>
           <div id="funnel-micro" class="micro-grid"></div>
         </article>
 
         <article class="dashboard-card panel">
-          <header class="card-head"><div><div class="card-kicker">Behavior</div><h2>行为事件</h2><p>统计期内服务端与客户端事件分布。</p></div></header>
+          <header class="card-head"><div><div class="card-kicker">Behavior</div><h2>行为事件</h2><p>该数据统计服务端和客户端在当前窗口内记录的事件。</p></div></header>
           <div id="behavior-bars" class="bar-list"></div>
         </article>
 
         <article class="dashboard-card panel">
-          <header class="card-head"><div><div class="card-kicker">Feedback</div><h2>显式反馈</h2><p>只读取 user_feedback，避免与行为镜像双计。</p></div></header>
+          <header class="card-head"><div><div class="card-kicker">Feedback</div><h2>显式反馈</h2><p>该数据只读取 user_feedback，不重复计入 user_behavior 中的反馈映射事件。</p></div></header>
           <div id="feedback-chart" class="feedback-layout"></div>
         </article>
 
         <article class="dashboard-card panel">
-          <header class="card-head"><div><div class="card-kicker">Risk</div><h2>初始推荐风险</h2><p>按 recommendation_log 风险分桶。</p></div></header>
+          <header class="card-head"><div><div class="card-kicker">Risk</div><h2>初始推荐风险</h2><p>该分布使用 recommendation_log 中保存的初始风险分进行分桶统计。</p></div></header>
           <div id="risk-bars" class="bar-list"></div>
         </article>
 
         <article class="dashboard-card panel">
-          <header class="card-head"><div><div class="card-kicker">Supply</div><h2>候选品类</h2><p>数据库聚合后的候选池 Top 品类。</p></div></header>
+          <header class="card-head"><div><div class="card-kicker">Supply</div><h2>候选池品类</h2><p>该数据按候选记录数排序，展示数据库中数量较多的品类。</p></div></header>
           <div id="category-bars" class="bar-list"></div>
         </article>
 
         <article class="dashboard-card panel span-2">
-          <header class="card-head"><div><div class="card-kicker">Versions</div><h2>算法与选择模式</h2><p>统计期请求按版本组合汇总。</p></div></header>
+          <header class="card-head"><div><div class="card-kicker">Versions</div><h2>算法版本与选择模式</h2><p>表格按推荐、风险、口味算法版本和选择模式汇总当前窗口内的会话数。</p></div></header>
           <div class="data-table-wrap">
             <table class="data-table">
               <thead><tr><th>推荐算法</th><th>风险算法</th><th>口味算法</th><th>选择模式</th><th>会话</th></tr></thead>
@@ -604,7 +651,7 @@
         </article>
 
         <article class="dashboard-card panel">
-          <header class="card-head"><div><div class="card-kicker">Shadow</div><h2>V9 实验快照</h2><p>覆盖不等同于成功率。</p></div></header>
+          <header class="card-head"><div><div class="card-kicker">Shadow</div><h2>V9 实验快照</h2><p>覆盖率只表示已保存快照的会话占比，不表示 Shadow 算法的成功率或提升幅度。</p></div></header>
           <div id="shadow-summary" class="shadow-summary"></div>
           <div id="shadow-reasons" class="bar-list" style="margin-top:14px"></div>
           <p id="shadow-note" class="card-note"></p>
@@ -638,8 +685,8 @@
     <section id="locations-view" class="view panel" data-module="database-guide" hidden>
       <header class="location-head">
         <div>
-          <h2>匿名用户地级市分布</h2>
-          <p>请求坐标先在 PostgreSQL 聚合为 0.1° 小结果集，再由本地行政区索引归属并合并到地级市。匿名标识按主要活动城市互斥归属，请求数按实际发生城市统计。</p>
+          <h2>匿名标识的地级市分布</h2>
+          <p>请求坐标先在 PostgreSQL 中聚合为精度 0.1° 的结果集，再由本地行政区索引映射到地级市。每个匿名标识只归入一个主要活动城市；推荐请求则按实际发生的城市统计。</p>
         </div>
         <div class="metric-switch" aria-label="地图指标">
           <button class="metric-button" type="button" data-location-metric="anonymousIds" aria-pressed="true">匿名标识</button>
@@ -655,13 +702,13 @@
           </div>
           <span id="map-zoom-label" class="map-zoom-label">100%</span>
           <svg id="user-location-map" viewBox="0 0 860 620" tabindex="0" role="img" aria-labelledby="location-map-title location-map-desc">
-            <title id="location-map-title">ELMA Gohan 匿名用户地级市分布地图</title>
+            <title id="location-map-title">ELMA Gohan 匿名标识的地级市分布地图</title>
             <desc id="location-map-desc">按地级市展示匿名客户端标识或推荐请求数量。可滚轮缩放、拖拽和键盘平移；低样本城市以虚线气泡标记。</desc>
             <g id="location-map-viewport"></g>
           </svg>
           <div class="map-caption">
             <span id="location-legend">气泡面积表示匿名标识数量</span>
-            <span>气泡使用地级行政区锚点，不显示用户网格坐标</span>
+            <span>气泡显示在地级行政区锚点上，不代表用户坐标</span>
           </div>
         </div>
         <aside id="location-detail" class="location-aside" aria-live="polite"></aside>
@@ -697,7 +744,7 @@
       <div class="guide-grid">
         <section>
           <h2>1. 从 Windows 连接</h2>
-          <p class="kind">先在 PowerShell 进入服务器，再以只读会话连接数据库。</p>
+          <p class="kind">先通过 PowerShell 连接服务器，再使用只读会话连接 PostgreSQL。</p>
           <pre><code>ssh elma-gohan
 
 # 以下命令在服务器中执行
@@ -716,7 +763,7 @@ unset DB_PASSWORD</code></pre>
         </section>
         <section>
           <h2>2. 进入 psql 后</h2>
-          <p class="kind">反斜杠开头的是 psql 命令，不加分号；SQL 要加分号。</p>
+          <p class="kind">反斜杠开头的 psql 命令不需要分号，SQL 语句需要以分号结尾。</p>
           <pre><code>\conninfo
 SHOW default_transaction_read_only;
 SHOW timezone;
@@ -730,7 +777,7 @@ SHOW timezone;
 SELECT count(*) FROM recommendation_log;
 
 \q                  -- 退出</code></pre>
-          <div class="warning"><strong>生产库注意：</strong>确认 <code>default_transaction_read_only</code> 为 <code>on</code>。不要执行 <code>UPDATE</code>、<code>DELETE</code>、<code>TRUNCATE</code>、<code>DROP</code>；查看 JSON 或明细时先加 <code>LIMIT</code>。</div>
+          <div class="warning"><strong>生产库操作限制：</strong>连接后先确认 <code>default_transaction_read_only</code> 为 <code>on</code>。不要执行 <code>UPDATE</code>、<code>DELETE</code>、<code>TRUNCATE</code> 或 <code>DROP</code>；查询 JSON 和明细记录时需要添加 <code>LIMIT</code>。</div>
         </section>
       </div>
     </section>
@@ -738,7 +785,7 @@ SELECT count(*) FROM recommendation_log;
     <section id="queries-view" class="view panel" data-module="database-guide" hidden>
       <div class="queries">
         <article class="query-item">
-          <h3>匿名用户规模与时间范围</h3>
+          <h3>匿名标识数量与时间范围</h3>
           <pre><code>SELECT
   count(*) AS recommendation_count,
   count(DISTINCT anonymous_user_id) AS anonymous_ids,
@@ -747,7 +794,7 @@ SELECT count(*) FROM recommendation_log;
 FROM recommendation_log;</code></pre>
         </article>
         <article class="query-item">
-          <h3>每天新增、活跃和请求量</h3>
+          <h3>每日新增标识、活跃标识和推荐请求</h3>
           <pre><code>WITH first_seen AS (
   SELECT anonymous_user_id, min(created_at)::date AS first_date
   FROM recommendation_log
@@ -776,7 +823,7 @@ ORDER BY d.day;</code></pre>
 FROM recommendation_log
 GROUP BY lat_grid, lon_grid
 ORDER BY anonymous_ids DESC, requests DESC;</code></pre>
-          <p>生成器只接收这些聚合网格，再通过本地行政区索引映射并合并到地级市；HTML 不保存网格经纬度。</p>
+          <p>生成器只接收聚合后的网格数据，并通过本地行政区索引将网格映射到地级市。HTML 不保存网格经纬度。</p>
         </article>
         <article class="query-item">
           <h3>查看最近推荐结果，不显示精确坐标和完整 UUID</h3>
@@ -806,7 +853,7 @@ GROUP BY result
 ORDER BY count(*) DESC;</code></pre>
         </article>
         <article class="query-item">
-          <h3>快速看每张表的估算行数</h3>
+          <h3>查看每张表的估算行数</h3>
           <pre><code>SELECT relname AS table_name,
        n_live_tup AS estimated_rows
 FROM pg_stat_user_tables
@@ -814,7 +861,7 @@ ORDER BY n_live_tup DESC;</code></pre>
         </article>
       </div>
     </section>
-    <footer class="page-footer">本文件不连接网络；重新运行 generate_dashboard.py 才会刷新数据。</footer>
+    <footer class="page-footer">直接打开该文件时，页面不会连接网络。通过本机看板服务打开时，可以点击按钮刷新只读生产快照。</footer>
   </div>
   </main>
 
@@ -824,7 +871,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
   </script>
   <!-- ELMA_DASHBOARD_DATA_START -->
 <script id="elma-dashboard-data" type="application/json">
-{"schemaVersion":1,"meta":{"snapshotAt":"2026-09-03T20:30:00+08:00","periodStart":"2026-08-28","periodEnd":"2026-09-03","windowDays":7,"databaseName":"elma_test","serverVersion":"17.6","timezone":"Asia/Shanghai","flywayVersion":9,"readOnlyVerified":true,"sourceMode":"fixture","sourceLabel":"本地验收聚合快照","queryCount":23,"queryDurationMs":86,"warnings":[]},"overview":{"totalRecommendations":18,"totalAnonymousIds":7,"totalRestaurants":12,"totalFeedbacks":6,"totalReturningIds":4,"totalReturningRate":0.5714,"averageRequestsPerId":2.57,"averageCandidateCount":5.2,"firstRequestAt":"2026-08-20T12:00:00","lastRequestAt":"2026-09-03T19:40:00","periodRecommendations":12,"periodActiveIds":5,"periodNewIds":2,"periodReturningIds":3},"funnel":{"recommendationSessions":12,"acceptedSessions":5,"navigatedSessions":3,"rerolledSessions":4,"feedbackSessions":4,"feedbackCount":5,"dislikedSessions":1,"rerollCount":7,"averageRerolls":0.58,"acceptanceRate":0.4167,"navigationRate":0.25,"feedbackRate":0.3333},"daily":[{"metricDate":"2026-08-28","recommendations":0,"activeIds":0,"newIds":0,"accepts":0,"navigations":0,"rerolls":0,"feedbacks":0,"dislikes":0},{"metricDate":"2026-08-29","recommendations":1,"activeIds":1,"newIds":1,"accepts":0,"navigations":0,"rerolls":1,"feedbacks":0,"dislikes":0},{"metricDate":"2026-08-30","recommendations":2,"activeIds":2,"newIds":0,"accepts":1,"navigations":1,"rerolls":0,"feedbacks":1,"dislikes":0},{"metricDate":"2026-08-31","recommendations":1,"activeIds":1,"newIds":0,"accepts":1,"navigations":0,"rerolls":2,"feedbacks":1,"dislikes":0},{"metricDate":"2026-09-01","recommendations":3,"activeIds":2,"newIds":1,"accepts":1,"navigations":1,"rerolls":1,"feedbacks":1,"dislikes":0},{"metricDate":"2026-09-02","recommendations":2,"activeIds":2,"newIds":0,"accepts":1,"navigations":0,"rerolls":2,"feedbacks":1,"dislikes":1},{"metricDate":"2026-09-03","recommendations":3,"activeIds":3,"newIds":0,"accepts":1,"navigations":1,"rerolls":1,"feedbacks":1,"dislikes":0}],"behaviors":[{"label":"RECOMMENDED","eventCount":19,"anonymousIds":5},{"label":"REROLL","eventCount":7,"anonymousIds":3},{"label":"ACCEPT","eventCount":5,"anonymousIds":4},{"label":"NAVIGATE","eventCount":3,"anonymousIds":3},{"label":"SKIP","eventCount":2,"anonymousIds":2}],"feedback":[{"label":"LIKE","feedbackCount":3,"anonymousIds":3},{"label":"NORMAL","feedbackCount":1,"anonymousIds":1},{"label":"DISLIKE","feedbackCount":1,"anonymousIds":1}],"risks":[{"label":"[0,20]","recommendationCount":5,"averageScore":14.2},{"label":"(20,40]","recommendationCount":4,"averageScore":31.5},{"label":"(40,60]","recommendationCount":2,"averageScore":48.5},{"label":"\u003e60","recommendationCount":1,"averageScore":66}],"riskCalibration":[{"riskAlgorithmVersion":"risk-v0.3.1","riskBucket":"[0,20]","feedbackCount":3,"dislikeCount":0,"dislikeRate":0}],"categories":[{"label":"湘菜","candidateCount":21,"shownCount":6,"sessionCount":9},{"label":"粉面","candidateCount":14,"shownCount":4,"sessionCount":7},{"label":"烧烤","candidateCount":9,"shownCount":2,"sessionCount":5}],"algorithms":[{"recommendationAlgorithmVersion":"recommendation-v0.4.1","riskAlgorithmVersion":"risk-v0.3.1","tasteAlgorithmVersion":"taste-v0.1","selectionMode":"PERSONALIZED","recommendationCount":9},{"recommendationAlgorithmVersion":"recommendation-v0.4.1","riskAlgorithmVersion":"risk-v0.3.1","tasteAlgorithmVersion":"taste-v0.1","selectionMode":"DEFAULT","recommendationCount":3}],"shadow":{"available":true,"summary":{"periodRecommendations":12,"totalSnapshots":10,"coveredRecommendations":10,"noSelectable":0,"sameFirstChoice":4,"changedFirstChoice":6,"coverageRate":0.8333},"variants":[{"experimentKey":"safe-regret-v0.5","variant":"SHADOW","servedRiskAlgorithmVersion":"risk-v0.3.1","shadowRiskAlgorithmVersion":"risk-v0.5","servedRecommendationAlgorithmVersion":"recommendation-v0.4.1","shadowRecommendationAlgorithmVersion":"recommendation-v0.5","snapshotCount":10}],"selectionReasons":[{"label":"LOWEST_CONSERVATIVE_RISK_FALLBACK","selectionCount":7},{"label":"SAFE_REGRET","selectionCount":3}],"note":"覆盖率只表示 V9 快照落盘覆盖，不等同于 shadow 成功率。"},"locations":{"coordinateSystem":"WGS-84","sourceCoordinateSystem":"GCJ-02","aggregationLevel":"prefecture","gridPrecision":1,"minimumAnonymousIds":1,"lowSampleThreshold":3,"totalAnonymousIds":7,"totalRequests":18,"cityCount":3,"sourceGridCount":3,"mappedAnonymousIds":7,"mappedRequests":18,"locatedAnonymousIds":7,"locatedRequests":18,"unmatchedGridCount":0,"unmatchedGridUserEntries":0,"unmatchedPrimaryIds":0,"unmatchedGridRequests":0,"hiddenGridCount":0,"hiddenGridUserEntries":0,"hiddenPrimaryIds":0,"hiddenGridRequests":0,"points":[{"code":"156430100","label":"长沙市","province":"湖南省","latitude":28.23316,"longitude":113.16196,"anonymousIds":4,"activeIdEntries":5,"requests":12,"sourceGridCount":1,"lowSample":false},{"code":"156440100","label":"广州市","province":"广东省","latitude":23.34172,"longitude":113.53379,"anonymousIds":2,"activeIdEntries":2,"requests":4,"sourceGridCount":1,"lowSample":true},{"code":"156110000","label":"北京市","province":"北京市","latitude":40.17431,"longitude":116.40141,"anonymousIds":1,"activeIdEntries":1,"requests":2,"sourceGridCount":1,"lowSample":true}]},"tableRows":{"restaurant":12,"riskResult":36,"recommendationLog":18,"recommendationCandidate":56,"userFeedback":6,"userPreference":2,"externalEntityMapping":14,"restaurantDeepEvidence":3,"restaurantDeepAnalysis":2,"userTasteProfile":5,"userBehavior":36,"userFoodHistory":4,"restaurantFlavorObservation":3,"recommendationDecisionSnapshot":10,"flywaySchemaHistory":9},"capabilities":{"behaviorMetrics":true,"riskCalibration":true,"shadowSnapshots":true}}
+{"schemaVersion":1,"meta":{"snapshotAt":"2026-09-03T20:30:00+08:00","periodStart":"2026-08-28","periodEnd":"2026-09-03","windowDays":7,"databaseName":"elma_test","serverVersion":"17.6","timezone":"Asia/Shanghai","flywayVersion":9,"readOnlyVerified":true,"sourceMode":"fixture","sourceLabel":"本地验收聚合快照","queryCount":23,"queryDurationMs":86,"warnings":[]},"overview":{"totalRecommendations":18,"totalAnonymousIds":7,"totalRestaurants":12,"totalFeedbacks":6,"totalReturningIds":4,"totalReturningRate":0.5714,"averageRequestsPerId":2.57,"averageCandidateCount":5.2,"firstRequestAt":"2026-08-20T12:00:00","lastRequestAt":"2026-09-03T19:40:00","periodRecommendations":12,"periodActiveIds":5,"periodNewIds":2,"periodReturningIds":3},"funnel":{"recommendationSessions":12,"acceptedSessions":5,"navigatedSessions":3,"rerolledSessions":4,"feedbackSessions":4,"feedbackCount":5,"dislikedSessions":1,"rerollCount":7,"averageRerolls":0.58,"acceptanceRate":0.4167,"navigationRate":0.25,"feedbackRate":0.3333},"daily":[{"metricDate":"2026-08-28","recommendations":0,"activeIds":0,"newIds":0,"accepts":0,"navigations":0,"rerolls":0,"feedbacks":0,"dislikes":0},{"metricDate":"2026-08-29","recommendations":1,"activeIds":1,"newIds":1,"accepts":0,"navigations":0,"rerolls":1,"feedbacks":0,"dislikes":0},{"metricDate":"2026-08-30","recommendations":2,"activeIds":2,"newIds":0,"accepts":1,"navigations":1,"rerolls":0,"feedbacks":1,"dislikes":0},{"metricDate":"2026-08-31","recommendations":1,"activeIds":1,"newIds":0,"accepts":1,"navigations":0,"rerolls":2,"feedbacks":1,"dislikes":0},{"metricDate":"2026-09-01","recommendations":3,"activeIds":2,"newIds":1,"accepts":1,"navigations":1,"rerolls":1,"feedbacks":1,"dislikes":0},{"metricDate":"2026-09-02","recommendations":2,"activeIds":2,"newIds":0,"accepts":1,"navigations":0,"rerolls":2,"feedbacks":1,"dislikes":1},{"metricDate":"2026-09-03","recommendations":3,"activeIds":3,"newIds":0,"accepts":1,"navigations":1,"rerolls":1,"feedbacks":1,"dislikes":0}],"behaviors":[{"label":"RECOMMENDED","eventCount":19,"anonymousIds":5},{"label":"REROLL","eventCount":7,"anonymousIds":3},{"label":"ACCEPT","eventCount":5,"anonymousIds":4},{"label":"NAVIGATE","eventCount":3,"anonymousIds":3},{"label":"SKIP","eventCount":2,"anonymousIds":2}],"feedback":[{"label":"LIKE","feedbackCount":3,"anonymousIds":3},{"label":"NORMAL","feedbackCount":1,"anonymousIds":1},{"label":"DISLIKE","feedbackCount":1,"anonymousIds":1}],"risks":[{"label":"[0,20]","recommendationCount":5,"averageScore":14.2},{"label":"(20,40]","recommendationCount":4,"averageScore":31.5},{"label":"(40,60]","recommendationCount":2,"averageScore":48.5},{"label":"\u003e60","recommendationCount":1,"averageScore":66}],"riskCalibration":[{"riskAlgorithmVersion":"risk-v0.3.1","riskBucket":"[0,20]","feedbackCount":3,"dislikeCount":0,"dislikeRate":0}],"categories":[{"label":"湘菜","candidateCount":21,"shownCount":6,"sessionCount":9},{"label":"粉面","candidateCount":14,"shownCount":4,"sessionCount":7},{"label":"烧烤","candidateCount":9,"shownCount":2,"sessionCount":5}],"algorithms":[{"recommendationAlgorithmVersion":"recommendation-v0.4.1","riskAlgorithmVersion":"risk-v0.3.1","tasteAlgorithmVersion":"taste-v0.1","selectionMode":"PERSONALIZED","recommendationCount":9},{"recommendationAlgorithmVersion":"recommendation-v0.4.1","riskAlgorithmVersion":"risk-v0.3.1","tasteAlgorithmVersion":"taste-v0.1","selectionMode":"DEFAULT","recommendationCount":3}],"shadow":{"available":true,"summary":{"periodRecommendations":12,"totalSnapshots":10,"coveredRecommendations":10,"noSelectable":0,"sameFirstChoice":4,"changedFirstChoice":6,"coverageRate":0.8333},"variants":[{"experimentKey":"safe-regret-v0.5","variant":"SHADOW","servedRiskAlgorithmVersion":"risk-v0.3.1","shadowRiskAlgorithmVersion":"risk-v0.5","servedRecommendationAlgorithmVersion":"recommendation-v0.4.1","shadowRecommendationAlgorithmVersion":"recommendation-v0.5","snapshotCount":10}],"selectionReasons":[{"label":"LOWEST_CONSERVATIVE_RISK_FALLBACK","selectionCount":7},{"label":"SAFE_REGRET","selectionCount":3}],"note":"覆盖率只表示已保存 V9 快照的会话占比，不表示 Shadow 算法的成功率或提升幅度。"},"locations":{"coordinateSystem":"WGS-84","sourceCoordinateSystem":"GCJ-02","aggregationLevel":"prefecture","gridPrecision":1,"minimumAnonymousIds":1,"lowSampleThreshold":3,"totalAnonymousIds":7,"totalRequests":18,"cityCount":3,"sourceGridCount":3,"mappedAnonymousIds":7,"mappedRequests":18,"locatedAnonymousIds":7,"locatedRequests":18,"unmatchedGridCount":0,"unmatchedGridUserEntries":0,"unmatchedPrimaryIds":0,"unmatchedGridRequests":0,"hiddenGridCount":0,"hiddenGridUserEntries":0,"hiddenPrimaryIds":0,"hiddenGridRequests":0,"points":[{"code":"156430100","label":"长沙市","province":"湖南省","latitude":28.23316,"longitude":113.16196,"anonymousIds":4,"activeIdEntries":5,"requests":12,"sourceGridCount":1,"lowSample":false},{"code":"156440100","label":"广州市","province":"广东省","latitude":23.34172,"longitude":113.53379,"anonymousIds":2,"activeIdEntries":2,"requests":4,"sourceGridCount":1,"lowSample":true},{"code":"156110000","label":"北京市","province":"北京市","latitude":40.17431,"longitude":116.40141,"anonymousIds":1,"activeIdEntries":1,"requests":2,"sourceGridCount":1,"lowSample":true}]},"tableRows":{"restaurant":12,"riskResult":36,"recommendationLog":18,"recommendationCandidate":56,"userFeedback":6,"userPreference":2,"externalEntityMapping":14,"restaurantDeepEvidence":3,"restaurantDeepAnalysis":2,"userTasteProfile":5,"userBehavior":36,"userFoodHistory":4,"restaurantFlavorObservation":3,"recommendationDecisionSnapshot":10,"flywaySchemaHistory":9},"capabilities":{"behaviorMetrics":true,"riskCalibration":true,"shadowSnapshots":true}}
 </script>
 <!-- ELMA_DASHBOARD_DATA_END -->
   <script>
@@ -833,10 +880,10 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       dashboardData = JSON.parse(document.getElementById('elma-dashboard-data').textContent);
     } catch (error) {
       dashboardData = {
-        meta: {sourceMode: 'invalid', sourceLabel: '快照解析失败', warnings: ['内嵌运营数据无法解析，请重新运行生成器。']},
+        meta: {sourceMode: 'invalid', sourceLabel: '快照解析失败', warnings: ['页面无法解析内嵌的运营数据，请重新运行生成脚本。']},
         overview: {}, funnel: {}, daily: [], behaviors: [], feedback: [], risks: [],
         riskCalibration: [], categories: [], algorithms: [], tableRows: {},
-        shadow: {available: false, summary: {}, selectionReasons: [], note: '快照不可用。'},
+        shadow: {available: false, summary: {}, selectionReasons: [], note: '当前快照中没有实验数据。'},
         locations: {points: [], totalAnonymousIds: 0, totalRequests: 0, lowSampleThreshold: 3},
       };
       console.error('ELMA dashboard snapshot is invalid', error);
@@ -877,7 +924,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       },
       {
         name: 'recommendation_decision_snapshot', type: 'table', group: 'core', rows: 81,
-        purpose: '安全后悔/影子实验的决策快照，用于离线复盘同一会话在正式算法和影子算法下的差异。',
+        purpose: '安全后悔算法与 Shadow 实验的决策快照。该表用于离线比较同一会话在当前算法和 Shadow 算法下的结果。',
         fields: [
           ['recommendation_log_id', '对应推荐会话'], ['experiment_key', '实验名称'],
           ['variant', 'SHADOW、CONTROL 或 CANDIDATE'], ['served_*_version', '真实对用户生效的算法版本'],
@@ -973,9 +1020,9 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       },
       {
         name: 'user_taste_profile', type: 'table', group: 'user', rows: 32,
-        purpose: '当前生效的用户口味画像，每个匿名 UUID 最多一行。它是从显式反馈和隐式行为持续累积、衰减后的权重状态。',
+        purpose: '当前生效的用户口味画像，每个匿名 UUID 最多对应一行。画像权重根据显式反馈和隐式行为累积，并随时间衰减。',
         fields: [
-          ['anonymous_user_id', '主键，每个匿名用户一条当前画像'],
+          ['anonymous_user_id', '主键，每个匿名标识保存一条当前画像'],
           ['category_weights_json', '品类偏好权重'], ['flavor_weights_json', '口味标签权重'],
           ['price_weights_json', '价格带偏好'], ['distance_weights_json', '距离带偏好'],
           ['implicit_accumulators_json', '隐式行为累计状态'],
@@ -1009,9 +1056,9 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       },
       {
         name: 'restaurant_flavor_observation', type: 'table', group: 'user', rows: 1,
-        purpose: '把用户反馈中的口味标签沉淀到餐厅层面，形成“某餐厅被哪些匿名用户以什么结果标记过某口味”的公共观察。',
+        purpose: '该表将用户反馈中的口味标签汇总到餐厅层面，记录餐厅、匿名标识、口味标签和反馈结果之间的关系。',
         fields: [
-          ['restaurant_id', '餐厅'], ['anonymous_user_id', '提供观察的匿名用户'],
+          ['restaurant_id', '餐厅'], ['anonymous_user_id', '提供观察的匿名标识'],
           ['flavor_tag', '口味标签'], ['feedback_result', '对应反馈结果'], ['observed_at', '观察时间']
         ],
         relations: ['→ restaurant', '⇠ user_feedback（逻辑来源）'],
@@ -1074,8 +1121,8 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
         table.rows = Number(value);
         table.available = true;
       } else if (table.type === 'table') {
-        table.rows = null;
         table.available = false;
+        table.rows = null;
       }
     }
 
@@ -1151,17 +1198,17 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
     }
 
     function formatSnapshotTime(value) {
-      if (!value) return '时间未知';
+      if (!value) return '没有快照时间';
       const parsed = new Date(value);
       if (Number.isNaN(parsed.getTime())) return String(value);
       return parsed.toLocaleString('zh-CN', {hour12: false});
     }
 
-    function emptyState(container, message = '当前快照暂无数据') {
+    function emptyState(container, message = '当前快照中没有该项数据') {
       container.replaceChildren();
       const empty = htmlEl('div', 'empty-state');
       const copy = htmlEl('div');
-      copy.append(htmlEl('strong', '', '暂无数据'), document.createTextNode(message));
+      copy.append(htmlEl('strong', '', '没有数据'), document.createTextNode(message));
       empty.appendChild(copy);
       container.appendChild(empty);
     }
@@ -1191,7 +1238,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       const overview = dashboardData.overview || {};
       const funnel = dashboardData.funnel || {};
       document.getElementById('snapshot-label').textContent = `快照：${formatSnapshotTime(meta.snapshotAt)}`;
-      document.getElementById('kpi-period-label').textContent = meta.windowDays ? `最近 ${meta.windowDays} 天` : '首次生成后可用';
+      document.getElementById('kpi-period-label').textContent = meta.windowDays ? `最近 ${meta.windowDays} 天` : '未提供统计窗口';
 
       animateMetric('kpi-total-recommendations', overview.totalRecommendations);
       animateMetric('kpi-total-users', overview.totalAnonymousIds);
@@ -1203,7 +1250,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       const verified = meta.readOnlyVerified === true;
       const statusDot = document.getElementById('snapshot-status-dot');
       statusDot.classList.toggle('is-ok', verified);
-      document.getElementById('snapshot-status-title').textContent = verified ? '只读查询已验证' : '等待首次生成';
+      document.getElementById('snapshot-status-title').textContent = verified ? '已使用只读会话查询' : '未验证只读会话';
       document.getElementById('snapshot-status-copy').textContent = meta.sourceLabel || '内嵌离线快照';
 
       const metaBox = document.getElementById('snapshot-meta');
@@ -1278,6 +1325,10 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       stage.querySelector('.empty-state')?.remove();
       chart.replaceChildren();
       legend.replaceChildren();
+      tooltip.hidden = true;
+      tooltip.replaceChildren();
+      chart.onmousemove = null;
+      chart.onmouseleave = null;
       document.querySelectorAll('[data-trend-mode]').forEach(button => {
         button.setAttribute('aria-pressed', button.dataset.trendMode === mode ? 'true' : 'false');
       });
@@ -1291,7 +1342,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       if (!rows.length || !hasValues) {
         chart.hidden = true;
         const empty = htmlEl('div', 'empty-state');
-        empty.appendChild(htmlEl('div', '', dashboardData.meta?.sourceMode === 'legacy' ? '运行生成器后显示每日趋势' : '统计期内暂无对应事件'));
+        empty.appendChild(htmlEl('div', '', dashboardData.meta?.sourceMode === 'legacy' ? '请运行生成脚本以读取每日趋势' : '当前统计窗口内没有对应事件'));
         stage.appendChild(empty);
         return;
       }
@@ -1336,7 +1387,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
         }
         chart.appendChild(svgEl('path', {d: pathData, stroke: item.color, class: 'trend-line'}));
         points.forEach(([x, y], index) => {
-          const point = svgEl('circle', {cx: x, cy: y, r: 4, fill: item.color, class: 'trend-point'});
+          const point = svgEl('circle', {cx: x, cy: y, r: 4, fill: item.color, class: 'trend-point', 'data-point-index': index});
           point.style.animationDelay = `${Math.min(index * 18 + seriesIndex * 80, 500)}ms`;
           const title = svgEl('title');
           title.textContent = `${rows[index].metricDate} · ${item.label} ${formatNumber(rows[index][item.key])}`;
@@ -1352,10 +1403,15 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
         const row = rows[selectedIndex];
         tooltip.replaceChildren(htmlEl('strong', '', row.metricDate));
         for (const item of series) {
-          const entry = htmlEl('div', 'tooltip-row');
+          const entry = htmlEl('div', 'tooltip-row trend-tooltip-row');
           const label = htmlEl('span', '', item.label); label.style.color = item.color;
           entry.append(label, htmlEl('b', '', formatNumber(row[item.key]))); tooltip.append(entry);
         }
+        chart.querySelectorAll('.trend-point').forEach(point => {
+          const active = Number(point.dataset.pointIndex) === selectedIndex;
+          point.classList.toggle('is-active', active);
+          point.setAttribute('r', active ? '6' : '4');
+        });
         tooltip.hidden = false;
         const rect = chart.getBoundingClientRect();
         const stageRect = stage.getBoundingClientRect();
@@ -1373,9 +1429,16 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
         const x = (event.clientX - rect.left - (rect.width - width * scale) / 2) / scale;
         showValue(Math.round((x - left) / plotWidth * (rows.length - 1)));
       }
-      function hideValue() { tooltip.hidden = true; cursor.setAttribute('visibility', 'hidden'); }
-      trendInteraction.pointermove = trendInteraction.pointerdown = fromPointer;
-      trendInteraction.pointerleave = trendInteraction.blur = hideValue;
+      function hideValue() {
+        tooltip.hidden = true;
+        cursor.setAttribute('visibility', 'hidden');
+        chart.querySelectorAll('.trend-point.is-active').forEach(point => {
+          point.classList.remove('is-active');
+          point.setAttribute('r', '4');
+        });
+      }
+      trendInteraction.mousemove = trendInteraction.pointermove = trendInteraction.pointerdown = fromPointer;
+      trendInteraction.mouseleave = trendInteraction.pointerleave = trendInteraction.blur = hideValue;
       trendInteraction.focus = () => showValue(selectedIndex);
       trendInteraction.keydown = event => {
         if (event.key === 'Escape') { hideValue(); return; }
@@ -1421,7 +1484,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       micro.replaceChildren();
       const sessions = finiteNumber(data.recommendationSessions);
       if (sessions === null) {
-        emptyState(container, '运行生成器后显示会话转化');
+        emptyState(container, '请运行生成脚本以读取会话行为数据');
         return;
       }
       const steps = [
@@ -1459,7 +1522,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       container.replaceChildren();
       const total = rows.reduce((sum, row) => sum + (finiteNumber(row.feedbackCount) || 0), 0);
       if (!rows.length || total <= 0) {
-        emptyState(container, dashboardData.meta?.sourceMode === 'legacy' ? '运行生成器后显示反馈分布' : '统计期内暂无显式反馈');
+        emptyState(container, dashboardData.meta?.sourceMode === 'legacy' ? '请运行生成脚本以读取反馈分布' : '当前统计窗口内没有显式反馈');
         return;
       }
       const colors = ['var(--success)', 'var(--primary)', 'var(--danger)', 'var(--ops)'];
@@ -1498,7 +1561,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       body.replaceChildren();
       if (!rows.length) {
         const row = document.createElement('tr');
-        const cell = htmlEl('td', '', '运行生成器后显示版本分布');
+        const cell = htmlEl('td', '', '请运行生成脚本以读取版本分布');
         cell.colSpan = 5;
         cell.style.textAlign = 'center';
         row.appendChild(cell);
@@ -1527,7 +1590,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       }
       const values = [
         ['快照', formatNumber(summary.totalSnapshots)],
-        ['落盘覆盖', formatPercent(summary.coverageRate)],
+        ['快照保存覆盖率', formatPercent(summary.coverageRate)],
         ['首选变化', formatNumber(summary.changedFirstChoice)],
         ['无可选项', formatNumber(summary.noSelectable)],
       ];
@@ -1569,8 +1632,8 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       renderFunnel();
       renderBarList('behavior-bars', dashboardData.behaviors || [], 'eventCount', '统计期内暂无行为事件');
       renderFeedback();
-      renderBarList('risk-bars', dashboardData.risks || [], 'recommendationCount', '运行生成器后显示风险分布');
-      renderBarList('category-bars', dashboardData.categories || [], 'candidateCount', '运行生成器后显示候选品类');
+      renderBarList('risk-bars', dashboardData.risks || [], 'recommendationCount', '请运行生成脚本以读取风险分布');
+      renderBarList('category-bars', dashboardData.categories || [], 'candidateCount', '请运行生成脚本以读取候选池品类');
       renderAlgorithms();
       renderShadow();
       renderSchemaSnapshot();
@@ -1748,7 +1811,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
         ['所属省级行政区', point.province || '—'],
         ['合并来源网格', formatNumber(point.sourceGridCount)],
         ['推荐请求', formatNumber(point.requests)],
-        ['用户占比', totalIds ? `${((finiteNumber(point.anonymousIds) || 0) / totalIds * 100).toFixed(1)}%` : '—'],
+        ['匿名标识占比', totalIds ? `${((finiteNumber(point.anonymousIds) || 0) / totalIds * 100).toFixed(1)}%` : '—'],
         ['数据快照', formatSnapshotTime(dashboardData.meta?.snapshotAt)],
       ];
       for (const [label, factValue] of factRows) {
@@ -1757,7 +1820,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
         facts.appendChild(row);
       }
       detail.appendChild(facts);
-      const privacy = `源坐标只用于离线匹配地级市；地图显示的是行政区锚点，不是用户坐标、住址或实时位置。${point.lowSample ? '这是低样本城市，地图以虚线气泡特别标记。' : ''}`;
+      const privacy = `源坐标只用于离线匹配地级市。地图显示行政区锚点，不显示用户坐标、住址或实时位置。${point.lowSample ? '该城市的样本量较少，地图使用虚线气泡标记。' : ''}`;
       detail.appendChild(htmlEl('p', 'privacy-note', privacy));
     }
 
@@ -1810,7 +1873,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
 
       const threshold = finiteNumber(data.lowSampleThreshold) || 3;
       const source = document.getElementById('location-source');
-      source.textContent = `省级边界与地级市归属索引：chinese-global-compliant-geodata（MIT，来源注明为天地图，本地处理）。统计快照：${formatSnapshotTime(dashboardData.meta?.snapshotAt)}。虚线气泡表示少于 ${threshold} 个主要活动匿名标识；HTML 不含完整 UUID、用户网格坐标或精确轨迹。第三方许可见同目录 THIRD_PARTY_NOTICES.md。`;
+      source.textContent = `省级边界和地级市归属索引来自 chinese-global-compliant-geodata（MIT），该项目标注的数据来源为天地图。本地生成脚本已对数据进行处理。统计快照时间为 ${formatSnapshotTime(dashboardData.meta?.snapshotAt)}。少于 ${threshold} 个主要活动匿名标识的城市使用虚线气泡标记。HTML 不包含完整 UUID、用户网格坐标或精确轨迹。第三方许可文本位于同目录的 THIRD_PARTY_NOTICES.md。`;
     }
 
     let currentLocationMetric = 'anonymousIds';
@@ -1971,7 +2034,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       currentLocationMetric = metric;
 
       if (!geo || !data) {
-        emptyState(document.getElementById('location-detail'), '内嵌地图数据未加载，请重新运行生成器');
+        emptyState(document.getElementById('location-detail'), '页面没有加载内嵌的地图数据，请重新运行生成脚本');
         return;
       }
 
@@ -2043,8 +2106,8 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
         button.setAttribute('aria-pressed', button.dataset.locationMetric === metric ? 'true' : 'false');
       });
       document.getElementById('location-legend').textContent = metric === 'anonymousIds'
-        ? '气泡面积表示主要活动匿名标识；标签为地级市全称；虚线气泡为低样本城市'
-        : '气泡面积表示推荐请求；标签为地级市全称；虚线气泡为低样本城市';
+        ? '气泡面积表示主要活动匿名标识数。标签使用地级市全称，低样本城市使用虚线气泡。'
+        : '气泡面积表示推荐请求数。标签使用地级市全称，低样本城市使用虚线气泡。';
       if (points.length) showLocationDetail(points[0], metric);
       else emptyState(document.getElementById('location-detail'), '当前快照没有可绘制的区域聚合');
       locationMapRendered = true;
@@ -2067,7 +2130,7 @@ window.ELMA_CHINA_GEOJSON={"type":"FeatureCollection","features":[{"type":"Featu
       renderTrendChart(button.dataset.trendMode);
     }));
     document.getElementById('search').addEventListener('input', event => renderCatalog(event.target.value));
-    for (const type of ['pointermove', 'pointerdown', 'pointerleave', 'focus', 'blur', 'keydown']) {
+    for (const type of ['mousemove', 'mouseleave', 'pointermove', 'pointerdown', 'pointerleave', 'focus', 'blur', 'keydown']) {
       document.getElementById('trend-chart').addEventListener(type, event => trendInteraction[type]?.(event));
     }
     document.getElementById('trend-range').addEventListener('change', () =>
