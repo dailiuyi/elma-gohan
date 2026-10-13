@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" width="100%" height="auto" role="img" aria-label="ELMA Gohan Food Decision Engine Banner">
+  <title>ELMA Gohan Hero</title>
+  <style><![CDATA[
+    .bg { fill: #0b0f19; }
+    .grid { stroke: #1e293b; stroke-width: 1; stroke-dasharray: 4,4; }
+    .panel { fill: #111827; stroke: #1e293b; stroke-width: 1.5; }
+    .badge { fill: #1e293b; stroke: #334155; stroke-width: 1; }
+    .txt-tag { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; font-weight: 600; fill: #38bdf8; letter-spacing: 0.12em; text-transform: uppercase; }
+    .txt-title { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 38px; font-weight: 800; fill: #f8fafc; letter-spacing: -0.02em; }
+    .txt-desc { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 16px; line-height: 1.6; fill: #94a3b8; }
+    .txt-sub { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #cbd5e1; }
+    .telemetry-txt { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; fill: #64748b; }
+    .telemetry-val { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; font-weight: 600; fill: #34d399; }
+    .code-txt { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; fill: #cbd5e1; }
+
+    /* Decision Card & Flow */
+    .flow-line { stroke: #38bdf8; stroke-width: 1.5; stroke-dasharray: 4,3; fill: none; }
+    .btn-primary { fill: #0284c7; rx: 6; }
+    .btn-secondary { fill: #1e293b; stroke: #334155; stroke-width: 1; rx: 6; }
+
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #f8fafc; }
+      .grid { stroke: #e2e8f0; }
+      .panel { fill: #ffffff; stroke: #e2e8f0; }
+      .badge { fill: #f1f5f9; stroke: #cbd5e1; }
+      .txt-tag { fill: #0284c7; }
+      .txt-title { fill: #0f172a; }
+      .txt-desc { fill: #475569; }
+      .txt-sub { fill: #334155; }
+      .telemetry-txt { fill: #64748b; }
+      .telemetry-val { fill: #059669; }
+      .code-txt { fill: #334155; }
+      .flow-line { stroke: #0284c7; }
+      .btn-primary { fill: #0284c7; }
+      .btn-secondary { fill: #f1f5f9; stroke: #cbd5e1; }
+    }
+  ]]></style>
+
+  <!-- Background -->
+  <rect width="1200" height="380" rx="16" class="bg" />
+
+  <!-- Grid -->
+  <g class="grid">
+    <line x1="60" y1="0" x2="60" y2="380" />
+    <line x1="320" y1="0" x2="320" y2="380" />
+    <line x1="600" y1="0" x2="600" y2="380" />
+    <line x1="880" y1="0" x2="880" y2="380" />
+    <line x1="0" y1="70" x2="1200" y2="70" />
+    <line x1="0" y1="190" x2="1200" y2="190" />
+    <line x1="0" y1="310" x2="1200" y2="310" />
+  </g>
+
+  <!-- Left: Content -->
+  <g transform="translate(60, 42)">
+    <rect x="0" y="0" width="280" height="26" rx="13" class="badge" />
+    <circle cx="12" cy="13" r="4" fill="#38bdf8" />
+    <text x="24" y="17" class="txt-tag">WECHAT MINI PROGRAM // FOOD DECISION</text>
+
+    <text x="0" y="70" class="txt-title">ELMA · 今天吃什么</text>
+    <text x="0" y="106" class="txt-desc">解决“条件都差不多时，到底选哪一家”的单一决策推荐引擎。</text>
+    <text x="0" y="132" class="txt-desc">冻结候选过程 · 客观风险与口味分离 · 跨平台 Evidence 对账 · 匿名数据合规生命周期。</text>
+
+    <!-- Pillars -->
+    <g transform="translate(0, 168)">
+      <g transform="translate(0, 0)">
+        <rect width="235" height="40" rx="8" class="panel" />
+        <circle cx="18" cy="20" r="4" fill="#38bdf8" />
+        <text x="32" y="25" class="txt-sub">单一最终选择 · 拒绝冗长列表</text>
+      </g>
+      <g transform="translate(247, 0)">
+        <rect width="235" height="40" rx="8" class="panel" />
+        <circle cx="18" cy="20" r="4" fill="#34d399" />
+        <text x="32" y="25" class="txt-sub">最多 6 家冻结候选 · 支持无偏差换一家</text>
+      </g>
+      <g transform="translate(0, 48)">
+        <rect width="235" height="40" rx="8" class="panel" />
+        <circle cx="18" cy="20" r="4" fill="#fb7185" />
+        <text x="32" y="25" class="txt-sub">高德主来源 + 百度 Evidence 降级容灾</text>
+      </g>
+      <g transform="translate(247, 48)">
+        <rect width="235" height="40" rx="8" class="panel" />
+        <circle cx="18" cy="20" r="4" fill="#a78bfa" />
+        <text x="32" y="25" class="txt-sub">微信搜一搜「饭点电波」线上运行</text>
+      </g>
+    </g>
+
+    <g transform="translate(0, 286)">
+      <text x="0" y="0" class="telemetry-txt">SPRING BOOT 3.5 · POSTGRESQL · FLYWAY · UNI-APP · OPENAPI 3.0</text>
+    </g>
+  </g>
+
+  <!-- Right: Decision Card Simulation Wireframe -->
+  <g transform="translate(680, 40)">
+    <rect width="460" height="300" rx="14" class="panel" />
+
+    <!-- Window Header -->
+    <line x1="0" y1="36" x2="460" y2="36" stroke="#1e293b" class="grid" />
+    <circle cx="20" cy="18" r="4" fill="#38bdf8" />
+    <text x="32" y="22" class="telemetry-txt">DECISION_ENGINE // FROZEN_SESSION_CARD</text>
+    <rect x="375" y="10" width="65" height="18" rx="4" class="badge" />
+    <text x="388" y="22" class="telemetry-val">FROZEN</text>
+
+    <!-- Pipeline Step Indicators -->
+    <g transform="translate(20, 52)">
+      <text x="0" y="0" class="telemetry-txt">POI 召回 ➔ 实体对账 ➔ 风险过滤 ➔ 候选冻结 ➔ 唯一定策</text>
+    </g>
+
+    <!-- Center Card -->
+    <g transform="translate(20, 72)">
+      <rect width="420" height="150" rx="10" class="badge" />
+      
+      <!-- Restaurant Main Title -->
+      <text x="20" y="32" class="txt-sub" font-size="16" font-weight="700">📍 精选定策推荐 · 附近热评小馆</text>
+      
+      <!-- Tags -->
+      <g transform="translate(20, 48)">
+        <rect width="80" height="22" rx="4" class="panel" />
+        <text x="10" y="15" class="code-txt" fill="#34d399">客观低风险</text>
+
+        <rect x="90" y="0" width="70" height="22" rx="4" class="panel" />
+        <text x="100" y="15" class="code-txt">步行 380m</text>
+
+        <rect x="170" y="0" width="80" height="22" rx="4" class="panel" />
+        <text x="180" y="15" class="code-txt">预算恰当</text>
+      </g>
+
+      <!-- Reason text -->
+      <text x="20" y="96" class="code-txt" fill="#94a3b8">推荐理由：高德与百度双源评分一致，近期口味吻合，无异常风险标签。</text>
+
+      <!-- Action Buttons -->
+      <g transform="translate(20, 112)">
+        <rect width="180" height="26" class="btn-primary" />
+        <text x="50" y="17" class="code-txt" fill="#ffffff" font-weight="600">✨ 就它了 / 导航</text>
+
+        <rect x="195" y="0" width="180" height="26" class="btn-secondary" />
+        <text x="235" y="17" class="code-txt">🎲 换一家 (1/5)</text>
+      </g>
+    </g>
+
+    <!-- Bottom Telemetry -->
+    <g transform="translate(20, 240)">
+      <rect width="420" height="42" rx="6" class="panel" />
+      <text x="16" y="20" class="telemetry-txt">RISK ENGINE: risk-v0.3.1</text>
+      <text x="16" y="34" class="telemetry-val">ENTITIES RESOLVED: 1:1 MATCHED</text>
+      <text x="230" y="20" class="telemetry-txt">TASTE PROFILE: taste-v0.2</text>
+      <text x="230" y="34" class="telemetry-val">STATE: DETERMINISTIC REPLAY</text>
+    </g>
+  </g>
+</svg>
