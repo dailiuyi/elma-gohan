@@ -229,6 +229,57 @@ class AmapResponseMapperTest {
         assertThat(mapper.toRestaurants(List.of(malformedDistance, malformedLocation))).isEmpty();
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "181,28", "-181,28", "112,91", "112,-91", "NaN,28", "112,NaN", "bad,28", "112,bad", "112,28,0"})
+    void rejectsOutOfRangeAndNonFiniteCoordinates(String location) throws Exception {
+        var poi = objectMapper.readTree(poiFor("050100"));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) poi).put("location", location);
+        assertThat(mapper.toRestaurants(List.of(poi))).isEmpty();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> mapper.toRestaurant(poi))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("POI 缺少合法的坐标或距离");
+    }
+
+    @Test
+    void directMappingRejectsOfficialNonRestaurantClassification() throws Exception {
+        var poi = objectMapper.readTree(poiFor("060100"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> mapper.toRestaurant(poi))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("POI 不属于可确认的餐饮范围");
+    }
+
+    @Test
+    void invalidBusinessNumbersRemainUnknownAndAddressPartsAreDeduplicated() throws Exception {
+        var poi = objectMapper.readTree("""
+                {"id":"fallback","name":"小店","typecode":"050999",
+                 "location":"112,28","distance":"0","pname":"上海市","cityname":"上海市","adname":"徐汇区",
+                 "biz_ext":{"rating":"invalid","cost":"[]","opening_time":"09:00-20:00"}}
+                """);
+        var result = mapper.toRestaurant(poi);
+        assertThat(result.rating()).isNull();
+        assertThat(result.averagePrice()).isNull();
+        assertThat(result.categoryCode()).isEqualTo("OTHER");
+        assertThat(result.categoryLabel()).isEqualTo("餐饮");
+        assertThat(result.address()).isEqualTo("上海市徐汇区");
+        assertThat(result.dataCompleteness()).isEqualTo(DataCompleteness.PARTIAL);
+    }
+
+    @Test
+    void longUpstreamFieldsAreTruncatedAtStorageLimits() throws Exception {
+        var poi = objectMapper.readTree("""
+                {"id":"long","typecode":"050100","location":"112,28","distance":"1"}
+                """);
+        var node = (com.fasterxml.jackson.databind.node.ObjectNode) poi;
+        node.put("name", "店".repeat(130));
+        node.put("address", "路".repeat(300));
+        node.put("tel", "1".repeat(140));
+        node.putObject("biz_ext").put("opening_time", "0".repeat(300));
+        var result = mapper.toRestaurant(poi);
+        assertThat(result.name()).hasSize(120);
+        assertThat(result.address()).hasSize(255);
+        assertThat(result.telephone()).hasSize(128);
+        assertThat(result.openingHours()).hasSize(255);
+    }
+
     private static AmapProperties loadProductionProperties() throws Exception {
         String basedir = System.getProperty("basedir", System.getProperty("user.dir"));
         Resource resource = new FileSystemResource(

@@ -26,6 +26,7 @@ class BraveWebEvidenceProviderTest {
     private final AtomicReference<String> accept = new AtomicReference<>();
     private volatile boolean fallbackScenario;
     private volatile int responseStatus = 200;
+    private volatile int firstResponseStatus = 200;
     private volatile long delayMs;
     private volatile String customBody;
     private final AtomicReference<String> postBody = new AtomicReference<>();
@@ -168,6 +169,93 @@ class BraveWebEvidenceProviderTest {
         assertThat(requests).isEmpty();
     }
 
+    @Test
+    void emptyResultsOnBothAttemptsAreNoData() {
+        customBody = "{\"web\":{\"results\":[]}}";
+        var p = properties();
+        var result = new BraveWebEvidenceProvider(p, new WebEvidenceMatcher(p)).fetch(
+                DeepEvidenceSource.DIANPING, TestRestaurants.full("a", 4.5, 100));
+        assertThat(result.status()).isEqualTo(EvidenceStatus.NO_DATA);
+        assertThat(result.items()).isEmpty();
+        assertThat(requests).hasSize(2);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"", "{}", "{broken", "{\"web\":{\"results\":{}}}"})
+    void malformedOrEmptyResponseIsUnavailable(String body) {
+        customBody = body;
+        var p = properties();
+        var result = new BraveWebEvidenceProvider(p, new WebEvidenceMatcher(p)).fetch(
+                DeepEvidenceSource.DIANPING, TestRestaurants.full("a", 4.5, 100));
+        assertThat(result.status()).isEqualTo(EvidenceStatus.UNAVAILABLE);
+        assertThat(result.items()).isEmpty();
+        assertThat(requests).hasSize(2);
+    }
+
+    @Test
+    void failedFirstAttemptCanRecoverOnFallback() {
+        firstResponseStatus = 503;
+        var p = properties();
+        var result = new BraveWebEvidenceProvider(p, new WebEvidenceMatcher(p)).fetch(
+                DeepEvidenceSource.BILIBILI, TestRestaurants.full("a", "老王湘菜馆", 4.6, 500, 42));
+        assertThat(result.status()).isEqualTo(EvidenceStatus.AVAILABLE);
+        assertThat(result.items()).hasSize(1);
+        assertThat(requests).hasSize(2);
+    }
+
+    @Test
+    void interruptedCallerDoesNotSendRequestAndKeepsInterruptFlag() {
+        var p = properties();
+        var provider = new BraveWebEvidenceProvider(p, new WebEvidenceMatcher(p));
+        Thread.currentThread().interrupt();
+        try {
+            assertThat(provider.fetch(DeepEvidenceSource.DIANPING, TestRestaurants.full("a", 4.5, 100)).status())
+                    .isEqualTo(EvidenceStatus.UNAVAILABLE);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            assertThat(requests).isEmpty();
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void legacyFallbackRemovesRecencyFilterAndKeepsQuotedStoreName() {
+        fallbackScenario = true;
+        var p = properties();
+        p.setImprovedSearchEnabled(false);
+        var result = new BraveWebEvidenceProvider(p, new WebEvidenceMatcher(p)).fetch(
+                DeepEvidenceSource.BILIBILI, TestRestaurants.full("a", "老王湘菜馆", 4.6, 500, 42));
+        assertThat(result.status()).isEqualTo(EvidenceStatus.AVAILABLE);
+        assertThat(requests).hasSize(2);
+        assertThat(URLDecoder.decode(requests.get(0), StandardCharsets.UTF_8))
+                .contains("freshness=pm", "\"老王湘菜馆\"");
+        assertThat(URLDecoder.decode(requests.get(1), StandardCharsets.UTF_8))
+                .doesNotContain("freshness=").contains("\"老王湘菜馆\"");
+    }
+
+    @Test
+    void invalidUrlsAreDiscardedAndCanonicalDuplicatesKeepFirstItem() {
+        customBody = """
+                {"web":{"results":[
+                  {"title":"老王湘菜馆","url":"https://bilibili.com/video/1?a=1","description":"麓山南路","page_age":"bad","date":"2026-08-10"},
+                  {"title":"老王湘菜馆重复","url":"https://bilibili.com/video/1?a=2","description":"麓山南路"},
+                  {"title":"老王湘菜馆","url":"http://bilibili.com/video/2"},
+                  {"title":"老王湘菜馆","url":"https://evilbilibili.com/video/3"},
+                  {"title":"老王湘菜馆","url":"https://[broken"},
+                  {"title":"老王湘菜馆"},
+                  {"url":"https://bilibili.com/video/4"}
+                ]}}
+                """;
+        var p = properties();
+        var result = new BraveWebEvidenceProvider(p, new WebEvidenceMatcher(p)).fetch(
+                DeepEvidenceSource.BILIBILI, TestRestaurants.full("a", "老王湘菜馆", 4.6, 500, 42));
+        assertThat(result.status()).isEqualTo(EvidenceStatus.AVAILABLE);
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.items().get(0).title()).isEqualTo("老王湘菜馆");
+        assertThat(result.items().get(0).url()).isEqualTo("https://bilibili.com/video/1");
+        assertThat(result.items().get(0).publishedAt()).isEqualTo(java.time.Instant.parse("2026-08-10T00:00:00Z"));
+    }
+
     private DeepEvidenceProperties properties() {
         DeepEvidenceProperties properties = new DeepEvidenceProperties();
         properties.setEnabled(true);
@@ -201,7 +289,8 @@ class BraveWebEvidenceProviderTest {
                 """.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json;charset=UTF-8");
         if (customBody != null) body = customBody.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(responseStatus, body.length);
+        exchange.sendResponseHeaders(requests.size() == 1 && firstResponseStatus != 200
+                ? firstResponseStatus : responseStatus, body.length);
         exchange.getResponseBody().write(body);
         exchange.close();
     }

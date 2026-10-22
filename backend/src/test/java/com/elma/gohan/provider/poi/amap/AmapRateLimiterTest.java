@@ -15,6 +15,37 @@ import org.junit.jupiter.api.Test;
 class AmapRateLimiterTest {
 
     @Test
+    void interruptedWaitRejectsWithoutConsumingTheNextPermit() {
+        AmapProperties properties = new AmapProperties();
+        properties.setRateLimitPerSecond(0);
+
+        AmapRateLimiter limiter = new AmapRateLimiter(properties);
+        assertThat(limiter.acquire(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)).acquired()).isTrue();
+        Thread.currentThread().interrupt();
+        try {
+            assertThat(limiter.acquire(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)).acquired()).isFalse();
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
+        }
+        assertThat(limiter.acquire(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)).acquired()).isTrue();
+    }
+
+    @Test
+    void expiredDeadlineAndQueuedRejectionDoNotReserveFutureSlots() {
+        AmapProperties properties = new AmapProperties();
+        properties.setRateLimitPerSecond(10);
+        AmapRateLimiter limiter = new AmapRateLimiter(properties);
+        assertThat(limiter.acquire(System.nanoTime() - 1).acquired()).isFalse();
+        assertThat(limiter.acquire(System.nanoTime() + TimeUnit.SECONDS.toNanos(2)).acquired()).isTrue();
+        assertThat(limiter.acquire(System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(1)).acquired()).isFalse();
+        for (int i = 0; i < 5; i++) {
+            assertThat(limiter.acquire(System.nanoTime() - 1).acquired()).isFalse();
+        }
+        assertThat(limiter.acquire(System.nanoTime() + TimeUnit.SECONDS.toNanos(2)).acquired()).isTrue();
+    }
+
+    @Test
     void sharedConcurrentCallsNeverExceedThreeInAnyRollingSecond() throws Exception {
         AmapProperties properties = new AmapProperties();
         properties.setRateLimitPerSecond(3);
