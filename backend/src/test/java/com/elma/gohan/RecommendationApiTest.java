@@ -116,6 +116,9 @@ class RecommendationApiTest {
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
     private com.elma.gohan.application.EvidenceAggregator evidenceAggregator;
 
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    private com.elma.gohan.domain.recommendation.HardFilter hardFilter;
+
     @Autowired
     @Qualifier("safeRegretShadowExecutor")
     private Executor shadowExecutor;
@@ -341,6 +344,35 @@ class RecommendationApiTest {
             assertThat(jdbc.queryForObject("SELECT count(*) FROM (SELECT source,source_poi_id FROM restaurant "
                     + "GROUP BY source,source_poi_id HAVING count(*)>1) duplicates", Integer.class)).isZero();
         } finally { executor.shutdownNow(); }
+    }
+
+    @Test
+    void createAppliesHardFilterOnlyOnceBeforeScoring() {
+        var response = create(USER, """
+                {"latitude":28.2282,"longitude":112.9388,"radius":1000,"category":"ANY","dislikes":[]}
+                """);
+        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        org.mockito.Mockito.verify(hardFilter, org.mockito.Mockito.times(1)).filter(
+                org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void persistedSessionExportsAndReplaysWithTheReadOnlyQuery() throws Exception {
+        var response = create(USER, """
+                {"latitude":28.2282,"longitude":112.9388,"radius":1000,"category":"ANY","dislikes":[]}
+                """);
+        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        String id = JSON.readTree(response.getBody()).get("recommendationId").asText();
+        awaitShadowIdle();
+        String query = java.nio.file.Files.readString(java.nio.file.Path.of("tools/export_recommendation_replay.sql"))
+                .replace(":'served_exploration_rate'", "?").replace(":'shadow_configuration'", "?")
+                .replace(":'recommendation_id'", "?");
+        String exported = jdbc.queryForObject(query, String.class, .20,
+                JSON.writeValueAsString(com.elma.gohan.domain.recommendation.v05.SafeRegretConfig.defaults()), id);
+        var input = JSON.readValue(exported, com.elma.gohan.application.replay.RecommendationSelectionReplay.Input.class);
+        var replay = new com.elma.gohan.application.replay.RecommendationSelectionReplay(JSON).replay(input);
+        assertThat(replay.servedPoolMatches()).isTrue();
+        assertThat(replay.shadowDifferences()).isEmpty();
     }
 
     @Test

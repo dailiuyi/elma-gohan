@@ -5,10 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.elma.gohan.config.RecommendationProperties;
 import com.elma.gohan.config.RiskProperties;
 import com.elma.gohan.TestRestaurants;
-import com.elma.gohan.application.shadow.SafeRegretShadowDispatcher;
 import com.elma.gohan.controller.api.CreateRecommendationRequest;
 import com.elma.gohan.domain.recommendation.HardFilter;
 import com.elma.gohan.domain.recommendation.RecommendationEngine;
@@ -20,7 +18,6 @@ import com.elma.gohan.infrastructure.persistence.RecommendationCandidateReposito
 import com.elma.gohan.infrastructure.persistence.RecommendationLogRepository;
 import com.elma.gohan.infrastructure.persistence.RestaurantRepository;
 import com.elma.gohan.infrastructure.persistence.RestaurantEntity;
-import com.elma.gohan.infrastructure.persistence.RiskResultRepository;
 import com.elma.gohan.infrastructure.persistence.UserFeedbackRepository;
 import com.elma.gohan.provider.poi.PoiProvider;
 import com.elma.gohan.provider.poi.PoiSearchDiagnostics;
@@ -127,12 +124,11 @@ class RecommendationServiceRecallTest {
                 mock(RiskEngine.class), mock(RecommendationEngine.class), hardFilter,
                 mock(TasteProfileService.class), mock(FlavorFeatureService.class),
                 mock(UserFoodHistoryService.class), mock(BehaviorService.class),
-                mock(SafeRegretShadowDispatcher.class),
-                mock(RecommendationProperties.class), mock(RiskProperties.class),
-                restaurantRepository, mock(RiskResultRepository.class),
+                mock(RiskProperties.class), restaurantRepository,
                 mock(RecommendationLogRepository.class), mock(RecommendationCandidateRepository.class),
                 mock(UserFeedbackRepository.class), new ObjectMapper(),
-                mock(org.springframework.transaction.PlatformTransactionManager.class));
+                mock(RecommendationSessionWriter.class), mock(RecommendationResponseAssembler.class),
+                mock(RecommendationSnapshotJson.class));
     }
 
     private static RiskResult risk(RiskLevel level) {

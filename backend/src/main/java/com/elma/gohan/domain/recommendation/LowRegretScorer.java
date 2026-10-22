@@ -3,7 +3,6 @@ package com.elma.gohan.domain.recommendation;
 import com.elma.gohan.config.RecommendationProperties;
 import com.elma.gohan.config.TasteProperties;
 import com.elma.gohan.domain.restaurant.CategoryConfidence;
-import com.elma.gohan.domain.restaurant.DataCompleteness;
 import com.elma.gohan.domain.restaurant.Restaurant;
 import com.elma.gohan.domain.restaurant.SearchCondition;
 import com.elma.gohan.domain.risk.RiskLevel;
@@ -40,18 +39,41 @@ public class LowRegretScorer {
     }
 
     public PersonalizedScore details(Restaurant r, RiskResult risk, UserPreference preference) {
+        return details(features(r, risk, preference,
+                new RecentFoodIndex(preference.recentHistory()).forRestaurant(r)));
+    }
+
+    public RecommendationFeatures features(Restaurant r, RiskResult risk, UserPreference preference,
+                                      RecentFoodIndex.Features recent) {
         SearchCondition condition = preference.condition();
         TasteProfile profile = preference.tasteProfile();
         double confidence = profile.confidence(tasteProperties);
         double quality = quality(r, props.getWeights().getRestaurantQuality());
         double safety = riskSafety(risk);
-        double taste = tasteMatch(r, profile, preference.flavorTags(r), confidence);
-        double budget = 0.60 * currentBudget(r, condition)
+        double categoryWeight = profile.categoryWeight(r);
+        double taste = tasteMatch(categoryWeight, profile, preference.flavorTags(r), confidence);
+        double currentBudget = currentBudget(r, condition);
+        double currentDistance = currentDistance(r, condition);
+        double budget = 0.60 * currentBudget
                 + 0.40 * historical(profile.priceWeight(r, tasteProperties), confidence);
-        double distance = 0.60 * currentDistance(r, condition)
+        double distance = 0.60 * currentDistance
                 + 0.40 * historical(profile.distanceWeight(r, tasteProperties), confidence);
-        double diversity = preference.recentHistory().diversityScore(r);
-        double recentPenalty = preference.recentHistory().penalty(r);
+        return new RecommendationFeatures(r, risk, quality, safety, taste, confidence, categoryWeight,
+                currentBudget, currentDistance, budget, distance,
+                condition.minBudget() != null || condition.maxBudget() != null, recent);
+    }
+
+    public PersonalizedScore details(RecommendationFeatures features) {
+        Restaurant r = features.restaurant();
+        RiskResult risk = features.risk();
+        double quality = features.quality();
+        double safety = features.safety();
+        double taste = features.taste();
+        double confidence = features.confidence();
+        double budget = features.budget();
+        double distance = features.distance();
+        double diversity = features.recent().diversityScore();
+        double recentPenalty = features.recent().penalty();
         RecommendationProperties.Weights w = props.getWeights();
         double weighted = (w.getRestaurantQuality() * quality
                 + w.getRiskSafety() * safety
@@ -60,15 +82,14 @@ public class LowRegretScorer {
                 + w.getDistanceFit() * distance
                 + w.getRecentDiversity() * diversity) / 100.0;
         double score = clamp(weighted - recentPenalty, 0, 100);
-        List<String> personal = personalizationReasons(r, profile, confidence, budget,
+        List<String> personal = personalizationReasons(features.categoryWeight(), confidence, budget,
                 distance, recentPenalty);
         List<String> reasons = new ArrayList<>();
         if (risk.riskLevel() == RiskLevel.LOW) reasons.add("客观风险较低");
-        boolean budgetSpecified = condition.minBudget() != null || condition.maxBudget() != null;
-        if (budgetSpecified && currentBudget(r, condition) >= 60 && r.averagePrice() != null) {
+        if (features.budgetSpecified() && features.currentBudget() >= 60 && r.averagePrice() != null) {
             reasons.add("预算合适");
         }
-        if (currentDistance(r, condition) >= 60) reasons.add("距离符合当前选择");
+        if (features.currentDistance() >= 60) reasons.add("距离符合当前选择");
         if (r.categoryConfidence() == CategoryConfidence.INFERRED) reasons.add("餐饮信息相对有限");
         for (String reason : personal) {
             if (!reasons.contains(reason)) reasons.add(reason);
@@ -114,8 +135,8 @@ public class LowRegretScorer {
                 + (1 - risk.confidence()) * props.getUncertaintyRisk();
         return 100 - clamp(effective, 0, 100);
     }
-    private double tasteMatch(Restaurant r, TasteProfile p, Set<FlavorTag> flavors, double confidence) {
-        double category = rawPreference(p.categoryWeight(r));
+    private double tasteMatch(double categoryWeight, TasteProfile p, Set<FlavorTag> flavors, double confidence) {
+        double category = rawPreference(categoryWeight);
         double flavor = 50;
         if (flavors != null && !flavors.isEmpty()) {
             flavor = flavors.stream().mapToDouble(tag -> rawPreference(p.flavorWeight(tag))).average().orElse(50);
@@ -143,10 +164,10 @@ public class LowRegretScorer {
     private double rawPreference(double weight) {
         return 50 + 50 * clamp(weight / Math.max(0.0001, tasteProperties.getMaxAbsoluteWeight()), -1, 1);
     }
-    private List<String> personalizationReasons(Restaurant r, TasteProfile profile,
+    private List<String> personalizationReasons(double categoryWeight,
             double confidence, double budget, double distance, double recentPenalty) {
         List<String> reasons = new ArrayList<>();
-        if (confidence > 0 && profile.categoryWeight(r) > 0.3) reasons.add("你过去对这类餐厅反馈不错");
+        if (confidence > 0 && categoryWeight > 0.3) reasons.add("你过去对这类餐厅反馈不错");
         if (confidence > 0 && budget >= 60) reasons.add("价格符合你常用预算");
         if (confidence > 0 && distance >= 60) reasons.add("距离符合你的常用范围");
         if (recentPenalty == 0) reasons.add("最近几天没有吃过类似类型");

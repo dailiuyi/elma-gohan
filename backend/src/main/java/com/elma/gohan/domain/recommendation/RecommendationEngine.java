@@ -8,7 +8,8 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 推荐引擎抽象:输入候选(已含风险结果),输出有序候选池。
+ * 推荐引擎抽象：输入已通过 HardFilter 的候选及风险结果，输出有序候选池。
+ * 条件硬过滤由应用编排执行一次；引擎只负责风险准入、评分和选择。
  */
 public interface RecommendationEngine {
 

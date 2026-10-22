@@ -18,7 +18,7 @@ class RecentFoodHistoryTest {
                         "DISLIKE", now.minusDays(2)),
                 new RecentFoodHistory.Entry("AMAP", "p1", restaurant.categoryCode(),
                         "LIKE", now.minusDays(1))), now);
-        assertThat(history.penalty(restaurant)).isEqualTo(40.0);
+        assertThat(new RecentFoodIndex(history).forRestaurant(restaurant).penalty()).isEqualTo(40.0);
     }
 
     @Test
@@ -29,6 +29,6 @@ class RecentFoodHistoryTest {
                         "LIKE", now.minusDays(1)),
                 new RecentFoodHistory.Entry("AMAP", "b", restaurant.categoryCode(),
                         "NORMAL", now.minusDays(2))), now);
-        assertThat(history.penalty(restaurant)).isEqualTo(12.0);
+        assertThat(new RecentFoodIndex(history).forRestaurant(restaurant).penalty()).isEqualTo(12.0);
     }
 }

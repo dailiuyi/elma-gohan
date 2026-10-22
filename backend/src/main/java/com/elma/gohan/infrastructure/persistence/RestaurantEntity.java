@@ -127,4 +127,14 @@ public class RestaurantEntity {
     public CategoryConfidence getCategoryConfidence() { return categoryConfidence; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public com.elma.gohan.domain.restaurant.Restaurant toRestaurant(int distanceMeters) {
+        RestaurantEntity e = this;
+        return new com.elma.gohan.domain.restaurant.Restaurant(e.getId(), e.getSource(), e.getSourcePoiId(), e.getName(),
+                e.getLatitude(), e.getLongitude(), distanceMeters, e.getCategoryCode(),
+                e.getCategoryLabel(), e.getRating(), e.getReviewCount(), e.getAveragePrice(),
+                e.getBusinessStatus(), e.getOpeningHours(), e.getAddress(), e.getTelephone(),
+                e.getDataCompleteness() == null ? DataCompleteness.MINIMAL : e.getDataCompleteness(),
+                e.getCategoryConfidence());
+    }
+
 }
