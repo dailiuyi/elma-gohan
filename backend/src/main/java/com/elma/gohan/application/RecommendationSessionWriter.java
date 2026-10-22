@@ -43,11 +43,13 @@ public class RecommendationSessionWriter {
     private final BehaviorService behaviorService;
     private final SafeRegretShadowDispatcher shadowDispatcher;
     private final RecommendationSnapshotJson json;
+    private final com.elma.gohan.config.RecommendationProperties recommendationProperties;
 
     public RecommendationSessionWriter(RestaurantRepository restaurantRepository,
             RiskResultRepository riskResultRepository, RecommendationLogRepository logRepository,
             RecommendationCandidateRepository candidateRepository, BehaviorService behaviorService,
-            SafeRegretShadowDispatcher shadowDispatcher, RecommendationSnapshotJson json) {
+            SafeRegretShadowDispatcher shadowDispatcher, RecommendationSnapshotJson json,
+            com.elma.gohan.config.RecommendationProperties recommendationProperties) {
         this.restaurantRepository = restaurantRepository;
         this.riskResultRepository = riskResultRepository;
         this.logRepository = logRepository;
@@ -55,6 +57,7 @@ public class RecommendationSessionWriter {
         this.behaviorService = behaviorService;
         this.shadowDispatcher = shadowDispatcher;
         this.json = json;
+        this.recommendationProperties = recommendationProperties;
     }
 
     @Transactional(timeout = 5)
@@ -97,6 +100,7 @@ public class RecommendationSessionWriter {
 
         RestaurantCandidate first = persisted.get(0);
         Map<String, Object> conditionSnapshot = new java.util.LinkedHashMap<>();
+        conditionSnapshot.put("servedExplorationRate", recommendationProperties.getExplorationRate());
         conditionSnapshot.put("latitude", request.latitude());
         conditionSnapshot.put("longitude", request.longitude());
         conditionSnapshot.put("minDistance", request.minDistance());

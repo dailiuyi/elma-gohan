@@ -26,6 +26,7 @@ class BaiduCoordinationIntegrationTest {
     static String schema;
     HttpServer server;
     ExecutorService httpExecutor;
+    AtomicInteger httpStatus = new AtomicInteger(200);
     AtomicInteger calls = new AtomicInteger(), status = new AtomicInteger(), active = new AtomicInteger(), peak = new AtomicInteger();
     List<Long> starts = new CopyOnWriteArrayList<>();
     BaiduProperties properties;
@@ -64,7 +65,7 @@ class BaiduCoordinationIntegrationTest {
             try { Thread.sleep(80); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             byte[] body = ("{\"status\":" + status.get() + ",\"results\":[],\"total\":0}").getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, body.length); exchange.getResponseBody().write(body);
+            exchange.sendResponseHeaders(httpStatus.get(), body.length); exchange.getResponseBody().write(body);
             active.decrementAndGet(); exchange.close();
         }); server.start();
         properties = new BaiduProperties(); properties.setAk("test-only-key");
@@ -120,6 +121,104 @@ class BaiduCoordinationIntegrationTest {
         assertThat(db.queryForObject("SELECT blocked_until='infinity'::timestamptz FROM baidu_call_state WHERE id=1", Boolean.class)).isTrue();
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {401, 403})
+    void httpAuthorizationFailuresCooldownForFifteenMinutesThenProbeOneLane(int code) throws Exception {
+        httpStatus.set(code);
+        var first = provider(); var second = provider();
+        assertThat(query(first, "auth-a").failureReason()).isEqualTo("CONFIGURATION_ERROR");
+        assertThat(query(second, "auth-b").failureReason()).isEqualTo("CONFIGURATION_ERROR");
+        assertThat(calls).hasValue(1);
+        assertThat(db.queryForObject("SELECT extract(epoch FROM blocked_until-clock_timestamp()) "
+                + "FROM baidu_call_state WHERE id=1", Double.class)).isBetween(895.0, 900.0);
+        db.update("UPDATE baidu_call_state SET blocked_until=now(), next_allowed_at=now()");
+        var executor = Executors.newFixedThreadPool(2);
+        var start = new CountDownLatch(1);
+        try {
+            var a = executor.submit(() -> { start.await(); return query(first, "probe-a"); });
+            var b = executor.submit(() -> { start.await(); return query(second, "probe-b"); });
+            start.countDown();
+            assertThat(a.get(3, TimeUnit.SECONDS).failureReason()).isEqualTo("CONFIGURATION_ERROR");
+            assertThat(b.get(3, TimeUnit.SECONDS).failureReason()).isEqualTo("CONFIGURATION_ERROR");
+            assertThat(calls).hasValue(2);
+            assertThat(peak).hasValue(1);
+        } finally { executor.shutdownNow(); }
+        db.update("UPDATE baidu_call_state SET blocked_until=now(), next_allowed_at=now()");
+        httpStatus.set(200);
+        assertThat(query(second, "recovered").status()).isEqualTo(EvidenceStatus.NO_DATA);
+    }
+
+    @Test void resultSurvivesPostOutboundCoordinationWriteFailure() {
+        var delegate = org.mockito.Mockito.mock(BaiduPlaceApiProvider.class);
+        var expected = new PlatformSearchResult(EvidenceStatus.NO_DATA, List.of());
+        org.mockito.Mockito.when(delegate.searchNearby(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString())).thenAnswer(call -> {
+                    db.execute("ALTER TABLE baidu_call_state RENAME TO baidu_call_state_unavailable");
+                    return expected;
+                });
+        var coordinator = new CoordinatedBaiduProvider(connections, delegate,
+                new ObjectMapper().findAndRegisterModules(), properties,
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        providers.add(coordinator);
+        try {
+            assertThat(query(coordinator, "post-outbound-write-failure")).isEqualTo(expected);
+        } finally { db.execute("ALTER TABLE baidu_call_state_unavailable RENAME TO baidu_call_state"); }
+    }
+
+    @Test void consumerConnectionSetsNetworkTimeoutBeforeSql() throws Exception {
+        var connection = org.mockito.Mockito.spy(connections.open());
+        var database = org.mockito.Mockito.mock(BaiduDatabase.class);
+        org.mockito.Mockito.when(database.open()).thenReturn(connection);
+        @SuppressWarnings("unchecked")
+        org.springframework.beans.factory.ObjectProvider<com.elma.gohan.application.EvidenceAggregator> factory =
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
+        var queue = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, database,
+                new ObjectMapper().findAndRegisterModules(), factory, properties,
+                new com.elma.gohan.config.EntityResolutionProperties(), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        queue.consume();
+        var order = org.mockito.Mockito.inOrder(connection);
+        order.verify(connection).setNetworkTimeout(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(1250));
+        order.verify(connection, org.mockito.Mockito.atLeastOnce()).prepareStatement(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test void fatalDispatcherErrorMakesProviderHealthDown() {
+        var delegate = org.mockito.Mockito.mock(BaiduPlaceApiProvider.class);
+        org.mockito.Mockito.when(delegate.searchNearby(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyString()))
+                .thenThrow(new AssertionError("simulated worker failure"));
+        var coordinator = new CoordinatedBaiduProvider(connections, delegate,
+                new ObjectMapper().findAndRegisterModules(), properties,
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        providers.add(coordinator);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> query(coordinator, "fatal"))
+                .isInstanceOf(IllegalStateException.class).hasCauseInstanceOf(AssertionError.class);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (coordinator.health().getStatus().equals(org.springframework.boot.actuate.health.Status.UP)
+                && System.nanoTime() < deadline) Thread.yield();
+        assertThat(coordinator.health().getStatus()).isEqualTo(org.springframework.boot.actuate.health.Status.DOWN);
+    }
+
+    @Test void localFailuresNeverExhaustBackgroundTaskAttempts() {
+        var aggregator = org.mockito.Mockito.mock(com.elma.gohan.application.EvidenceAggregator.class);
+        @SuppressWarnings("unchecked")
+        org.springframework.beans.factory.ObjectProvider<com.elma.gohan.application.EvidenceAggregator> factory =
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
+        org.mockito.Mockito.when(factory.getObject()).thenReturn(aggregator);
+        org.mockito.Mockito.when(aggregator.enrichInBackground(org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenThrow(new IllegalStateException("local coordination unavailable"));
+        var queue = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, connections,
+                new ObjectMapper().findAndRegisterModules(), factory, properties,
+                new com.elma.gohan.config.EntityResolutionProperties(), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        queue.enqueue(List.of(com.elma.gohan.TestRestaurants.full("local-failure", 4.5, 20)),
+                new Location(28.2291,112.9412), 500);
+        for (int i = 0; i < 21; i++) {
+            db.update("UPDATE baidu_enrichment_task SET available_at=now()");
+            queue.consume();
+        }
+        assertThat(db.queryForObject("SELECT attempts FROM baidu_enrichment_task", Integer.class)).isZero();
+    }
+
     @Test void fiftyDifferentRequestsRespectDeadlinesWithoutBorrowingBusinessConnections() throws Exception {
         var coordinator = provider();
         var executor = Executors.newFixedThreadPool(50);
@@ -136,8 +235,13 @@ class BaiduCoordinationIntegrationTest {
             }
             long started = System.nanoTime();
             start.countDown();
-            for (var future : pending) assertThat(future.get(3, TimeUnit.SECONDS).status())
-                    .isIn(EvidenceStatus.NO_DATA, EvidenceStatus.UNAVAILABLE);
+            int successes = 0;
+            for (var future : pending) {
+                var result = future.get(3, TimeUnit.SECONDS);
+                if (result.status() == EvidenceStatus.NO_DATA) successes++;
+                else assertThat(result.failureReason()).isEqualTo("LOCAL_QUEUE_TIMEOUT");
+            }
+            assertThat(successes).isGreaterThanOrEqualTo(1);
             assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)).isLessThan(2500);
             assertThat(calls.get()).isBetween(1, 3);
             assertThat(peak).hasValue(1);
@@ -206,7 +310,10 @@ class BaiduCoordinationIntegrationTest {
         org.mockito.Mockito.when(factory.getObject()).thenReturn(aggregator);
         org.mockito.Mockito.when(aggregator.enrichInBackground(org.mockito.ArgumentMatchers.anyList(),
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt()))
-                .thenThrow(new IllegalStateException("simulated worker failure")).thenReturn(java.util.Map.of());
+                .thenAnswer(invocation -> {
+                    com.elma.gohan.provider.evidence.BaiduCallContext.recordOutboundFailure();
+                    throw new IllegalStateException("simulated upstream failure");
+                }).thenReturn(java.util.Map.of());
         var mapper = new ObjectMapper().findAndRegisterModules();
         var queue = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, connections, mapper, factory, properties,
                 new com.elma.gohan.config.EntityResolutionProperties(), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
@@ -221,7 +328,7 @@ class BaiduCoordinationIntegrationTest {
         assertThat(db.queryForObject("SELECT attempts FROM baidu_enrichment_task", Integer.class)).isEqualTo(1);
         db.update("UPDATE baidu_enrichment_task SET available_at=now()-interval '1 second'");
         restarted.consume();
-        assertThat(db.queryForObject("SELECT attempts FROM baidu_enrichment_task", Integer.class)).isEqualTo(2);
+        assertThat(db.queryForObject("SELECT attempts FROM baidu_enrichment_task", Integer.class)).isEqualTo(1);
         org.mockito.Mockito.verify(aggregator, org.mockito.Mockito.times(2)).enrichInBackground(
                 org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
         db.update("INSERT INTO external_entity_mapping(id,primary_source,primary_poi_id,evidence_source,match_status,expires_at,created_at,updated_at) "

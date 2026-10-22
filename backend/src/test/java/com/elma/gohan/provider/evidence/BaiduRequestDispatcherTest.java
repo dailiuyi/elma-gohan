@@ -73,7 +73,10 @@ class BaiduRequestDispatcherTest {
             assertThat(dispatcher.call("overflow", BaiduRequestDispatcherTest::empty).failureReason())
                     .isEqualTo("LOCAL_QUEUE_FULL");
             assertThat(expired.get(1, TimeUnit.SECONDS).failureReason()).isEqualTo("LOCAL_QUEUE_TIMEOUT");
+            var replacement = executor.submit(() -> dispatcher.call("replacement", BaiduRequestDispatcherTest::empty));
+            waitForCounter(meters, "queued", 3);
             release.countDown();
+            assertThat(replacement.get(1, TimeUnit.SECONDS).status()).isEqualTo(EvidenceStatus.NO_DATA);
             assertThat(first.get(1, TimeUnit.SECONDS).status()).isEqualTo(EvidenceStatus.NO_DATA);
             // A subsequent job proves the expired job ahead of it was consumed without executing.
             assertThat(dispatcher.call("after", BaiduRequestDispatcherTest::empty).status()).isEqualTo(EvidenceStatus.NO_DATA);
@@ -112,11 +115,34 @@ class BaiduRequestDispatcherTest {
             first.get(1, TimeUnit.SECONDS);
             background.get(1, TimeUnit.SECONDS);
             for (var future : foreground) future.get(1, TimeUnit.SECONDS);
-            assertThat(order.indexOf("background")).isBetween(1, 3);
+            assertThat(order.indexOf("background")).isEqualTo(2);
         } finally {
             release.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void fatalWorkerFailureReleasesWaitersAndMakesHealthFail() throws Exception {
+        var meters = new SimpleMeterRegistry();
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(2);
+        try (var dispatcher = new BaiduRequestDispatcher(8, meters)) {
+            var failed = executor.submit(() -> dispatcher.call("fatal", () -> {
+                entered.countDown(); await(release); throw new AssertionError("simulated fatal failure");
+            }));
+            assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+            var waiting = executor.submit(() -> dispatcher.call("waiting", BaiduRequestDispatcherTest::empty));
+            waitForCounter(meters, "queued", 2);
+            release.countDown();
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> failed.get(1, TimeUnit.SECONDS))
+                    .hasCauseInstanceOf(IllegalStateException.class);
+            assertThat(waiting.get(1, TimeUnit.SECONDS).failureReason()).isEqualTo("DISPATCHER_FAILED");
+            assertThat(dispatcher.healthy()).isFalse();
+            assertThat(meters.counter("elma.baidu.worker.failures").count()).isEqualTo(1);
+            assertThat(dispatcher.call("later", BaiduRequestDispatcherTest::empty).failureReason()).isEqualTo("DISPATCHER_FAILED");
+        } finally { release.countDown(); executor.shutdownNow(); }
     }
 
     private static PlatformSearchResult empty() {

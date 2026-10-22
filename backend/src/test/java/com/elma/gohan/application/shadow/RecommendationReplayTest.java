@@ -87,7 +87,7 @@ class RecommendationReplayTest {
                 var snapshot = calculator.calculate(input);
                 shadowNanos.add(System.nanoTime() - began);
                 JsonNode payload = mapper.readTree(snapshot.getAllCandidatesJson());
-                var request = replayInput(input, snapshot.getConfigHash(), payload);
+                var request = replayInput(input, payload);
                 var result = replay.replay(request);
                 assertThat(result.servedPoolMatches()).as(scenario.name() + "/" + seed + " V7").isTrue();
                 assertThat(result.shadowDifferences()).as(scenario.name() + "/" + seed + " V9").isEmpty();
@@ -147,16 +147,45 @@ class RecommendationReplayTest {
         report.put("shadowLowestRiskFallbacks", fallbacks);
         report.put("largestLegacyScoreGap", maximumLegacyGap);
         report.put("controlledSensitivity", controlledSensitivity());
-        report.put("v04ScoreSelectMedianMicros", percentile(servingNanos, .5) / 1000.0);
-        report.put("v04ScoreSelectP95Micros", percentile(servingNanos, .95) / 1000.0);
-        report.put("v05PosteriorFeaturesSelectSerializeMedianMicros", percentile(shadowNanos, .5) / 1000.0);
-        report.put("v05PosteriorFeaturesSelectSerializeP95Micros", percentile(shadowNanos, .95) / 1000.0);
         Map<String, Object> ablations = new LinkedHashMap<>();
         variants.forEach((name, stats) -> ablations.put(name, stats.summary()));
         report.put("ablations", ablations);
         report.put("cases", cases);
         mapper.writerWithDefaultPrettyPrinter().writeValue(Path.of("target/recommendation-replay/report.json").toFile(), report);
         assertThat(servingNanos).hasSize(104);
+        try (var expected = Files.newInputStream(Path.of("../docs/reports/recommendation-replay-20261022.json"))) {
+            assertThat(mapper.<JsonNode>valueToTree(report)).as("Frozen deterministic replay and all six ablations")
+                    .isEqualTo(mapper.readTree(expected));
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+        "LIKE,7,false", "NORMAL,7,false", "DISLIKE,30,false", "DISLIKE,31,true", "LIKE,8,true"
+    })
+    void explorationHonorsSevenDayMealsAndThirtyDayDislikes(String feedback, int ageDays, boolean eligible) {
+        var scenario = RecommendationReplayFixtures.ratingProbe(4.8);
+        var restaurant = scenario.restaurants().get(0);
+        var preference = new UserPreference(scenario.preference().condition(), scenario.preference().tasteProfile(), Map.of(),
+                new RecentFoodHistory(List.of(new RecentFoodHistory.Entry("AMAP", "other-store", restaurant.categoryCode(),
+                        feedback, RecommendationReplayFixtures.AS_OF.minusDays(ageDays))), RecommendationReplayFixtures.AS_OF));
+        var lowRisk = new com.elma.gohan.domain.risk.RiskResult(0, com.elma.gohan.domain.risk.RiskLevel.LOW, List.of(), "risk-v0.3.1");
+        var result = engine(new RecommendationProperties()).recommend(List.of(restaurant), Map.of(restaurant.sourcePoiId(), lowRisk), preference, 42);
+        assertThat(result.selectionSnapshot()).singleElement().satisfies(candidate ->
+                assertThat(candidate.explorationEligible()).isEqualTo(eligible));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"LIKE", "NORMAL"})
+    void sameRestaurantLikeAndNormalBothCostThirtyPoints(String feedback) {
+        var scenario = RecommendationReplayFixtures.ratingProbe(4.8);
+        var restaurant = scenario.restaurants().get(0);
+        var preference = new UserPreference(scenario.preference().condition(), scenario.preference().tasteProfile(), Map.of(),
+                new RecentFoodHistory(List.of(new RecentFoodHistory.Entry("AMAP", restaurant.sourcePoiId(), restaurant.categoryCode(),
+                        feedback, RecommendationReplayFixtures.AS_OF.minusDays(7))), RecommendationReplayFixtures.AS_OF));
+        var result = engine(new RecommendationProperties()).recommend(List.of(restaurant), scenario.risks(), preference, 42);
+        assertThat(result.pool()).singleElement().satisfies(candidate ->
+                assertThat(candidate.personalization().scoreBreakdown().recentPenalty()).isEqualTo(30));
     }
 
     @Test
@@ -165,22 +194,22 @@ class RecommendationReplayTest {
         var snapshot = calculator.calculate(input);
         ObjectNode payload = (ObjectNode) mapper.readTree(snapshot.getAllCandidatesJson());
         ((ObjectNode) payload.withArray("candidates").get(0)).remove("shadowFeatures");
-        var missingFeatures = replayInput(input, snapshot.getConfigHash(), payload);
+        var missingFeatures = replayInput(input, payload);
         assertThatThrownBy(() -> replay.replay(missingFeatures))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("shadowFeatures");
         payload = (ObjectNode) mapper.readTree(snapshot.getAllCandidatesJson());
         payload.withArray("postExclusionManifest").removeAll();
-        var request = replayInput(input, snapshot.getConfigHash(), payload);
+        var request = replayInput(input, payload);
         assertThatThrownBy(() -> replay.replay(request)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("manifest/actual");
     }
 
-    private RecommendationSelectionReplay.Input replayInput(SafeRegretShadowInput input, String hash, JsonNode payload) {
+    private RecommendationSelectionReplay.Input replayInput(SafeRegretShadowInput input, JsonNode payload) {
         return new RecommendationSelectionReplay.Input(input.randomSeed(), input.servedResult().pool().size(), .20,
                 input.servedResult().selectionSnapshot(), input.servedResult().pool().stream().map(c ->
                     new RecommendationSelectionReplay.CandidateRef(c.restaurant().source(), c.restaurant().sourcePoiId())).toList(),
                 input.userPreference().condition().minBudget(), input.userPreference().condition().maxBudget(),
-                SafeRegretConfig.defaults(), hash, payload);
+                SafeRegretConfig.defaults(), payload);
     }
 
     private static DefaultRecommendationEngine engine(RecommendationProperties properties) {
@@ -194,9 +223,6 @@ class RecommendationReplayTest {
         return decision.pool().stream().map(c -> c.candidate().candidate().candidateId()).toList();
     }
     private static String first(List<String> pool) { return pool.isEmpty() ? null : pool.get(0); }
-    private static long percentile(List<Long> nanos, double fraction) {
-        return nanos.stream().sorted().toList().get((int) Math.ceil(nanos.size() * fraction) - 1);
-    }
     private static Restaurant fullCompleteness(Restaurant r) {
         return completeness(r, DataCompleteness.FULL);
     }

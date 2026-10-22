@@ -16,7 +16,7 @@ public final class RecommendationSelectionReplay {
     public record Input(long randomSeed, int servedPoolSize, double servedExplorationRate,
                         List<SelectionCandidate> selectionSnapshot, List<CandidateRef> servedPool,
                         Integer minBudget, Integer maxBudget, SafeRegretConfig shadowConfiguration,
-                        String recordedConfigHash, JsonNode shadowPayload) {
+                        JsonNode shadowPayload) {
         public Input {
             if (randomSeed == 0) throw new IllegalArgumentException("V7 randomSeed must be nonzero");
             if (servedPoolSize < 0 || servedPoolSize > 6) throw new IllegalArgumentException("Invalid stored pool size");
@@ -26,13 +26,11 @@ public final class RecommendationSelectionReplay {
             servedPool = List.copyOf(servedPool);
             if (servedPool.size() != servedPoolSize) throw new IllegalArgumentException("Stored pool is incomplete");
             Objects.requireNonNull(shadowConfiguration, "Explicit v0.5 selection configuration is required");
-            Objects.requireNonNull(recordedConfigHash, "Recorded full config hash is required");
             Objects.requireNonNull(shadowPayload, "V9 payload is required");
         }
     }
     public record Result(String scope, boolean servedPoolMatches, List<CandidateRef> servedPool,
-                         List<String> shadowDifferences, SafeRegretDecision shadowDecision,
-                         String recordedConfigHash) { }
+                         List<String> shadowDifferences, SafeRegretDecision shadowDecision) { }
 
     private final ObjectMapper mapper;
 
@@ -49,7 +47,7 @@ public final class RecommendationSelectionReplay {
         SafeRegretDecision shadow = shadow(input.shadowPayload(), input.randomSeed(), input.minBudget(), input.maxBudget(),
                 input.shadowConfiguration());
         return new Result("FROZEN_SELECTION_ONLY", served.equals(input.servedPool()), served,
-                differences(input.shadowPayload(), shadow), shadow, input.recordedConfigHash());
+                differences(input.shadowPayload(), shadow), shadow);
     }
 
     public SafeRegretDecision shadow(JsonNode payload, long seed, Integer minBudget, Integer maxBudget,

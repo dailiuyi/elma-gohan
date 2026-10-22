@@ -30,14 +30,31 @@ class RecommendationRegressionTest {
         var shadow = new SafeRegretShadowService(new SafeRegretProperties(), new SafeRegretShadowSnapshotWriter(repository),
                 new SafeRegretShadowCalculator(new SafeRegretProperties(), new TasteProperties(), mapper));
         Map<String, Object> actual = new TreeMap<>();
+        Map<String, Object> summaries = new TreeMap<>();
+        int explorations = 0;
         for (var scenario : RecommendationReplayFixtures.scenarios()) {
             for (long seed : RecommendationReplayFixtures.SEEDS) {
                 var input = scenario.input(seed);
                 var snapshot = shadow.capture(input).orElseThrow();
+                explorations += (int) input.servedResult().pool().stream()
+                        .filter(c -> c.personalization().selectionMode() == com.elma.gohan.domain.recommendation.SelectionMode.EXPLORATION).count();
+                summaries.put(scenario.name() + "/" + seed, Map.of(
+                        "pool", input.servedResult().pool().stream().map(c -> Map.of(
+                                "source", c.restaurant().source(), "sourcePoiId", c.restaurant().sourcePoiId(),
+                                "score", c.lowRegretScore(), "mode", c.personalization().selectionMode())).toList(),
+                        "selectionSnapshot", input.servedResult().selectionSnapshot()));
                 actual.put(scenario.name() + "/" + seed, Map.of(
                         "served", hash(mapper.writeValueAsBytes(input.servedResult())),
                         "shadow", hash(mapper.writeValueAsBytes(mapper.readTree(snapshot.getAllCandidatesJson()))),
                         "config", snapshot.getConfigHash()));
+            }
+        }
+        assertThat(explorations).as("Frozen baseline must exercise exploration").isEqualTo(7);
+        try (var readable = getClass().getResourceAsStream("/recommendation/regression-readable.json")) {
+            var expected = mapper.readTree(readable);
+            for (var entry : summaries.entrySet()) {
+                assertThat(mapper.<com.fasterxml.jackson.databind.JsonNode>valueToTree(entry.getValue())).as(entry.getKey() + " readable scores/pool/modes")
+                        .isEqualTo(expected.get(entry.getKey()));
             }
         }
         Path generated = Path.of("target/recommendation-regression-actual.json");

@@ -12,10 +12,6 @@
     "rating48to39QualityLoss": 3.6000000000000014,
     "completenessFullToMinimalQualityOnlyLoss": 3.5
   },
-  "v04ScoreSelectMedianMicros": 55.065,
-  "v04ScoreSelectP95Micros": 162.569,
-  "v05PosteriorFeaturesSelectSerializeMedianMicros": 1621.486,
-  "v05PosteriorFeaturesSelectSerializeP95Micros": 3940.496,
   "ablations": {
     "v04-without-risk-ranking": {
       "decisions": 104,

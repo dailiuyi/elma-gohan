@@ -70,7 +70,7 @@
 
 本批缺失字段候选为 INFERRED，分类惩罚已经把其质量分裁到零，因此完整度中和没有再改变该候选分数；不能据此认定完整度没有影响。同样，首推没有变化也不能说明某条路径可以删除：分数变化可能被抽样数量、品类轮询、门槛或固定 seed 掩盖。
 
-本机诊断的 v0.4“评分与选池”中位数约 55μs、P95 约 163μs；v0.5“后验、特征、选池、序列化”中位数约 1621μs、P95 约 3940μs。两组工作量不同，均不含网络或数据库，不是线上延迟指标，也不作为性能回归阈值。
+2026-10-22 审查修复：固定报告移除 JVM/机器相关耗时；报告只保留可复现的决策和消融结果，并由测试逐字段校验。耗时不作为本批证据。
 
 ## 可重复执行的工具
 
@@ -81,7 +81,7 @@ cd backend
 mvn -B -Dtest=RecommendationRegressionTest,RecommendationReplayTest,RecentFoodIndexTest test
 ```
 
-输出在 `backend/target/recommendation-replay/`：`report.json`、`example-input.json`。相同输入的决策与消融计数可重复，计时数据会随 JVM 和机器负载波动。
+输出在 `backend/target/recommendation-replay/`：`report.json`、`example-input.json`。相同输入的决策与消融计数可重复；报告不含计时数据。
 
 独立 CLI 不启动 Spring，不连接数据库或地图服务。在仓库根目录：
 
@@ -95,9 +95,9 @@ java -cp "$replay_classpath" com.elma.gohan.application.replay.RecommendationSel
 
 本次实际执行返回 `scope=FROZEN_SELECTION_ONLY`、`servedPoolMatches=true`、`shadowDifferences=[]`。
 
-`backend/tools/export_recommendation_replay.sql` 是只读导出查询，按推荐 ID 联合 V7 日志、原候选顺序与 V9 快照，只导出 v0.4.1 / v0.5、schema 2、seed 一致的记录。需要操作者明确提供该部署当时的 `served_exploration_rate` 和完整 `shadow_configuration` JSON；这些不能从现有 V7/V9 自动推测。SQL 经真实 PostgreSQL/Flyway/API 集成测试验证，导出由本地 POI stub 生成的会话后可成功重放。
+`backend/tools/export_recommendation_replay.sql` 是只读导出查询，按推荐 ID 联合 V7 日志、原候选顺序与 V9 快照，只导出 v0.4.1 / v0.5、schema 2、seed 一致的记录。新会话的 `servedExplorationRate` 随 request_condition_json 保存，查询从记录读取；未记录此字段的历史行不导出，需有可靠部署记录才能人工补齐。操作者仍需明确提供完整 `shadow_configuration` JSON。SQL 经真实 PostgreSQL/Flyway/API 集成测试验证，导出由本地 POI stub 生成的会话后可成功重放。
 
-工具重放 V7 的随机选池，以及 V9 已冻结特征的分数、排名、slot、选择概率和目标值；不重算风险、匹配、画像或历史变化。V9 未保存完整评论和全部配置，`recordedConfigHash` 仅原样保留供核对，工具不会宣称已重建并验证整个配置哈希。缺少字段、特征或 manifest 不一致时拒绝输入，不补默认值。
+工具重放 V7 的随机选池，以及 V9 已冻结特征的分数、排名、slot、选择概率和目标值；不重算风险、匹配、画像或历史变化。V9 未保存完整评论和全部配置，回放输入/输出已移除未验证的 `recordedConfigHash`，原 V9 表仍保留完整配置哈希供离线核对；工具不宣称已重建并验证整个配置哈希。缺少字段、特征或 manifest 不一致时拒绝输入，不补默认值。
 
 ## 验证与阶段结论
 
@@ -115,3 +115,5 @@ DB_HOST=127.0.0.1 DB_PORT=55439 DB_USERNAME=elma_test DB_PASSWORD= DB_TEST_NAME=
 验证完成后已移除本轮临时 PostgreSQL 容器 `elma-gohan-algorithm-test-20261022` 及其匿名卷，55439 端口不再监听。测试和回放日志保留于上述路径。
 
 阶段结论：职责与重复计算已收敛；评分路径的重复影响得到量化。由于缺少真实接受率和风险校准样本，本阶段不发布删除某个因子的权重方案，也不解除 v0.5 serving 安全闩。后续先对获得授权的真实快照做相同回放并人工复核风险差异，再冻结灰度验收门槛。本轮按用户要求提交并创建 Draft PR 供人工审核；未执行合并、生产部署或算法切换。
+
+2026-10-22 HOLD 复核：冻结范围从 EvidenceBundle 之后开始。旧实现独立复核脚本、104 组可读摘要及各项修复见[实施记录](recommendation-poi-implementation-20261022.md#pr3-hold-修复复核2026-10-22)。

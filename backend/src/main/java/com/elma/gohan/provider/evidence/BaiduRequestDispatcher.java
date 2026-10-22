@@ -9,15 +9,21 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.function.Supplier;
 
 /** 同查询合并；三个前台任务后给后台一次机会。等待者只等待 Future。 */
 final class BaiduRequestDispatcher implements AutoCloseable {
+    private static final Logger log = LoggerFactory.getLogger(BaiduRequestDispatcher.class);
+    private volatile Throwable workerFailure;
     private static final class Job {
         final String key;
         final boolean background;
         final Supplier<PlatformSearchResult> action;
         final AtomicLong deadline;
+        final AtomicBoolean outboundFailure = new AtomicBoolean();
         final CompletableFuture<PlatformSearchResult> result = new CompletableFuture<>();
         final long enqueuedAt = System.nanoTime();
 
@@ -44,6 +50,7 @@ final class BaiduRequestDispatcher implements AutoCloseable {
         this.meters = meters;
         worker = new Thread(this::run, "baidu-outbound");
         worker.setDaemon(true);
+        worker.setUncaughtExceptionHandler((thread, failure) -> failWorker(failure));
         worker.start();
     }
 
@@ -53,7 +60,10 @@ final class BaiduRequestDispatcher implements AutoCloseable {
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(remaining);
         Job job;
         synchronized (this) {
+            if (workerFailure != null) return unavailable("DISPATCHER_FAILED");
             if (closed) return unavailable("DISPATCHER_CLOSED");
+            removeExpired(foreground);
+            removeExpired(background);
             job = pending.get(key);
             if (job == null) {
                 if (foreground.size() + background.size() >= capacity) return unavailable("LOCAL_QUEUE_FULL");
@@ -69,7 +79,9 @@ final class BaiduRequestDispatcher implements AutoCloseable {
             }
         }
         try {
-            return job.result.get(remaining, TimeUnit.MILLISECONDS);
+            PlatformSearchResult result = job.result.get(remaining, TimeUnit.MILLISECONDS);
+            if (job.outboundFailure.get()) BaiduCallContext.recordOutboundFailure();
+            return result;
         } catch (TimeoutException e) {
             return unavailable("LOCAL_QUEUE_TIMEOUT");
         } catch (InterruptedException e) {
@@ -103,15 +115,46 @@ final class BaiduRequestDispatcher implements AutoCloseable {
                 }
             }
             meters.timer("elma.baidu.queue.wait").record(System.nanoTime() - job.enqueuedAt, TimeUnit.NANOSECONDS);
-            try (var ignored = new BaiduCallContext(job.deadline::get, job.background)) {
+            try (var ignored = new BaiduCallContext(job.deadline::get, job.background, job.outboundFailure)) {
                 job.result.complete(BaiduCallContext.remainingMillis() <= 0
                         ? unavailable("LOCAL_QUEUE_TIMEOUT") : job.action.get());
+            } catch (Error e) {
+                job.result.completeExceptionally(e);
+                throw e;
             } catch (RuntimeException e) {
                 job.result.completeExceptionally(e);
             } finally {
                 synchronized (this) { pending.remove(job.key, job); }
             }
         }
+    }
+
+    private void removeExpired(ArrayDeque<Job> queue) {
+        var iterator = queue.iterator();
+        long now = System.nanoTime();
+        while (iterator.hasNext()) {
+            Job job = iterator.next();
+            if (job.deadline.get() - now <= 0) {
+                iterator.remove();
+                pending.remove(job.key, job);
+                job.result.complete(unavailable("LOCAL_QUEUE_TIMEOUT"));
+            }
+        }
+    }
+
+    private synchronized void failWorker(Throwable failure) {
+        workerFailure = failure;
+        log.error("Baidu outbound worker terminated errorType={}", failure.getClass().getSimpleName());
+        meters.counter("elma.baidu.worker.failures").increment();
+        pending.values().forEach(job -> job.result.complete(unavailable("DISPATCHER_FAILED")));
+        pending.clear();
+        foreground.clear();
+        background.clear();
+        notifyAll();
+    }
+
+    synchronized boolean healthy() {
+        return workerFailure == null && !closed && worker.isAlive();
     }
 
     @Override

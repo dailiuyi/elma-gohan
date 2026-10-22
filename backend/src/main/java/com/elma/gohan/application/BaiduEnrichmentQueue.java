@@ -74,6 +74,7 @@ public class BaiduEnrichmentQueue {
     public void consume() {
         if (!properties.isAsyncEnrichmentEnabled() || !properties.isEnabled() || properties.getAk().isBlank()) return;
         try (Connection connection = database.open()) {
+            connection.setNetworkTimeout(Runnable::run, 1250);
             JdbcTemplate lane = new JdbcTemplate(new SingleConnectionDataSource(connection, true));
             lane.setQueryTimeout(1);
             if (!Boolean.TRUE.equals(lane.queryForObject("SELECT pg_try_advisory_lock(?)", Boolean.class, LOCK))) return;
@@ -92,20 +93,25 @@ public class BaiduEnrichmentQueue {
                         .record(((Number) tasks.get(0).get("age_seconds")).doubleValue());
                 String key = (String) tasks.get(0).get("task_key");
                 // Lease is committed before processing. A crash makes the task available again.
-                lane.update("UPDATE baidu_enrichment_task SET attempts=attempts+1,available_at=now()+interval '2 minutes' WHERE task_key=?", key);
-                try {
-                    Task task = mapper.readValue((String) tasks.get(0).get("payload"), Task.class);
-                    List<Restaurant> remaining = task.restaurants().stream()
-                            .filter(r -> !complete(lane, r)).toList();
-                    if (!remaining.isEmpty()) aggregator.getObject().enrichInBackground(remaining, task.center(), task.radius());
-                    boolean complete = task.restaurants().stream().allMatch(r -> complete(lane, r));
-                    if (complete) lane.update("DELETE FROM baidu_enrichment_task WHERE task_key=?", key);
-                    else lane.update("UPDATE baidu_enrichment_task SET available_at=now()+interval '10 seconds' WHERE task_key=?", key);
-                    meters.counter("elma.baidu.enrichment", "outcome", complete ? "completed" : "remaining").increment();
-                    log.info("Baidu enrichment complete={} restaurants={}", complete, task.restaurants().size());
-                } catch (Exception e) {
-                    meters.counter("elma.baidu.enrichment", "outcome", "retry").increment();
-                    log.warn("Baidu enrichment retry errorType={}", e.getClass().getSimpleName());
+                lane.update("UPDATE baidu_enrichment_task SET available_at=now()+interval '2 minutes' WHERE task_key=?", key);
+                try (var attempt = new com.elma.gohan.provider.evidence.BaiduCallContext(120000, true)) {
+                    try {
+                        Task task = mapper.readValue((String) tasks.get(0).get("payload"), Task.class);
+                        List<Restaurant> remaining = task.restaurants().stream()
+                                .filter(r -> !complete(lane, r)).toList();
+                        if (!remaining.isEmpty()) aggregator.getObject().enrichInBackground(remaining, task.center(), task.radius());
+                        boolean complete = task.restaurants().stream().allMatch(r -> complete(lane, r));
+                        if (complete) lane.update("DELETE FROM baidu_enrichment_task WHERE task_key=?", key);
+                        else lane.update("UPDATE baidu_enrichment_task SET available_at=now()+interval '10 seconds' WHERE task_key=?", key);
+                        meters.counter("elma.baidu.enrichment", "outcome", complete ? "completed" : "remaining").increment();
+                        log.info("Baidu enrichment complete={} restaurants={}", complete, task.restaurants().size());
+                    } catch (Exception e) {
+                        meters.counter("elma.baidu.enrichment", "outcome", "retry").increment();
+                        log.warn("Baidu enrichment retry errorType={}", e.getClass().getSimpleName());
+                    } finally {
+                        if (attempt.hasOutboundFailure()) lane.update(
+                                "UPDATE baidu_enrichment_task SET attempts=attempts+1 WHERE task_key=?", key);
+                    }
                 }
             } finally {
                 try { lane.queryForObject("SELECT pg_advisory_unlock(?)", Boolean.class, LOCK); }

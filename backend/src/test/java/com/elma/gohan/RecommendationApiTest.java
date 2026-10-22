@@ -113,6 +113,19 @@ class RecommendationApiTest {
     @Autowired
     private PoiRecallCache recallCache;
 
+    @Autowired
+    private com.elma.gohan.config.RecommendationProperties recommendationProperties;
+
+    @Autowired
+    private com.elma.gohan.application.RecommendationSessionWriter sessionWriter;
+
+    @Autowired
+    private javax.sql.DataSource dataSource;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    private com.elma.gohan.infrastructure.persistence.RestaurantRepository restaurantRepository;
+
+
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
     private com.elma.gohan.application.EvidenceAggregator evidenceAggregator;
 
@@ -347,6 +360,79 @@ class RecommendationApiTest {
     }
 
     @Test
+    void oppositePoolsAcquireTheirFirstRestaurantLockInTheSameOrder() throws Exception {
+        var a = TestRestaurants.full("writer-a", 4.5, 20);
+        var b = TestRestaurants.full("writer-b", 4.5, 20);
+        var reached = new CountDownLatch(2);
+        var release = new CountDownLatch(1);
+        var firstStores = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var threads = java.util.concurrent.ConcurrentHashMap.<Thread>newKeySet();
+        var repositoryAnswer = org.mockito.Mockito.mockingDetails(restaurantRepository)
+                .getMockCreationSettings().getDefaultAnswer();
+        org.mockito.Mockito.doAnswer(call -> {
+            if (threads.add(Thread.currentThread())) {
+                var row = call.getArgument(0, com.elma.gohan.infrastructure.persistence.RestaurantEntity.class);
+                firstStores.add(row.getSourcePoiId());
+                reached.countDown();
+                assertThat(release.await(3, TimeUnit.SECONDS)).isTrue();
+            }
+            return repositoryAnswer.answer(call);
+        }).when(restaurantRepository).store(org.mockito.ArgumentMatchers.any());
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            var first = executor.submit(() -> sessionWriter.save(writerCreation(List.of(a, b))));
+            var second = executor.submit(() -> sessionWriter.save(writerCreation(List.of(b, a))));
+            assertThat(reached.await(3, TimeUnit.SECONDS)).isTrue();
+            assertThat(firstStores).containsExactly("writer-a", "writer-a");
+            release.countDown();
+            var firstId = first.get(5, TimeUnit.SECONDS).id();
+            var secondId = second.get(5, TimeUnit.SECONDS).id();
+            String poolQuery = "SELECT r.source_poi_id FROM recommendation_candidate c JOIN restaurant r ON r.id=c.restaurant_id "
+                    + "WHERE c.recommendation_log_id=? ORDER BY c.slot";
+            assertThat(jdbc.queryForList(poolQuery, String.class, firstId)).containsExactly("writer-a", "writer-b");
+            assertThat(jdbc.queryForList(poolQuery, String.class, secondId)).containsExactly("writer-b", "writer-a");
+        } finally { release.countDown(); executor.shutdownNow(); }
+    }
+
+    @Test
+    void writerCancelsBlockedDatabaseStatementWithinFiveSecondTransactionBudget() throws Exception {
+        var restaurant = TestRestaurants.full("writer-timeout", 4.5, 20);
+        sessionWriter.save(writerCreation(List.of(restaurant)));
+        var executor = Executors.newSingleThreadExecutor();
+        try (var connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                var holder = new JdbcTemplate(new org.springframework.jdbc.datasource.SingleConnectionDataSource(connection, true));
+                holder.queryForObject("SELECT id FROM restaurant WHERE source_poi_id=? FOR UPDATE", UUID.class, restaurant.sourcePoiId());
+                long started = System.nanoTime();
+                var blocked = executor.submit(() -> sessionWriter.save(writerCreation(List.of(restaurant))));
+                org.assertj.core.api.Assertions.assertThatThrownBy(() -> blocked.get(9, TimeUnit.SECONDS))
+                        .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                        .hasStackTraceContaining("canceling statement due to user request");
+                assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)).isBetween(4000L, 8000L);
+                assertThat(jdbc.queryForObject("SELECT count(*) FROM recommendation_log", Integer.class)).isEqualTo(1);
+            } finally { connection.rollback(); }
+        } finally { executor.shutdownNow(); }
+    }
+
+    private com.elma.gohan.application.RecommendationSessionWriter.Creation writerCreation(
+            List<com.elma.gohan.domain.restaurant.Restaurant> restaurants) {
+        var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        var request = new com.elma.gohan.controller.api.CreateRecommendationRequest(28.2, 112.9, 1000, 100, "ANY", List.of());
+        var preference = new com.elma.gohan.domain.recommendation.UserPreference(
+                new com.elma.gohan.domain.restaurant.SearchCondition(1000, 100, "ANY", List.of()));
+        var risk = new com.elma.gohan.domain.risk.RiskResult(0, com.elma.gohan.domain.risk.RiskLevel.LOW, List.of(), "risk-v0.3.1");
+        var pool = restaurants.stream().map(r -> new com.elma.gohan.domain.recommendation.RestaurantCandidate(r, risk, 80, List.of())).toList();
+        var risks = restaurants.stream().collect(java.util.stream.Collectors.toMap(
+                com.elma.gohan.domain.restaurant.Restaurant::sourcePoiId, r -> risk));
+        return new com.elma.gohan.application.RecommendationSessionWriter.Creation(UUID.randomUUID(), request,
+                preference, restaurants, restaurants, Map.of(), risks,
+                new com.elma.gohan.domain.recommendation.RecommendationResult(pool, "recommendation-v0.4.1", 42, List.of()),
+                new com.elma.gohan.provider.poi.PoiSearchDiagnostics(restaurants.size(), restaurants.size(), 1, 0,
+                        restaurants.size(), false, 100, "050000", null), null, now);
+    }
+
+    @Test
     void createAppliesHardFilterOnlyOnceBeforeScoring() {
         var response = create(USER, """
                 {"latitude":28.2282,"longitude":112.9388,"radius":1000,"category":"ANY","dislikes":[]}
@@ -358,6 +444,9 @@ class RecommendationApiTest {
 
     @Test
     void persistedSessionExportsAndReplaysWithTheReadOnlyQuery() throws Exception {
+        double originalRate = recommendationProperties.getExplorationRate();
+        recommendationProperties.setExplorationRate(.73);
+        try {
         var response = create(USER, """
                 {"latitude":28.2282,"longitude":112.9388,"radius":1000,"category":"ANY","dislikes":[]}
                 """);
@@ -365,14 +454,19 @@ class RecommendationApiTest {
         String id = JSON.readTree(response.getBody()).get("recommendationId").asText();
         awaitShadowIdle();
         String query = java.nio.file.Files.readString(java.nio.file.Path.of("tools/export_recommendation_replay.sql"))
-                .replace(":'served_exploration_rate'", "?").replace(":'shadow_configuration'", "?")
-                .replace(":'recommendation_id'", "?");
-        String exported = jdbc.queryForObject(query, String.class, .20,
+                .replace(":'shadow_configuration'", "?")
+                .replace(":'recommendation_id'", "?").replace("json ?", "json ??");
+        String exported = jdbc.queryForObject(query, String.class,
                 JSON.writeValueAsString(com.elma.gohan.domain.recommendation.v05.SafeRegretConfig.defaults()), id);
         var input = JSON.readValue(exported, com.elma.gohan.application.replay.RecommendationSelectionReplay.Input.class);
         var replay = new com.elma.gohan.application.replay.RecommendationSelectionReplay(JSON).replay(input);
         assertThat(replay.servedPoolMatches()).isTrue();
         assertThat(replay.shadowDifferences()).isEmpty();
+        assertThat(input.servedExplorationRate()).isEqualTo(.73);
+        jdbc.update("UPDATE recommendation_log SET request_condition_json=request_condition_json-'servedExplorationRate' WHERE id=?::uuid", id);
+        assertThat(jdbc.queryForList(query,
+                JSON.writeValueAsString(com.elma.gohan.domain.recommendation.v05.SafeRegretConfig.defaults()), id)).isEmpty();
+        } finally { recommendationProperties.setExplorationRate(originalRate); }
     }
 
     @Test
