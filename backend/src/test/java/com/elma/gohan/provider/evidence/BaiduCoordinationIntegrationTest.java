@@ -19,7 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** Real PostgreSQL, isolated disposable schema, local HTTP only. No map credentials needed. */
 class BaiduCoordinationIntegrationTest {
-    static DriverManagerDataSource ds;
+    static com.zaxxer.hikari.HikariDataSource ds;
+    static BaiduDatabase connections;
+    private final List<CoordinatedBaiduProvider> providers = new ArrayList<>();
     static JdbcTemplate db;
     static String schema;
     HttpServer server;
@@ -32,16 +34,23 @@ class BaiduCoordinationIntegrationTest {
         String database = System.getenv().getOrDefault("DB_TEST_NAME", "elma_test");
         if (!database.endsWith("_test")) throw new IllegalStateException("Integration database must end in _test");
         schema = "baidu_it_" + UUID.randomUUID().toString().replace("-", "");
-        ds = new DriverManagerDataSource("jdbc:postgresql://" + System.getenv().getOrDefault("DB_HOST", "localhost")
+        ds = new com.zaxxer.hikari.HikariDataSource();
+        ds.setJdbcUrl("jdbc:postgresql://" + System.getenv().getOrDefault("DB_HOST", "localhost")
                 + ":" + System.getenv().getOrDefault("DB_PORT", "5432") + "/" + database + "?currentSchema=" + schema
-                + "&options=-c%20TimeZone=Asia%2FShanghai",
-                System.getenv().getOrDefault("DB_USERNAME", "postgres"), System.getenv().getOrDefault("DB_PASSWORD", ""));
+                + "&options=-c%20TimeZone=Asia%2FShanghai");
+        ds.setUsername(System.getenv().getOrDefault("DB_USERNAME", "postgres"));
+        ds.setPassword(System.getenv().getOrDefault("DB_PASSWORD", ""));
+        ds.setMaximumPoolSize(2);
+        ds.setConnectionTimeout(250);
+        connections = new BaiduDatabase(ds);
         db = new JdbcTemplate(ds);
         db.execute("CREATE SCHEMA " + schema);
         Flyway.configure().dataSource(ds).defaultSchema(schema).schemas(schema).load().migrate();
     }
     @AfterAll static void cleanup() {
         if (db != null && schema != null && schema.matches("baidu_it_[a-f0-9]{32}")) db.execute("DROP SCHEMA " + schema + " CASCADE");
+        connections.close();
+        ds.close();
     }
     @BeforeEach void start() throws Exception {
         db.update("DELETE FROM baidu_query_cache");
@@ -61,10 +70,12 @@ class BaiduCoordinationIntegrationTest {
         properties = new BaiduProperties(); properties.setAk("test-only-key");
         properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
     }
-    @AfterEach void stop() { server.stop(0); httpExecutor.shutdownNow(); }
+    @AfterEach void stop() { providers.forEach(CoordinatedBaiduProvider::close); server.stop(0); httpExecutor.shutdownNow(); }
     CoordinatedBaiduProvider provider() {
-        return new CoordinatedBaiduProvider(ds, new BaiduPlaceApiProvider(properties, new BaiduPlaceRateLimiter(properties)),
-                new ObjectMapper().findAndRegisterModules(), properties);
+        var provider = new CoordinatedBaiduProvider(connections, new BaiduPlaceApiProvider(properties),
+                new ObjectMapper().findAndRegisterModules(), properties, new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        providers.add(provider);
+        return provider;
     }
     PlatformSearchResult query(CoordinatedBaiduProvider provider, String query) {
         return provider.searchNearby(new Location(28.2291, 112.9412), 500, query);
@@ -95,6 +106,98 @@ class BaiduCoordinationIntegrationTest {
         assertThat(query(provider(), "d").failureReason()).isEqualTo("DAILY_QUOTA");
         assertThat(calls).hasValue(2);
     }
+
+    @Test void serviceConcurrencyAndPermanentQuotaStopEveryInstance() {
+        status.set(402);
+        assertThat(query(provider(), "service-a").failureReason()).isEqualTo("UPSTREAM_RATE_LIMIT");
+        assertThat(query(provider(), "service-b").failureReason()).isEqualTo("UPSTREAM_RATE_LIMIT");
+        assertThat(calls).hasValue(1);
+        db.update("UPDATE baidu_call_state SET blocked_until=now()");
+        status.set(301);
+        assertThat(query(provider(), "permanent-a").failureReason()).isEqualTo("PERMANENT_QUOTA");
+        assertThat(query(provider(), "permanent-b").failureReason()).isEqualTo("PERMANENT_QUOTA");
+        assertThat(calls).hasValue(2);
+        assertThat(db.queryForObject("SELECT blocked_until='infinity'::timestamptz FROM baidu_call_state WHERE id=1", Boolean.class)).isTrue();
+    }
+
+    @Test void fiftyDifferentRequestsRespectDeadlinesWithoutBorrowingBusinessConnections() throws Exception {
+        var coordinator = provider();
+        var executor = Executors.newFixedThreadPool(50);
+        var start = new CountDownLatch(1);
+        // Even a completely occupied business pool must not block the outbound dispatcher.
+        try (var first = ds.getConnection(); var second = ds.getConnection()) {
+            List<Future<PlatformSearchResult>> pending = new ArrayList<>();
+            for (int i = 0; i < 50; i++) {
+                String key = "load-" + i;
+                pending.add(executor.submit(() -> {
+                    start.await();
+                    try (var ignored = new BaiduCallContext(1500)) { return query(coordinator, key); }
+                }));
+            }
+            long started = System.nanoTime();
+            start.countDown();
+            for (var future : pending) assertThat(future.get(3, TimeUnit.SECONDS).status())
+                    .isIn(EvidenceStatus.NO_DATA, EvidenceStatus.UNAVAILABLE);
+            assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)).isLessThan(2500);
+            assertThat(calls.get()).isBetween(1, 3);
+            assertThat(peak).hasValue(1);
+            List<Long> ordered = starts.stream().sorted().toList();
+            for (long beginning : ordered) {
+                assertThat(ordered.stream().filter(t -> t >= beginning && t < beginning + TimeUnit.SECONDS.toNanos(1)).count())
+                        .isLessThanOrEqualTo(2);
+            }
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test void distinctTasksCannotExceedLastQueueSlotAndFullIsReported() throws Exception {
+        db.update("INSERT INTO baidu_enrichment_task(task_key,payload) SELECT 'existing-'||n,'{}'::jsonb FROM generate_series(1,999) n");
+        @SuppressWarnings("unchecked")
+        org.springframework.beans.factory.ObjectProvider<com.elma.gohan.application.EvidenceAggregator> factory =
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
+        var queue = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, connections,
+                new ObjectMapper().findAndRegisterModules(), factory, properties,
+                new com.elma.gohan.config.EntityResolutionProperties(), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        var executor = Executors.newFixedThreadPool(2);
+        var start = new CountDownLatch(1);
+        try {
+            List<Future<com.elma.gohan.application.BaiduEnrichmentQueue.EnqueueResult>> pending = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                String id = "last-slot-" + i;
+                pending.add(executor.submit(() -> {
+                    start.await();
+                    return queue.enqueue(List.of(com.elma.gohan.TestRestaurants.full(id, 4.5, 20)),
+                            new Location(28.2291,112.9412), 500);
+                }));
+            }
+            start.countDown();
+            assertThat(List.of(pending.get(0).get(3, TimeUnit.SECONDS), pending.get(1).get(3, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(com.elma.gohan.application.BaiduEnrichmentQueue.EnqueueResult.ENQUEUED,
+                            com.elma.gohan.application.BaiduEnrichmentQueue.EnqueueResult.FULL);
+            assertThat(db.queryForObject("SELECT count(*) FROM baidu_enrichment_task", Integer.class)).isEqualTo(1000);
+        } finally { executor.shutdownNow(); }
+    }
+
+    @Test void incompleteAmbiguousMappingKeepsTaskAndCompletedStoresAreNotRetried() {
+        var aggregator = org.mockito.Mockito.mock(com.elma.gohan.application.EvidenceAggregator.class);
+        @SuppressWarnings("unchecked")
+        org.springframework.beans.factory.ObjectProvider<com.elma.gohan.application.EvidenceAggregator> factory =
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
+        org.mockito.Mockito.when(factory.getObject()).thenReturn(aggregator);
+        var queue = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, connections,
+                new ObjectMapper().findAndRegisterModules(), factory, properties,
+                new com.elma.gohan.config.EntityResolutionProperties(), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        var first = com.elma.gohan.TestRestaurants.full("completed-store", 4.5, 20);
+        var second = com.elma.gohan.TestRestaurants.full("incomplete-store", 4.5, 20);
+        db.update("INSERT INTO external_entity_mapping(id,primary_source,primary_poi_id,evidence_source,match_status,match_features_json,match_algorithm_version,expires_at,created_at,updated_at) "
+                        + "VALUES (?,'AMAP',?,'BAIDU','NO_MATCH','{}','entity-v0.4',(now() AT TIME ZONE 'UTC')+interval '10 minutes',now(),now()),"
+                        + "(?,'AMAP',?,'BAIDU','AMBIGUOUS','{\"reasonBudgetOrAvailability\":1}','entity-v0.4',(now() AT TIME ZONE 'UTC')+interval '6 hours',now(),now())",
+                UUID.randomUUID(), first.sourcePoiId(), UUID.randomUUID(), second.sourcePoiId());
+        queue.enqueue(List.of(first, second), new Location(28.2291,112.9412), 500);
+        queue.consume();
+        org.mockito.Mockito.verify(aggregator).enrichInBackground(org.mockito.ArgumentMatchers.eq(List.of(second)),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(500));
+        assertThat(db.queryForObject("SELECT count(*) FROM baidu_enrichment_task", Integer.class)).isEqualTo(1);
+    }
     @Test void durableQueueDeduplicatesAndRecoversAfterLeaseExpiration() {
         var aggregator = org.mockito.Mockito.mock(com.elma.gohan.application.EvidenceAggregator.class);
         @SuppressWarnings("unchecked")
@@ -105,15 +208,15 @@ class BaiduCoordinationIntegrationTest {
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt()))
                 .thenThrow(new IllegalStateException("simulated worker failure")).thenReturn(java.util.Map.of());
         var mapper = new ObjectMapper().findAndRegisterModules();
-        var queue = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, mapper, factory, properties,
-                new com.elma.gohan.config.EntityResolutionProperties());
+        var queue = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, connections, mapper, factory, properties,
+                new com.elma.gohan.config.EntityResolutionProperties(), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
         var restaurants = List.of(com.elma.gohan.TestRestaurants.full("queue-a", 4.5, 20));
         var center = new Location(28.2291, 112.9412);
         queue.enqueue(restaurants, center, 500); queue.enqueue(restaurants, center, 500);
         assertThat(db.queryForObject("SELECT count(*) FROM baidu_enrichment_task", Integer.class)).isEqualTo(1);
         queue.consume();
-        var restarted = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, mapper, factory, properties,
-                new com.elma.gohan.config.EntityResolutionProperties());
+        var restarted = new com.elma.gohan.application.BaiduEnrichmentQueue(ds, connections, mapper, factory, properties,
+                new com.elma.gohan.config.EntityResolutionProperties(), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
         restarted.consume();
         assertThat(db.queryForObject("SELECT attempts FROM baidu_enrichment_task", Integer.class)).isEqualTo(1);
         db.update("UPDATE baidu_enrichment_task SET available_at=now()-interval '1 second'");

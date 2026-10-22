@@ -17,6 +17,32 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class RealtimeEvidenceBudgetTest {
+    @Test void incompleteAmbiguousResultDoesNotBecomeNegativeCache() {
+        var provider = mock(PlatformEvidenceProvider.class);
+        when(provider.searchV3(any(), anyInt(), eq(0))).thenReturn(
+                new PlatformSearchResult(EvidenceStatus.AVAILABLE, List.of(), 100, 0, 20));
+        when(provider.searchV3(any(), anyInt(), eq(1))).thenReturn(PlatformSearchResult.unavailable());
+        var repository = mock(ExternalEntityMappingRepository.class);
+        when(repository.findByPrimarySourceAndPrimaryPoiIdInAndEvidenceSource(any(), any(), any()))
+                .thenReturn(List.of());
+        var config = new EntityResolutionProperties();
+        var resolver = mock(EntityResolver.class);
+        when(resolver.resolve(anyList(), anyList(), anySet())).thenReturn(java.util.Map.of(
+                "a", new EntityMatchResult(EntityMatchStatus.AMBIGUOUS, .7, null, java.util.Map.of()),
+                "b", EntityMatchResult.noMatch()));
+        var aggregator = new EvidenceAggregator(r -> RestaurantEvidence.empty(), provider, new AmapEvidenceAdapter(),
+                resolver, new CrossPlatformConsistencyAnalyzer(new RiskProperties()), repository,
+                config, new ObjectMapper().findAndRegisterModules(), new BaiduProperties());
+
+        aggregator.collect(List.of(TestRestaurants.full("a", 4.5, 20), TestRestaurants.full("b", 4.5, 30)),
+                new Location(28.2291, 112.9412), 500, 40);
+
+        var saved = ArgumentCaptor.forClass(ExternalEntityMappingEntity.class);
+        verify(repository, times(2)).store(saved.capture());
+        assertThat(saved.getAllValues()).allSatisfy(mapping ->
+                assertThat(mapping.getExpiresAt()).isBeforeOrEqualTo(LocalDateTime.now(ZoneOffset.UTC)));
+    }
+
     @Test void coldForegroundOnlyReadsTwoPagesAndDoesNotCacheIncompleteNoMatch() {
         var provider = mock(PlatformEvidenceProvider.class);
         when(provider.searchV3(any(), anyInt(), anyInt())).thenReturn(

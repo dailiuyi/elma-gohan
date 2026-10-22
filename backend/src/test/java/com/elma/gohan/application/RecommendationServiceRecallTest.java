@@ -131,7 +131,8 @@ class RecommendationServiceRecallTest {
                 mock(RecommendationProperties.class), mock(RiskProperties.class),
                 restaurantRepository, mock(RiskResultRepository.class),
                 mock(RecommendationLogRepository.class), mock(RecommendationCandidateRepository.class),
-                mock(UserFeedbackRepository.class), new ObjectMapper());
+                mock(UserFeedbackRepository.class), new ObjectMapper(),
+                mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 
     private static RiskResult risk(RiskLevel level) {

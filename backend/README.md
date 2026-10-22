@@ -28,8 +28,9 @@ mvn spring-boot:run   # 启动开发服务(默认 8080)
 | `BAIDU_NAME_RECALL_RADIUS_METERS` | 逐店严格周边检索半径（米） | `500` |
 | `BAIDU_RECALL_MAX_CALLS` | 通用页、逐店召回和可选 V2 合计调用上限 | `22` |
 | `BAIDU_RECALL_TIME_BUDGET_MS` | 整次百度召回时间预算（毫秒） | `8000` |
-| `BAIDU_RATE_LIMIT_PER_SECOND` | 单 JVM 内所有百度 Place 请求共享的全局速率上限 | `3` |
-| `BAIDU_RATE_LIMIT_MAX_WAIT_MS` | 单次百度 Place 请求等待全局限速许可的最长时间；超时按平台不可用处理 | `1000` |
+| `BAIDU_RATE_LIMIT_PER_SECOND` | 同数据库所有实例的百度 Place 串行通道，默认每次完成后至少间隔 500ms | `2` |
+| `BAIDU_RATE_LIMIT_MAX_WAIT_MS` | 取得跨实例锁后等待下一次出站时刻的最长时间 | `1000` |
+| `BAIDU_DISPATCH_QUEUE_CAPACITY` | 每实例不同查询的等待队列上限，相同查询合并 | `64` |
 | `EVIDENCE_PROVIDER` | Evidence 实现：`file` 或 `empty` | `file` |
 | `EVIDENCE_FILE` | 标准化评论证据 JSON，可用外部文件覆盖 | `classpath:evidence/restaurant-evidence.json` |
 | `BAIDU_AI_SEARCH_ENABLED` | 是否启用按需公开 Web Evidence | `false` |

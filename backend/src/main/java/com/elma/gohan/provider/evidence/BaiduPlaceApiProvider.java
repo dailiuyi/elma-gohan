@@ -9,7 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import java.net.http.HttpClient;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -23,17 +24,13 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
 
     private final BaiduProperties properties;
     private final RestClient restClient;
-    private final BaiduPlaceRateLimiter rateLimiter;
+    private final HttpClient httpClient;
 
-    public BaiduPlaceApiProvider(BaiduProperties properties,
-                                 BaiduPlaceRateLimiter rateLimiter) {
+    public BaiduPlaceApiProvider(BaiduProperties properties) {
         this.properties = properties;
-        this.rateLimiter = rateLimiter;
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofMillis(properties.getConnectTimeoutMs()));
-        factory.setReadTimeout(Duration.ofMillis(properties.getReadTimeoutMs()));
-        this.restClient = RestClient.builder().baseUrl(properties.getBaseUrl())
-                .requestFactory(factory).build();
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(properties.getConnectTimeoutMs())).build();
+        this.restClient = RestClient.builder().baseUrl(properties.getBaseUrl()).build();
         if (properties.isEnabled() && properties.getAk().isBlank()) {
             log.warn("BAIDU_MAP_AK 未配置，百度 Evidence 将降级为 UNAVAILABLE");
         }
@@ -69,7 +66,6 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         String safeRegion = region == null || region.isBlank() ? "长沙" : region;
         long started = System.nanoTime();
         int pageSize = Math.min(20, Math.max(10, properties.getPageSize()));
-        if (!acquirePermit("REGION")) return PlatformSearchResult.unavailable("LOCAL_QUEUE_TIMEOUT");
         try {
             JsonNode body = client().get().uri(uriBuilder -> uriBuilder.path("/place/v3/region")
                     .queryParam("query", safeQuery)
@@ -86,8 +82,7 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
                 int status = body == null ? -1 : body.path("status").asInt(-1);
                 log.warn("百度 Place REGION 返回失败状态 status={} durationMs={}",
                         status, elapsedMillis(started));
-                return PlatformSearchResult.unavailable(status == 401 ? "UPSTREAM_RATE_LIMIT"
-                        : status == 302 ? "DAILY_QUOTA" : "UPSTREAM_ERROR");
+                return businessFailure(status);
             }
             List<PlatformEvidence> evidence = mapResults(body.path("results"), Instant.now());
             Integer total = integer(body, "total");
@@ -100,7 +95,7 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         } catch (RestClientException exception) {
             log.warn("百度 Place REGION 请求失败 durationMs={} errorType={}",
                     elapsedMillis(started), exception.getClass().getSimpleName());
-            return PlatformSearchResult.unavailable();
+            return transportFailure(exception);
         }
     }
 
@@ -112,7 +107,6 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         String safeQuery = query == null || query.isBlank() ? properties.getQuery() : query;
         String safeRegion = region == null || region.isBlank() ? "长沙" : region;
         long started = System.nanoTime();
-        if (!acquirePermit("SUGGEST")) return PlatformSearchResult.unavailable("LOCAL_QUEUE_TIMEOUT");
         try {
             JsonNode body = client().get().uri(uriBuilder -> {
                 var builder = uriBuilder.path("/place/v2/suggestion")
@@ -132,8 +126,7 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
                 int status = body == null ? -1 : body.path("status").asInt(-1);
                 log.warn("百度 Place SUGGEST 返回失败状态 status={} durationMs={}",
                         status, elapsedMillis(started));
-                return PlatformSearchResult.unavailable(status == 401 ? "UPSTREAM_RATE_LIMIT"
-                        : status == 302 ? "DAILY_QUOTA" : "UPSTREAM_ERROR");
+                return businessFailure(status);
             }
             List<PlatformEvidence> evidence = mapSuggestionResults(body.path("result"), Instant.now());
             String querySummary = safeQuery.substring(0, Math.min(safeQuery.length(), 40));
@@ -145,7 +138,7 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         } catch (RestClientException exception) {
             log.warn("百度 Place SUGGEST 请求失败 durationMs={} errorType={}",
                     elapsedMillis(started), exception.getClass().getSimpleName());
-            return PlatformSearchResult.unavailable();
+            return transportFailure(exception);
         }
     }
 
@@ -164,7 +157,6 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         long started = System.nanoTime();
         int safePageNumber = Math.max(0, pageNumber);
         int pageSize = Math.min(20, Math.max(10, properties.getPageSize()));
-        if (!acquirePermit(apiVersion)) return PlatformSearchResult.unavailable("LOCAL_QUEUE_TIMEOUT");
         try {
             JsonNode body = client().get().uri(uriBuilder -> {
                 var builder = uriBuilder.path(path)
@@ -189,8 +181,7 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
                 int status = body == null ? -1 : body.path("status").asInt(-1);
                 log.warn("百度 Place {} 返回失败状态 page={} status={} durationMs={}", apiVersion,
                         safePageNumber, status, elapsedMillis(started));
-                return PlatformSearchResult.unavailable(status == 401 ? "UPSTREAM_RATE_LIMIT"
-                        : status == 302 ? "DAILY_QUOTA" : "UPSTREAM_ERROR");
+                return businessFailure(status);
             }
             List<PlatformEvidence> evidence = mapResults(body.path("results"), Instant.now());
             Integer total = integer(body, "total");
@@ -203,7 +194,7 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
         } catch (RestClientException exception) {
             log.warn("百度 Place {} 请求失败 page={} durationMs={} errorType={}", apiVersion,
                     safePageNumber, elapsedMillis(started), exception.getClass().getSimpleName());
-            return PlatformSearchResult.unavailable();
+            return transportFailure(exception);
         }
     }
 
@@ -285,27 +276,30 @@ public class BaiduPlaceApiProvider implements PlatformEvidenceProvider {
     private RestClient client() {
         long remaining = BaiduCallContext.remainingMillis();
         if (remaining <= 0) throw new RestClientException("Baidu deadline exceeded");
-        var factory = new org.springframework.http.client.JdkClientHttpRequestFactory(
-                java.net.http.HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofMillis(Math.max(1, Math.min(remaining,
-                                properties.getConnectTimeoutMs())))).build());
+        var factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofMillis(Math.max(1, Math.min(remaining,
                 properties.getReadTimeoutMs()))));
         return restClient.mutate().requestFactory(factory).build();
     }
 
-    private boolean acquirePermit(String operation) {
-        if (BaiduCallContext.remainingMillis() <= 0) return false;
-        BaiduPlaceRateLimiter.Permit permit = rateLimiter.acquire();
-        if (!permit.acquired()) {
-            log.warn("百度 Place 全局节流拒绝 operation={} waitedMs={}",
-                    operation, permit.waitedMillis());
-            return false;
+    private static PlatformSearchResult businessFailure(int status) {
+        return PlatformSearchResult.unavailable(switch (status) {
+            case 401, 402 -> "UPSTREAM_RATE_LIMIT";
+            case 301 -> "PERMANENT_QUOTA";
+            case 302 -> "DAILY_QUOTA";
+            case 101, 102, 200, 201, 202, 203, 210, 211, 220, 230, 240, 250, 251, 252, 260, 261, 311 -> "CONFIGURATION_ERROR";
+            default -> "UPSTREAM_ERROR";
+        });
+    }
+
+    private static PlatformSearchResult transportFailure(RestClientException exception) {
+        if (BaiduCallContext.remainingMillis() <= 0) return PlatformSearchResult.unavailable("LOCAL_QUEUE_TIMEOUT");
+        if (exception instanceof org.springframework.web.client.RestClientResponseException response) {
+            int status = response.getStatusCode().value();
+            if (status == 429) return PlatformSearchResult.unavailable("UPSTREAM_RATE_LIMIT");
+            if (status == 401 || status == 403) return PlatformSearchResult.unavailable("CONFIGURATION_ERROR");
+            return PlatformSearchResult.unavailable(status >= 500 ? "UPSTREAM_UNAVAILABLE" : "HTTP_ERROR");
         }
-        if (permit.waitedMillis() > 0) {
-            log.debug("百度 Place 全局节流等待 operation={} waitedMs={}",
-                    operation, permit.waitedMillis());
-        }
-        return true;
+        return PlatformSearchResult.unavailable("NETWORK_ERROR");
     }
 }

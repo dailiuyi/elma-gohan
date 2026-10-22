@@ -100,7 +100,8 @@ elma:
     realtime-budget-ms: ${BAIDU_REALTIME_BUDGET_MS:2000}
     recall-max-calls: ${BAIDU_RECALL_MAX_CALLS:22}
     recall-time-budget-ms: ${BAIDU_RECALL_TIME_BUDGET_MS:8000}
-    rate-limit-per-second: ${BAIDU_RATE_LIMIT_PER_SECOND:3}
+    rate-limit-per-second: ${BAIDU_RATE_LIMIT_PER_SECOND:2}
+    dispatch-queue-capacity: ${BAIDU_DISPATCH_QUEUE_CAPACITY:64}
     rate-limit-max-wait-ms: ${BAIDU_RATE_LIMIT_MAX_WAIT_MS:1000}
     region: 长沙
     connect-timeout-ms: 1500

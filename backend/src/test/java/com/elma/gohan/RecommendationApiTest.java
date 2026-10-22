@@ -80,6 +80,26 @@ class RecommendationApiTest {
                 "AMAP", poi, "BAIDU").orElseThrow().getMatchStatus()).isEqualTo("MATCHED");
     }
 
+    @Test
+    void incompleteAmbiguousWithFutureExpiryCannotEraseFreshMatch() {
+        var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        String poi = "ambiguous-concurrency-" + UUID.randomUUID();
+        var matched = new com.elma.gohan.infrastructure.persistence.ExternalEntityMappingEntity(
+                UUID.randomUUID(), "AMAP", poi, "BAIDU", now);
+        matched.refresh("baidu-test", "MATCHED", .95, "{}", null, null, now, null, now.plusDays(1), now);
+        matched.setMatchAlgorithmVersion("entity-v0.4");
+        mappingCache.store(matched);
+        var incomplete = new com.elma.gohan.infrastructure.persistence.ExternalEntityMappingEntity(
+                UUID.randomUUID(), "AMAP", poi, "BAIDU", now);
+        incomplete.refresh(null, "AMBIGUOUS", .7, "{\"reasonBudgetOrAvailability\":1}",
+                null, null, null, null, now.plusHours(6), now.plusSeconds(1));
+        incomplete.setMatchAlgorithmVersion("entity-v0.4");
+        mappingCache.store(incomplete);
+
+        assertThat(mappingCache.findByPrimarySourceAndPrimaryPoiIdAndEvidenceSource(
+                "AMAP", poi, "BAIDU").orElseThrow().getMatchStatus()).isEqualTo("MATCHED");
+    }
+
     private static final String USER = "11111111-1111-1111-1111-111111111111";
     private static final String OTHER_USER = "22222222-2222-2222-2222-222222222222";
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -92,6 +112,9 @@ class RecommendationApiTest {
 
     @Autowired
     private PoiRecallCache recallCache;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    private com.elma.gohan.application.EvidenceAggregator evidenceAggregator;
 
     @Autowired
     @Qualifier("safeRegretShadowExecutor")
@@ -286,6 +309,38 @@ class RecommendationApiTest {
             assertThat(candidate.has("shadowRank")).isFalse();
         });
         assertThat(deepEvidenceCalls).hasValue(0);
+    }
+
+    @Test
+    void concurrentCreatesDoNotHoldTransactionDuringEvidenceOrDuplicateRestaurants() throws Exception {
+        var enteringEvidence = new CountDownLatch(2);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive())
+                    .as("External evidence must run outside the recommendation write transaction").isFalse();
+            enteringEvidence.countDown();
+            assertThat(enteringEvidence.await(3, TimeUnit.SECONDS)).isTrue();
+            return invocation.callRealMethod();
+        }).when(evidenceAggregator).collect(org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.<Map<String, Double>>any());
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<ResponseEntity<String>>> pending = new java.util.ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                String user = UUID.randomUUID().toString();
+                pending.add(executor.submit(() -> create(user, """
+                        {"latitude":28.2282,"longitude":112.9388,"radius":1000,
+                         "maxBudget":100,"category":"ANY","dislikes":[]}
+                        """)));
+            }
+            for (var future : pending) {
+                ResponseEntity<String> response = future.get(8, TimeUnit.SECONDS);
+                assertThat(response.getStatusCode().value()).as(response.getBody()).isEqualTo(201);
+            }
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM recommendation_log", Integer.class)).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM (SELECT source,source_poi_id FROM restaurant "
+                    + "GROUP BY source,source_poi_id HAVING count(*)>1) duplicates", Integer.class)).isZero();
+        } finally { executor.shutdownNow(); }
     }
 
     @Test

@@ -58,6 +58,8 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,6 +97,7 @@ public class RecommendationService {
     private final RecommendationCandidateRepository candidateRepository;
     private final UserFeedbackRepository feedbackRepository;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate creationTransaction;
 
     public RecommendationService(PoiProvider poiProvider, EvidenceAggregator evidenceAggregator,
                                  RiskEngine riskEngine, RecommendationEngine recommendationEngine,
@@ -110,7 +113,7 @@ public class RecommendationService {
                                  RecommendationLogRepository logRepository,
                                  RecommendationCandidateRepository candidateRepository,
                                  UserFeedbackRepository feedbackRepository,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper, PlatformTransactionManager transactionManager) {
         this.poiProvider = poiProvider;
         this.evidenceAggregator = evidenceAggregator;
         this.riskEngine = riskEngine;
@@ -129,9 +132,10 @@ public class RecommendationService {
         this.candidateRepository = candidateRepository;
         this.feedbackRepository = feedbackRepository;
         this.objectMapper = objectMapper;
+        this.creationTransaction = new TransactionTemplate(transactionManager);
+        this.creationTransaction.setTimeout(5);
     }
 
-    @Transactional
     /** 创建并冻结一个最多六家餐厅的推荐会话。 */
     public RecommendationResponse create(UUID anonymousUserId, CreateRecommendationRequest request) {
         if (request.radius() != null && !ALLOWED_RADIUS.contains(request.radius())) {
@@ -209,13 +213,30 @@ public class RecommendationService {
             throw new NoRecommendationAvailableException("附近暂时没有符合条件的餐厅,请放宽距离或预算");
         }
 
+        return creationTransaction.execute(status -> persist(anonymousUserId, request, condition,
+                hardEligible, eligible, evidence, risks, preference, result, diagnostics, searchNotice, now));
+    }
+
+    /** 只有会话写入持有事务；召回、外部取证及排序均已结束。 */
+    private RecommendationResponse persist(UUID anonymousUserId, CreateRecommendationRequest request,
+            SearchCondition condition, List<Restaurant> hardEligible, List<Restaurant> eligible,
+            Map<String, EvidenceBundle> evidence, Map<String, RiskResult> risks, UserPreference preference,
+            RecommendationResult result, PoiSearchDiagnostics diagnostics, SearchNotice searchNotice,
+            LocalDateTime now) {
         List<RestaurantCandidate> pool = result.pool();
         UUID logId = UUID.randomUUID();
+
+        // 固定行锁顺序，避免两个随机候选池以相反顺序更新相同门店。
+        Map<String, Restaurant> savedRestaurants = new java.util.HashMap<>();
+        pool.stream().map(RestaurantCandidate::restaurant)
+                .sorted(java.util.Comparator.comparing(Restaurant::source).thenComparing(Restaurant::sourcePoiId))
+                .forEach(r -> savedRestaurants.put(r.source() + "\u0000" + r.sourcePoiId(), upsertRestaurant(r, now)));
 
         // upsert restaurant,同时把内部 id 回填到候选
         List<RestaurantCandidate> persisted = new java.util.ArrayList<>(pool.size());
         for (RestaurantCandidate candidate : pool) {
-            Restaurant saved = upsertRestaurant(candidate.restaurant(), now);
+            Restaurant r = candidate.restaurant();
+            Restaurant saved = savedRestaurants.get(r.source() + "\u0000" + r.sourcePoiId());
             riskResultRepository.save(new RiskResultEntity(
                     UUID.randomUUID(), saved.id(), candidate.risk().riskScore(),
                     candidate.risk().riskLevel().name(), candidate.risk().confidence(),
@@ -231,7 +252,7 @@ public class RecommendationService {
         conditionSnapshot.put("latitude", request.latitude());
         conditionSnapshot.put("longitude", request.longitude());
         conditionSnapshot.put("minDistance", request.minDistance());
-        conditionSnapshot.put("radius", radius);
+        conditionSnapshot.put("radius", condition.radius());
         conditionSnapshot.put("minBudget", request.minBudget());
         conditionSnapshot.put("maxBudget", request.maxBudget());
         conditionSnapshot.put("category", condition.category());
@@ -272,7 +293,7 @@ public class RecommendationService {
 
         shadowDispatcher.afterCommit(new SafeRegretShadowInput(
                 anonymousUserId, logId, hardEligible, eligible, evidence, risks,
-                preference, result, randomSeed, now));
+                preference, result, result.randomSeed(), now));
 
         return toResponse(logId, persisted.get(0), persisted.size() - 1, searchNotice);
     }
@@ -401,21 +422,15 @@ public class RecommendationService {
     }
 
     private Restaurant upsertRestaurant(Restaurant r, LocalDateTime now) {
-        RestaurantEntity entity = restaurantRepository
-                .findBySourceAndSourcePoiId(r.source(), r.sourcePoiId())
-                .orElseGet(() -> new RestaurantEntity(UUID.randomUUID(), r.source(), r.sourcePoiId(),
-                        r.name(), r.latitude(), r.longitude(), r.categoryCode(), r.categoryLabel(),
-                        r.rating(), r.reviewCount(), r.averagePrice(), r.businessStatus(),
-                        r.openingHours(), r.address(), r.telephone(), r.dataCompleteness(),
-                        r.categoryConfidence(), now, now));
-        RestaurantEntity updated = new RestaurantEntity(
-                entity.getId(), entity.getSource(), entity.getSourcePoiId(),
+        restaurantRepository.store(new RestaurantEntity(
+                UUID.randomUUID(), r.source(), r.sourcePoiId(),
                 r.name(), r.latitude(), r.longitude(), r.categoryCode(), r.categoryLabel(),
                 r.rating(), r.reviewCount(), r.averagePrice(), r.businessStatus(),
                 r.openingHours(), r.address(), r.telephone(), r.dataCompleteness(),
                 r.categoryConfidence(),
-                entity.getCreatedAt(), now);
-        return toDomain(restaurantRepository.save(updated), r.distanceMeters());
+                now, now));
+        return toDomain(restaurantRepository.findBySourceAndSourcePoiId(r.source(), r.sourcePoiId())
+                .orElseThrow(), r.distanceMeters());
     }
 
     private Restaurant toDomain(RestaurantEntity e, int distanceMeters) {
