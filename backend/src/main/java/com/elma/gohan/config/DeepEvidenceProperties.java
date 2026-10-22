@@ -9,6 +9,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class DeepEvidenceProperties {
 
     private boolean enabled;
+    private boolean deepseekEnabled;
+    private String deepseekBaseUrl = "https://api.deepseek.com";
+    private double deepseekMinRerankScore = 1.0;
+    private int deepseekMaxAgeDays = 365;
+    public boolean isDeepseekEnabled() { return deepseekEnabled; }
+    public void setDeepseekEnabled(boolean value) { deepseekEnabled = value; }
+    public String getDeepseekBaseUrl() { return deepseekBaseUrl; }
+    public void setDeepseekBaseUrl(String value) { deepseekBaseUrl = value; }
+    public double getDeepseekMinRerankScore() { return deepseekMinRerankScore; }
+    public void setDeepseekMinRerankScore(double value) { deepseekMinRerankScore = value; }
+    public int getDeepseekMaxAgeDays() { return deepseekMaxAgeDays; }
+    public void setDeepseekMaxAgeDays(int value) { deepseekMaxAgeDays = value; }
     private boolean baiduAiSearchEnabled;
     private String baiduAiBaseUrl = "https://qianfan.baidubce.com";
     public boolean isBaiduAiSearchEnabled() { return baiduAiSearchEnabled; }
@@ -74,7 +86,7 @@ public class DeepEvidenceProperties {
     public void setMaxLinksPerSource(int maxLinksPerSource) { this.maxLinksPerSource = maxLinksPerSource; }
     public double getEntityMatchThreshold() { return entityMatchThreshold; }
     public void setEntityMatchThreshold(double entityMatchThreshold) { this.entityMatchThreshold = entityMatchThreshold; }
-    public String getQueryVersion() { return (baiduAiSearchEnabled ? "baidu-ai-query-v0.3" : queryVersion) + (improvedSearchEnabled ? "-improved" : "-legacy"); }
+    public String getQueryVersion() { return (deepseekEnabled ? "deepseek-query-v0.1-" + deepseekMinRerankScore + "-" + deepseekMaxAgeDays + "-fallback-" : "") + (baiduAiSearchEnabled ? "baidu-ai-query-v0.3" : queryVersion) + (improvedSearchEnabled ? "-improved" : "-legacy"); }
     public void setQueryVersion(String queryVersion) { this.queryVersion = queryVersion; }
     public String getAnalysisAlgorithmVersion() { return analysisAlgorithmVersion; }
     public void setAnalysisAlgorithmVersion(String analysisAlgorithmVersion) { this.analysisAlgorithmVersion = analysisAlgorithmVersion; }

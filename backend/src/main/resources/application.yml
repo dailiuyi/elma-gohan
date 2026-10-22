@@ -106,6 +106,10 @@ elma:
     connect-timeout-ms: 1500
     read-timeout-ms: 2500
   deep-evidence:
+    deepseek-enabled: ${DEEPSEEK_ENABLED:false}
+    deepseek-base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+    deepseek-min-rerank-score: ${DEEPSEEK_MIN_RERANK_SCORE:1.0}
+    deepseek-max-age-days: ${DEEPSEEK_MAX_AGE_DAYS:365}
     enabled: ${BAIDU_AI_SEARCH_ENABLED:${BRAVE_ENABLED:false}}
     baidu-ai-search-enabled: ${BAIDU_AI_SEARCH_ENABLED:false}
     baidu-ai-base-url: ${BAIDU_AI_SEARCH_BASE_URL:https://qianfan.baidubce.com}
