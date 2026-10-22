@@ -108,8 +108,13 @@ elma:
   deep-evidence:
     deepseek-enabled: ${DEEPSEEK_ENABLED:false}
     deepseek-base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
-    deepseek-min-rerank-score: ${DEEPSEEK_MIN_RERANK_SCORE:0}
-    deepseek-max-age-days: ${DEEPSEEK_MAX_AGE_DAYS:0}
+    deepseek-min-rerank-score: ${DEEPSEEK_MIN_RERANK_SCORE:0.2}
+    deepseek-max-age-days: ${DEEPSEEK_MAX_AGE_DAYS:730}
+    deepseek-min-snippet-length: ${DEEPSEEK_MIN_SNIPPET_LENGTH:10}
+    deepseek-short-snippet-multiplier: ${DEEPSEEK_SHORT_SNIPPET_MULTIPLIER:0.5}
+    deepseek-relevance-weight: ${DEEPSEEK_RELEVANCE_WEIGHT:0.7}
+    deepseek-recency-weight: ${DEEPSEEK_RECENCY_WEIGHT:0.3}
+    deepseek-recency-half-life-days: ${DEEPSEEK_RECENCY_HALF_LIFE_DAYS:365}
     enabled: ${BAIDU_AI_SEARCH_ENABLED:${BRAVE_ENABLED:false}}
     baidu-ai-search-enabled: ${BAIDU_AI_SEARCH_ENABLED:false}
     baidu-ai-base-url: ${BAIDU_AI_SEARCH_BASE_URL:https://qianfan.baidubce.com}

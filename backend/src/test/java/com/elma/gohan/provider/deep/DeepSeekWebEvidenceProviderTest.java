@@ -134,7 +134,7 @@ class DeepSeekWebEvidenceProviderTest {
     }
 
     @Test
-    void defaultsDoNotFilterOldDatesOrRerankScores() {
+    void allFilteredResultsFallBackToV1InOriginalOrder() {
         String old = "2022-01-01T00:00:00Z";
         responseBody = results(item("https://www.bilibili.com/video/old-low", 0.1, old),
                 item("https://www.bilibili.com/video/zero", 0, null),
@@ -147,6 +147,127 @@ class DeepSeekWebEvidenceProviderTest {
                 "https://www.bilibili.com/video/old-low", "https://www.bilibili.com/video/zero",
                 "https://www.bilibili.com/video/negative", "https://www.bilibili.com/video/no-score");
         assertThat(braveRequests).isEmpty();
+        assertThat(requests).hasSize(1);
+    }
+
+    @Test
+    void defaultAgeLimitRemovesOldResultsButKeepsUnknownDates() {
+        responseBody = results(item("https://www.bilibili.com/video/old", 2, daysAgo(731)),
+                item("https://www.bilibili.com/video/recent", 2, daysAgo(729)),
+                item("https://www.bilibili.com/video/undated", 2, null));
+        assertThat(fetch(properties()).items()).extracting(WebEvidenceItem::url).containsExactly(
+                "https://www.bilibili.com/video/recent", "https://www.bilibili.com/video/undated");
+        assertThat(braveRequests).isEmpty();
+    }
+
+    @Test
+    void zeroAgeLimitKeepsOldResults() {
+        responseBody = results(item("https://www.bilibili.com/video/old", 2, daysAgo(3000)),
+                item("https://www.bilibili.com/video/recent", 2, daysAgo(1)));
+        var p = properties();
+        p.setDeepseekMaxAgeDays(0);
+        assertThat(fetch(p).items()).extracting(WebEvidenceItem::url).containsExactly(
+                "https://www.bilibili.com/video/recent", "https://www.bilibili.com/video/old");
+    }
+
+    @Test
+    void onlyOldResultsFallBackToV1WithoutCallingBrave() {
+        responseBody = results(item("https://www.bilibili.com/video/old", 2, daysAgo(3000)));
+        assertThat(fetch(properties()).items()).extracting(WebEvidenceItem::url)
+                .containsExactly("https://www.bilibili.com/video/old");
+        assertThat(requests).hasSize(1);
+        assertThat(braveRequests).isEmpty();
+    }
+
+    @Test
+    void shortSnippetsAreDownweightedOrRemovedOrAllowedByConfiguration() {
+        responseBody = results(item("https://www.bilibili.com/video/short", 2, null)
+                        .replace("麓山南路，分量足但高峰期排队", "麓山南路"),
+                item("https://www.bilibili.com/video/full", 2, null));
+        var p = properties();
+        assertThat(fetch(p).items()).extracting(WebEvidenceItem::url).containsExactly(
+                "https://www.bilibili.com/video/full", "https://www.bilibili.com/video/short");
+        p.setDeepseekShortSnippetMultiplier(0);
+        assertThat(fetch(p).items()).extracting(WebEvidenceItem::url)
+                .containsExactly("https://www.bilibili.com/video/full");
+        p.setDeepseekMinSnippetLength(0);
+        assertThat(fetch(p).items()).extracting(WebEvidenceItem::url).containsExactly(
+                "https://www.bilibili.com/video/short", "https://www.bilibili.com/video/full");
+    }
+
+    @Test
+    void shortSnippetExclusionFallsBackToV1WhenAllAreRemoved() {
+        responseBody = results(item("https://www.bilibili.com/video/short", 2, null)
+                .replace("麓山南路，分量足但高峰期排队", "麓山南路"));
+        var p = properties();
+        p.setDeepseekShortSnippetMultiplier(0);
+        assertThat(fetch(p).items()).hasSize(1);
+        assertThat(requests).hasSize(1);
+        assertThat(braveRequests).isEmpty();
+    }
+
+    @Test
+    void defaultScoreThresholdRemovesLowAndMissingScores() {
+        responseBody = results(item("https://www.bilibili.com/video/low", 0.19, null),
+                item("https://www.bilibili.com/video/accepted", 0.2, null),
+                item("https://www.bilibili.com/video/missing", 1.0, null)
+                        .replace("\"rerank_score\":1.0,", ""));
+        var p = properties();
+        assertThat(fetch(p).items()).extracting(WebEvidenceItem::url)
+                .containsExactly("https://www.bilibili.com/video/accepted");
+        p.setDeepseekMinRerankScore(0);
+        assertThat(fetch(p).items()).hasSize(3);
+    }
+
+    @Test
+    void combinesRelevanceAndRecencyWithConfigurableWeightsAndHalfLife() {
+        responseBody = results(item("https://www.bilibili.com/video/older-relevant", 4, daysAgo(365)),
+                item("https://www.bilibili.com/video/newer", 1, daysAgo(1)));
+        var p = properties();
+        assertThat(fetch(p).items().get(0).url()).endsWith("/older-relevant");
+        p.setDeepseekRelevanceWeight(0.3);
+        p.setDeepseekRecencyWeight(0.7);
+        assertThat(fetch(p).items().get(0).url()).endsWith("/newer");
+        p.setDeepseekRecencyHalfLifeDays(36500);
+        assertThat(fetch(p).items().get(0).url()).endsWith("/older-relevant");
+        p.setDeepseekRelevanceWeight(0);
+        assertThat(fetch(p).items().get(0).url()).endsWith("/newer");
+        p.setDeepseekRelevanceWeight(1);
+        p.setDeepseekRecencyWeight(0);
+        assertThat(fetch(p).items().get(0).url()).endsWith("/older-relevant");
+    }
+
+    @Test
+    void v1FallbackNeverRestoresMissingTitlesInvalidLinksOrWrongStores() {
+        responseBody = results(item("https://www.bilibili.com/video/no-title", 2, null)
+                        .replace("老王湘菜馆大学城店值得吃吗", ""),
+                item("", 2, null),
+                item("https://example.com/invalid", 2, null),
+                item("https://www.bilibili.com/video/wrong", 2, null)
+                        .replace("老王湘菜馆大学城店值得吃吗", "另一家店"));
+        assertBraveResult(fetch(properties()));
+        assertThat(requests).hasSize(2);
+    }
+
+    @Test
+    void queryVersionTracksEveryV2FilterAndRankingOption() {
+        var p = properties();
+        String previous = p.getQueryVersion();
+        List<Runnable> changes = List.of(
+                () -> p.setDeepseekMinSnippetLength(20),
+                () -> p.setDeepseekShortSnippetMultiplier(0),
+                () -> p.setDeepseekRelevanceWeight(0.5),
+                () -> p.setDeepseekRecencyWeight(0.5),
+                () -> p.setDeepseekRecencyHalfLifeDays(180));
+        for (Runnable change : changes) {
+            change.run();
+            assertThat(p.getQueryVersion()).isNotEqualTo(previous);
+            previous = p.getQueryVersion();
+        }
+    }
+
+    private String daysAgo(int days) {
+        return Instant.now().minus(days, ChronoUnit.DAYS).toString();
     }
 
     @ParameterizedTest
@@ -339,8 +460,8 @@ class DeepSeekWebEvidenceProviderTest {
         var p = new DeepEvidenceProperties();
         assertThat(p.isDeepseekEnabled()).isFalse();
         assertThat(p.getDeepseekBaseUrl()).isEqualTo("https://api.deepseek.com");
-        assertThat(p.getDeepseekMinRerankScore()).isZero();
-        assertThat(p.getDeepseekMaxAgeDays()).isZero();
+        assertThat(p.getDeepseekMinRerankScore()).isEqualTo(0.2);
+        assertThat(p.getDeepseekMaxAgeDays()).isEqualTo(730);
         assertThat(p.getEvidenceCacheHours()).isEqualTo(12);
         assertThat(p.getOverallTimeoutMs()).isEqualTo(4000);
         assertThat(p.getEntityMatchThreshold()).isEqualTo(0.72);
@@ -367,8 +488,8 @@ class DeepSeekWebEvidenceProviderTest {
             assertThat(context).hasSingleBean(BraveWebEvidenceProvider.class);
             assertThat(context.getBean(DeepEvidenceProvider.class)).isInstanceOf(DeepSeekWebEvidenceProvider.class);
             assertThat(context.getBean(DeepEvidenceProperties.class).isDeepseekEnabled()).isTrue();
-            assertThat(context.getBean(DeepEvidenceProperties.class).getDeepseekMinRerankScore()).isZero();
-            assertThat(context.getBean(DeepEvidenceProperties.class).getDeepseekMaxAgeDays()).isZero();
+            assertThat(context.getBean(DeepEvidenceProperties.class).getDeepseekMinRerankScore()).isEqualTo(0.2);
+            assertThat(context.getBean(DeepEvidenceProperties.class).getDeepseekMaxAgeDays()).isEqualTo(730);
         });
     }
 

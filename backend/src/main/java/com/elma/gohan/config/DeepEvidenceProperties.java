@@ -11,8 +11,23 @@ public class DeepEvidenceProperties {
     private boolean enabled;
     private boolean deepseekEnabled;
     private String deepseekBaseUrl = "https://api.deepseek.com";
-    private double deepseekMinRerankScore = 0;
-    private int deepseekMaxAgeDays = 0;
+    private double deepseekMinRerankScore = 0.2;
+    private int deepseekMaxAgeDays = 730;
+    private int deepseekMinSnippetLength = 10;
+    private double deepseekShortSnippetMultiplier = 0.5;
+    private double deepseekRelevanceWeight = 0.7;
+    private double deepseekRecencyWeight = 0.3;
+    private int deepseekRecencyHalfLifeDays = 365;
+    public int getDeepseekMinSnippetLength() { return deepseekMinSnippetLength; }
+    public void setDeepseekMinSnippetLength(int value) { deepseekMinSnippetLength = value; }
+    public double getDeepseekShortSnippetMultiplier() { return deepseekShortSnippetMultiplier; }
+    public void setDeepseekShortSnippetMultiplier(double value) { deepseekShortSnippetMultiplier = value; }
+    public double getDeepseekRelevanceWeight() { return deepseekRelevanceWeight; }
+    public void setDeepseekRelevanceWeight(double value) { deepseekRelevanceWeight = value; }
+    public double getDeepseekRecencyWeight() { return deepseekRecencyWeight; }
+    public void setDeepseekRecencyWeight(double value) { deepseekRecencyWeight = value; }
+    public int getDeepseekRecencyHalfLifeDays() { return deepseekRecencyHalfLifeDays; }
+    public void setDeepseekRecencyHalfLifeDays(int value) { deepseekRecencyHalfLifeDays = value; }
     public boolean isDeepseekEnabled() { return deepseekEnabled; }
     public void setDeepseekEnabled(boolean value) { deepseekEnabled = value; }
     public String getDeepseekBaseUrl() { return deepseekBaseUrl; }
@@ -86,7 +101,14 @@ public class DeepEvidenceProperties {
     public void setMaxLinksPerSource(int maxLinksPerSource) { this.maxLinksPerSource = maxLinksPerSource; }
     public double getEntityMatchThreshold() { return entityMatchThreshold; }
     public void setEntityMatchThreshold(double entityMatchThreshold) { this.entityMatchThreshold = entityMatchThreshold; }
-    public String getQueryVersion() { return (deepseekEnabled ? "deepseek-query-v0.1-" + deepseekMinRerankScore + "-" + deepseekMaxAgeDays + "-fallback-" : "") + (baiduAiSearchEnabled ? "baidu-ai-query-v0.3" : queryVersion) + (improvedSearchEnabled ? "-improved" : "-legacy"); }
+    public String getQueryVersion() {
+        return (deepseekEnabled ? "deepseek-query-v0.2-" + deepseekMinRerankScore + "-" + deepseekMaxAgeDays
+                + "-" + deepseekMinSnippetLength + "-" + deepseekShortSnippetMultiplier
+                + "-" + deepseekRelevanceWeight + "-" + deepseekRecencyWeight
+                + "-" + deepseekRecencyHalfLifeDays + "-fallback-" : "")
+                + (baiduAiSearchEnabled ? "baidu-ai-query-v0.3" : queryVersion)
+                + (improvedSearchEnabled ? "-improved" : "-legacy");
+    }
     public void setQueryVersion(String queryVersion) { this.queryVersion = queryVersion; }
     public String getAnalysisAlgorithmVersion() { return analysisAlgorithmVersion; }
     public void setAnalysisAlgorithmVersion(String analysisAlgorithmVersion) { this.analysisAlgorithmVersion = analysisAlgorithmVersion; }

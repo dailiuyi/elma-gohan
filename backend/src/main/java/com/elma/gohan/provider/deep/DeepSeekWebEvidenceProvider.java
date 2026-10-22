@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -122,16 +123,11 @@ public class DeepSeekWebEvidenceProvider implements DeepEvidenceProvider {
 
     private List<WebEvidenceItem> map(DeepEvidenceSource source, Restaurant restaurant,
                                       JsonNode results, Instant fetchedAt) {
-        Map<String, WebEvidenceItem> deduplicated = new LinkedHashMap<>();
-        Instant oldest = properties.getDeepseekMaxAgeDays() > 0
-                ? fetchedAt.minus(properties.getDeepseekMaxAgeDays(), ChronoUnit.DAYS) : null;
+        Map<String, Candidate> deduplicated = new LinkedHashMap<>();
         for (JsonNode result : results) {
             JsonNode score = result.path("rerank_score");
-            if (properties.getDeepseekMinRerankScore() > 0
-                    && (!score.isNumber() || score.asDouble() < properties.getDeepseekMinRerankScore())) continue;
             String date = text(result, "date");
             Instant publishedAt = date == null ? null : OffsetDateTime.parse(date).toInstant();
-            if (oldest != null && publishedAt != null && publishedAt.isBefore(oldest)) continue;
             String title = truncate(text(result, "title"), 200);
             String url = canonicalUrl(source, text(result, "url"));
             String snippet = text(result, "snippet");
@@ -143,10 +139,44 @@ public class DeepSeekWebEvidenceProvider implements DeepEvidenceProvider {
             if (matchConfidence < properties.getEntityMatchThreshold()) continue;
             WebEvidenceItem item = new WebEvidenceItem(source, title, url, snippet,
                     publishedAt, fetchedAt, matchConfidence, List.of());
-            deduplicated.putIfAbsent(url, item);
+            deduplicated.putIfAbsent(url, new Candidate(item, score.isNumber() ? score.asDouble() : null));
         }
-        return List.copyOf(deduplicated.values());
+        List<Candidate> baseline = List.copyOf(deduplicated.values());
+        Instant oldest = properties.getDeepseekMaxAgeDays() > 0
+                ? fetchedAt.minus(properties.getDeepseekMaxAgeDays(), ChronoUnit.DAYS) : null;
+        List<WebEvidenceItem> filtered = baseline.stream()
+                .filter(candidate -> oldest == null || candidate.item().publishedAt() == null
+                        || !candidate.item().publishedAt().isBefore(oldest))
+                .filter(candidate -> properties.getDeepseekMinRerankScore() <= 0
+                        || (candidate.rerankScore() != null
+                        && candidate.rerankScore() >= properties.getDeepseekMinRerankScore()))
+                .filter(candidate -> !isShort(candidate.item()) || properties.getDeepseekShortSnippetMultiplier() > 0)
+                .sorted(Comparator.comparingDouble((Candidate candidate) -> rankingScore(candidate, fetchedAt)).reversed())
+                .map(Candidate::item)
+                .toList();
+        // 筛选不能把 v1 非空结果变成空结果；保持原顺序，不重复请求，也不绕过同店与链接校验。
+        return filtered.isEmpty() ? baseline.stream().map(Candidate::item).toList() : filtered;
     }
+
+    private boolean isShort(WebEvidenceItem item) {
+        int length = item.snippet() == null ? 0 : item.snippet().codePointCount(0, item.snippet().length());
+        return length < properties.getDeepseekMinSnippetLength();
+    }
+
+    private double rankingScore(Candidate candidate, Instant fetchedAt) {
+        double score = candidate.rerankScore() == null ? 0 : Math.max(0, candidate.rerankScore());
+        double relevance = score / (1 + score);
+        Instant publishedAt = candidate.item().publishedAt();
+        double ageDays = publishedAt == null ? 0
+                : Math.max(0, Duration.between(publishedAt, fetchedAt).toSeconds() / 86400.0);
+        double recency = publishedAt == null ? 0
+                : Math.pow(0.5, ageDays / properties.getDeepseekRecencyHalfLifeDays());
+        double combined = properties.getDeepseekRelevanceWeight() * relevance
+                + properties.getDeepseekRecencyWeight() * recency;
+        return combined * (isShort(candidate.item()) ? properties.getDeepseekShortSnippetMultiplier() : 1);
+    }
+
+    private record Candidate(WebEvidenceItem item, Double rerankScore) { }
 
     private String canonicalUrl(DeepEvidenceSource source, String value) {
         if (value == null || value.isBlank()) return null;
