@@ -1,6 +1,7 @@
 package com.elma.gohan.provider.poi;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.elma.gohan.config.AmapProperties;
 import com.elma.gohan.domain.restaurant.BusinessStatus;
@@ -156,6 +157,108 @@ class PoiRecallCacheTest {
         assertThat(second.restaurants().get(0).distanceMeters()).isEqualTo(expected);
         assertThat(second.restaurants().get(0).distanceMeters())
                 .isNotEqualTo(first.restaurants().get(0).distanceMeters());
+    }
+
+    @Test
+    void failedLoadIsPropagatedAndNextCallCanRetry() {
+        PoiRecallCache cache = new PoiRecallCache(properties());
+        var location = new Location(28.2, 112.9);
+        var condition = condition(20, 40, List.of());
+        var failure = new IllegalArgumentException("upstream failed");
+        assertThatThrownBy(() -> cache.getOrLoad(location, condition, () -> { throw failure; }))
+                .isSameAs(failure);
+        assertThat(cache.estimatedSize()).isZero();
+        assertThat(cache.getOrLoad(location, condition, () -> result(2)).restaurants())
+                .extracting(Restaurant::sourcePoiId).containsExactly("poi-2");
+    }
+
+    @Test
+    void errorIsRethrownAndDoesNotLeaveAnInFlightLoad() {
+        PoiRecallCache cache = new PoiRecallCache(properties());
+        var location = new Location(28.2, 112.9);
+        var condition = condition(20, 40, List.of());
+        var failure = new AssertionError("loader failed");
+        assertThatThrownBy(() -> cache.getOrLoad(location, condition, () -> { throw failure; }))
+                .isSameAs(failure);
+        assertThat(cache.getOrLoad(location, condition, () -> result(3)).diagnostics().cacheStatus())
+                .isEqualTo(PoiSearchCacheStatus.MISS);
+    }
+
+    @Test
+    void resultsWithoutDiagnosticsAreRebasedButNeverCached() {
+        PoiRecallCache cache = new PoiRecallCache(properties());
+        AtomicInteger loads = new AtomicInteger();
+        var location = new Location(28.2, 112.9);
+        for (int i = 0; i < 2; i++) {
+            var actual = cache.getOrLoad(location, condition(20, 40, List.of()),
+                    () -> new PoiSearchResult(result(loads.incrementAndGet()).restaurants(), null));
+            assertThat(actual.diagnostics()).isNull();
+            assertThat(actual.restaurants().get(0).distanceMeters())
+                    .isEqualTo(PoiRecallCache.distanceMeters(28.2, 112.9, 28.201, 112.901));
+        }
+        assertThat(loads).hasValue(2);
+        assertThat(cache.estimatedSize()).isZero();
+    }
+
+    @Test
+    void zeroFetchedPagesAreNotCachedAndInvalidationForcesReload() {
+        PoiRecallCache cache = new PoiRecallCache(properties());
+        var location = new Location(28.2, 112.9);
+        var condition = condition(20, 40, List.of());
+        var empty = new PoiSearchResult(List.of(), new PoiSearchDiagnostics(0, 0, 0, 0, 0,
+                true, null, "050000", null, PoiSearchCompletionReason.RECALL_DEADLINE_REACHED,
+                0, null, 0));
+        cache.getOrLoad(location, condition, () -> empty);
+        assertThat(cache.estimatedSize()).isZero();
+        cache.getOrLoad(location, condition, () -> result(1));
+        cache.invalidateAll();
+        assertThat(cache.estimatedSize()).isZero();
+        assertThat(cache.getOrLoad(location, condition, () -> result(2)).restaurants())
+                .extracting(Restaurant::sourcePoiId).containsExactly("poi-2");
+    }
+
+    @Test
+    void concurrentFollowerReceivesOriginalFailureAndRetrySucceeds() throws Exception {
+        PoiRecallCache cache = new PoiRecallCache(properties());
+        var location = new Location(28.2, 112.9);
+        var condition = condition(20, 40, List.of());
+        var failure = new IllegalStateException("upstream unavailable");
+        CountDownLatch loading = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        var followerThread = new java.util.concurrent.atomic.AtomicReference<Thread>();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<PoiSearchResult> owner = executor.submit(() -> cache.getOrLoad(location, condition, () -> {
+                loading.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("release timed out");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                throw failure;
+            }));
+            assertThat(loading.await(2, TimeUnit.SECONDS)).isTrue();
+            Future<PoiSearchResult> follower = executor.submit(() -> {
+                followerThread.set(Thread.currentThread());
+                return cache.getOrLoad(location, condition, () -> { throw new AssertionError("duplicate load"); });
+            });
+            // Wait until the follower is blocked on the owner's future, before failing the owner.
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while ((followerThread.get() == null || followerThread.get().getState() != Thread.State.WAITING)
+                    && System.nanoTime() < deadline) Thread.yield();
+            assertThat(followerThread.get()).isNotNull();
+            assertThat(followerThread.get().getState()).isEqualTo(Thread.State.WAITING);
+            release.countDown();
+            assertThatThrownBy(() -> owner.get(2, TimeUnit.SECONDS)).hasCause(failure);
+            assertThatThrownBy(() -> follower.get(2, TimeUnit.SECONDS)).hasCause(failure);
+            assertThat(cache.getOrLoad(location, condition, () -> result(4)).diagnostics().cacheStatus())
+                    .isEqualTo(PoiSearchCacheStatus.MISS);
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(2, TimeUnit.SECONDS)).isTrue();
+        }
     }
 
     private static AmapProperties properties() {

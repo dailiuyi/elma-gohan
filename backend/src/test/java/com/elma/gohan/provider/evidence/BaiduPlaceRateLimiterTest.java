@@ -15,6 +15,36 @@ import org.junit.jupiter.api.Test;
 class BaiduPlaceRateLimiterTest {
 
     @Test
+    void interruptedWaitRejectsWithoutConsumingTheNextPermit() {
+        BaiduProperties properties = new BaiduProperties();
+        properties.setRateLimitPerSecond(0);
+        properties.setRateLimitMaxWaitMs(3000);
+        BaiduPlaceRateLimiter limiter = new BaiduPlaceRateLimiter(properties);
+        assertThat(limiter.acquire().acquired()).isTrue();
+        Thread.currentThread().interrupt();
+        try {
+            assertThat(limiter.acquire().acquired()).isFalse();
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
+        }
+        assertThat(limiter.acquire().acquired()).isTrue();
+    }
+
+    @Test
+    void requestBudgetRejectsQueueEvenWhenConfiguredWaitIsLonger() {
+        BaiduProperties properties = new BaiduProperties();
+        properties.setRateLimitPerSecond(1);
+        properties.setRateLimitMaxWaitMs(3000);
+        BaiduPlaceRateLimiter limiter = new BaiduPlaceRateLimiter(properties);
+        assertThat(limiter.acquire().acquired()).isTrue();
+        try (var ignored = new BaiduCallContext(1)) {
+            assertThat(limiter.acquire().acquired()).isFalse();
+        }
+        assertThat(limiter.acquire().acquired()).isTrue();
+    }
+
+    @Test
     void zeroWaitAllowsImmediatePermitButRejectsQueuedCall() {
         BaiduProperties properties = new BaiduProperties();
         properties.setRateLimitPerSecond(1);

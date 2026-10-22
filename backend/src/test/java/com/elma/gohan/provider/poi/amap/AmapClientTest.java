@@ -36,6 +36,7 @@ class AmapClientTest {
     private final AtomicInteger requestNumber = new AtomicInteger();
     private HttpServer server;
     private AmapProperties props;
+    private int responseStatus = 200;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -49,7 +50,7 @@ class AmapClientTest {
             requestNumber.incrementAndGet();
             byte[] body = responseForPage.get().apply(page).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, body.length);
+            exchange.sendResponseHeaders(responseStatus, body.length);
             exchange.getResponseBody().write(body);
             exchange.close();
         });
@@ -75,6 +76,115 @@ class AmapClientTest {
     @AfterEach
     void tearDown() {
         server.stop(0);
+    }
+
+    @Test
+    void missingKeyFailsBeforeSendingRequest() {
+        props.setKey("");
+        AmapClient client = new AmapClient(props, objectMapper);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> client.searchAround(28.2, 112.9,
+                new SearchCondition(null, 500, null, null, "ANY", List.of())))
+                .isInstanceOf(com.elma.gohan.provider.poi.PoiProviderException.class)
+                .hasMessage("AMAP key 未配置");
+        assertThat(requests).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {429, 500, 503})
+    void retriesTransientHttpErrorsUntilAttemptsAreExhausted(int status) {
+        responseStatus = status;
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AmapClient(props, objectMapper)
+                .searchAround(28.2, 112.9,
+                        new SearchCondition(null, 500, null, null, "ANY", List.of())))
+                .isInstanceOf(com.elma.gohan.provider.poi.PoiProviderException.class)
+                .hasMessage("高德周边搜索暂时不可用");
+        assertThat(requests).hasSize(3);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {400, 401, 403})
+    void doesNotRetryPermanentHttpErrors(int status) {
+        responseStatus = status;
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AmapClient(props, objectMapper)
+                .searchAround(28.2, 112.9,
+                        new SearchCondition(null, 500, null, null, "ANY", List.of())))
+                .isInstanceOf(com.elma.gohan.provider.poi.PoiProviderException.class)
+                .hasMessage("高德周边搜索配置或参数错误");
+        assertThat(requests).hasSize(1);
+    }
+
+    @Test
+    void malformedJsonFailsWithoutRetrying() {
+        responseForPage.set(page -> "{broken");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AmapClient(props, objectMapper)
+                .searchAround(28.2, 112.9,
+                        new SearchCondition(null, 500, null, null, "ANY", List.of())))
+                .isInstanceOf(com.elma.gohan.provider.poi.PoiProviderException.class)
+                .hasMessage("高德周边搜索响应处理失败");
+        assertThat(requests).hasSize(1);
+    }
+
+    @Test
+    void missingPoiArrayIsAnExhaustedResultWithUnknownTotal() {
+        responseForPage.set(page -> "{\"status\":\"1\",\"count\":\"unknown\"}");
+
+        AmapSearchResult result = new AmapClient(props, objectMapper).searchAround(28.2, 112.9,
+                new SearchCondition(null, 500, null, null, "ANY", List.of()));
+
+        assertThat(result.pois()).isEmpty();
+        assertThat(result.providerTotalCount()).isNull();
+        assertThat(result.pagesFetched()).isEqualTo(1);
+        assertThat(result.completionReason().name()).isEqualTo("RESULTS_EXHAUSTED");
+    }
+
+    @Test
+    void invalidDistancesAndBlankIdsDoNotPreventValidTargetRecall() {
+        props.setPageSize(4);
+        props.setTargetCandidates(1);
+        responseForPage.set(page -> """
+                {"status":"1","count":"10.0","pois":[
+                  {"id":"","distance":"[]"}, {"id":"","distance":"invalid"},
+                  {"id":"missing-distance"}, {"id":"valid","distance":"101.6"}]}
+                """);
+
+        AmapSearchResult result = new AmapClient(props, objectMapper).searchAround(28.2, 112.9,
+                new SearchCondition(100, 500, null, null, "ANY", List.of()));
+
+        assertThat(result.pois()).hasSize(4);
+        assertThat(result.providerTotalCount()).isEqualTo(10);
+        assertThat(result.lastFetchedDistanceMeters()).isEqualTo(102);
+        assertThat(result.completionReason().name()).isEqualTo("TARGET_REACHED");
+        assertThat(requests).hasSize(1);
+    }
+
+    @Test
+    void rejectedLimiterPermitFailsWithoutHttpRequest() {
+        AmapRateLimiter limiter = org.mockito.Mockito.mock(AmapRateLimiter.class);
+        org.mockito.Mockito.when(limiter.acquire(org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn(new AmapRateLimiter.Permit(false, 0));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AmapClient(props, objectMapper, limiter)
+                .searchAround(28.2, 112.9,
+                        new SearchCondition(null, 500, null, null, "ANY", List.of())))
+                .isInstanceOf(com.elma.gohan.provider.poi.PoiProviderException.class);
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void retryBackoffBeyondDeadlineStopsBeforeSecondRequest() {
+        props.setRecallDeadlineMs(5000);
+        props.setRetryInitialBackoffMs(10000);
+        responseForPage.set(page -> failure("QPS_LIMIT", "10021"));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AmapClient(props, objectMapper)
+                .searchAround(28.2, 112.9,
+                        new SearchCondition(null, 500, null, null, "ANY", List.of())))
+                .isInstanceOf(com.elma.gohan.provider.poi.PoiProviderException.class);
+        assertThat(requests).hasSize(1);
     }
 
     @Test
