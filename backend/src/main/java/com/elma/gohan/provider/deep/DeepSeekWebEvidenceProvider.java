@@ -83,7 +83,7 @@ public class DeepSeekWebEvidenceProvider implements DeepEvidenceProvider {
                 return fallback.fetch(source, restaurant, deadlineNanos);
             }
         }
-        return new DeepEvidenceBatch(source, EvidenceStatus.NO_DATA, List.of(), now);
+        return fallback.fetch(source, restaurant, deadlineNanos);
     }
 
     private List<WebEvidenceItem> search(DeepEvidenceSource source, Restaurant restaurant,
@@ -123,13 +123,15 @@ public class DeepSeekWebEvidenceProvider implements DeepEvidenceProvider {
     private List<WebEvidenceItem> map(DeepEvidenceSource source, Restaurant restaurant,
                                       JsonNode results, Instant fetchedAt) {
         Map<String, WebEvidenceItem> deduplicated = new LinkedHashMap<>();
-        Instant oldest = fetchedAt.minus(properties.getDeepseekMaxAgeDays(), ChronoUnit.DAYS);
+        Instant oldest = properties.getDeepseekMaxAgeDays() > 0
+                ? fetchedAt.minus(properties.getDeepseekMaxAgeDays(), ChronoUnit.DAYS) : null;
         for (JsonNode result : results) {
             JsonNode score = result.path("rerank_score");
-            if (!score.isNumber() || score.asDouble() < properties.getDeepseekMinRerankScore()) continue;
+            if (properties.getDeepseekMinRerankScore() > 0
+                    && (!score.isNumber() || score.asDouble() < properties.getDeepseekMinRerankScore())) continue;
             String date = text(result, "date");
             Instant publishedAt = date == null ? null : OffsetDateTime.parse(date).toInstant();
-            if (publishedAt != null && publishedAt.isBefore(oldest)) continue;
+            if (oldest != null && publishedAt != null && publishedAt.isBefore(oldest)) continue;
             String title = truncate(text(result, "title"), 200);
             String url = canonicalUrl(source, text(result, "url"));
             String snippet = text(result, "snippet");

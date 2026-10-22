@@ -133,6 +133,48 @@ class DeepSeekWebEvidenceProviderTest {
         assertThat(braveRequests).isEmpty();
     }
 
+    @Test
+    void defaultsDoNotFilterOldDatesOrRerankScores() {
+        String old = "2022-01-01T00:00:00Z";
+        responseBody = results(item("https://www.bilibili.com/video/old-low", 0.1, old),
+                item("https://www.bilibili.com/video/zero", 0, null),
+                item("https://www.bilibili.com/video/negative", -0.5, old),
+                item("https://www.bilibili.com/video/no-score", 1.0, old)
+                        .replace("\"rerank_score\":1.0,", ""));
+        var result = fetch(properties());
+        assertThat(result.status()).isEqualTo(EvidenceStatus.AVAILABLE);
+        assertThat(result.items()).extracting(WebEvidenceItem::url).containsExactly(
+                "https://www.bilibili.com/video/old-low", "https://www.bilibili.com/video/zero",
+                "https://www.bilibili.com/video/negative", "https://www.bilibili.com/video/no-score");
+        assertThat(braveRequests).isEmpty();
+    }
+
+    @ParameterizedTest
+    @EnumSource(DeepEvidenceSource.class)
+    void emptySiteFallsBackWithSameSourceAndDeadline(DeepEvidenceSource source) {
+        responseBody = results();
+        var p = properties();
+        long deadline = System.nanoTime() + 4_000_000_000L;
+        var expected = new DeepEvidenceBatch(source, EvidenceStatus.AVAILABLE, List.of(), Instant.now());
+        DeepEvidenceProvider fallback = new DeepEvidenceProvider() {
+            @Override
+            public DeepEvidenceBatch fetch(DeepEvidenceSource requestedSource, Restaurant restaurant) {
+                throw new AssertionError("Fallback must receive original deadline");
+            }
+
+            @Override
+            public DeepEvidenceBatch fetch(DeepEvidenceSource requestedSource, Restaurant restaurant,
+                                           long deadlineNanos) {
+                assertThat(requestedSource).isEqualTo(source);
+                assertThat(deadlineNanos).isEqualTo(deadline);
+                return expected;
+            }
+        };
+        var provider = new DeepSeekWebEvidenceProvider(p, new WebEvidenceMatcher(p), fallback, "test-key");
+        assertThat(provider.fetch(source, restaurant(), deadline)).isSameAs(expected);
+        assertThat(requests).hasSize(2);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"summary", "content"})
     void usesSummaryOrContentWhenSnippetIsMissing(String field) {
@@ -165,17 +207,16 @@ class DeepSeekWebEvidenceProviderTest {
     }
 
     @Test
-    void retriesBrandQueryThenReturnsNoDataWithoutBrave() throws Exception {
+    void retriesBrandQueryThenFallsBackToBrave() throws Exception {
         responseBody = "{\"results\":[]}";
         var result = provider(properties(), "test-key").fetch(DeepEvidenceSource.BILIBILI,
                 TestRestaurants.full("a", "老王湘菜馆（大学城店）", 4.6, 500, 42));
-        assertThat(result.status()).isEqualTo(EvidenceStatus.NO_DATA);
+        assertBraveResult(result);
         assertThat(requests).hasSize(2);
         assertThat(objectMapper.readTree(requests.get(0).body()).path("query").asText())
                 .isEqualTo("site:bilibili.com/video 老王湘菜馆（大学城店） 长沙 大学城");
         assertThat(objectMapper.readTree(requests.get(1).body()).path("query").asText())
                 .isEqualTo("site:bilibili.com/video 老王 长沙 大学城");
-        assertThat(braveRequests).isEmpty();
     }
 
     @Test
@@ -298,8 +339,8 @@ class DeepSeekWebEvidenceProviderTest {
         var p = new DeepEvidenceProperties();
         assertThat(p.isDeepseekEnabled()).isFalse();
         assertThat(p.getDeepseekBaseUrl()).isEqualTo("https://api.deepseek.com");
-        assertThat(p.getDeepseekMinRerankScore()).isEqualTo(1.0);
-        assertThat(p.getDeepseekMaxAgeDays()).isEqualTo(365);
+        assertThat(p.getDeepseekMinRerankScore()).isZero();
+        assertThat(p.getDeepseekMaxAgeDays()).isZero();
         assertThat(p.getEvidenceCacheHours()).isEqualTo(12);
         assertThat(p.getOverallTimeoutMs()).isEqualTo(4000);
         assertThat(p.getEntityMatchThreshold()).isEqualTo(0.72);
@@ -326,6 +367,8 @@ class DeepSeekWebEvidenceProviderTest {
             assertThat(context).hasSingleBean(BraveWebEvidenceProvider.class);
             assertThat(context.getBean(DeepEvidenceProvider.class)).isInstanceOf(DeepSeekWebEvidenceProvider.class);
             assertThat(context.getBean(DeepEvidenceProperties.class).isDeepseekEnabled()).isTrue();
+            assertThat(context.getBean(DeepEvidenceProperties.class).getDeepseekMinRerankScore()).isZero();
+            assertThat(context.getBean(DeepEvidenceProperties.class).getDeepseekMaxAgeDays()).isZero();
         });
     }
 

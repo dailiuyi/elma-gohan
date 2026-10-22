@@ -11,8 +11,8 @@ public class DeepEvidenceProperties {
     private boolean enabled;
     private boolean deepseekEnabled;
     private String deepseekBaseUrl = "https://api.deepseek.com";
-    private double deepseekMinRerankScore = 1.0;
-    private int deepseekMaxAgeDays = 365;
+    private double deepseekMinRerankScore = 0;
+    private int deepseekMaxAgeDays = 0;
     public boolean isDeepseekEnabled() { return deepseekEnabled; }
     public void setDeepseekEnabled(boolean value) { deepseekEnabled = value; }
     public String getDeepseekBaseUrl() { return deepseekBaseUrl; }
