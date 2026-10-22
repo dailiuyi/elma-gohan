@@ -145,6 +145,63 @@ class BaiduRequestDispatcherTest {
         } finally { release.countDown(); executor.shutdownNow(); }
     }
 
+    @Test
+    void interruptedWaiterIsCancelledWithoutBlockingTheNextCall() throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(1);
+        try (var dispatcher = new BaiduRequestDispatcher(8, new SimpleMeterRegistry())) {
+            // Hold the single worker so the interrupted call is guaranteed to be waiting, not completed.
+            var busy = executor.submit(() -> dispatcher.call("busy", () -> {
+                entered.countDown();
+                await(release);
+                return empty();
+            }));
+            assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+            Thread.currentThread().interrupt();
+            try {
+                assertThat(dispatcher.call("interrupted", BaiduRequestDispatcherTest::empty).failureReason())
+                        .isEqualTo("CANCELLED");
+                assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            } finally {
+                Thread.interrupted();
+            }
+            release.countDown();
+            assertThat(busy.get(2, TimeUnit.SECONDS).status()).isEqualTo(EvidenceStatus.NO_DATA);
+            assertThat(dispatcher.call("next", BaiduRequestDispatcherTest::empty).status())
+                    .isEqualTo(EvidenceStatus.NO_DATA);
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void requestBudgetRejectsQueuedCallEvenWhenWorkerStaysBusyLonger() throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(1);
+        try (var dispatcher = new BaiduRequestDispatcher(8, new SimpleMeterRegistry())) {
+            var busy = executor.submit(() -> dispatcher.call("busy", () -> {
+                entered.countDown();
+                await(release);
+                return empty();
+            }));
+            assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+            try (var ignored = new BaiduCallContext(30)) {
+                assertThat(dispatcher.call("queued", BaiduRequestDispatcherTest::empty).failureReason())
+                        .isEqualTo("LOCAL_QUEUE_TIMEOUT");
+            }
+            release.countDown();
+            assertThat(busy.get(2, TimeUnit.SECONDS).status()).isEqualTo(EvidenceStatus.NO_DATA);
+            assertThat(dispatcher.call("after", BaiduRequestDispatcherTest::empty).status())
+                    .isEqualTo(EvidenceStatus.NO_DATA);
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
     private static PlatformSearchResult empty() {
         return new PlatformSearchResult(EvidenceStatus.NO_DATA, List.of());
     }
