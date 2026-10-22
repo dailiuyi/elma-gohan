@@ -19,12 +19,16 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class BaiduPlaceApiProviderTest {
 
     private HttpServer server;
     private final List<String> requests = new ArrayList<>();
     private String responseBody;
+    private int responseStatus = 200;
 
     @BeforeEach
     void startServer() throws IOException {
@@ -37,6 +41,136 @@ class BaiduPlaceApiProviderTest {
     @AfterEach
     void stopServer() {
         server.stop(0);
+    }
+
+    @Test
+    void suggestionFiltersInvalidIdentityAndCoordinatesAndBuildsAddresses() {
+        responseBody = """
+                {"status":0,"result":[
+                  {"name":"missing uid","location":{"lat":28,"lng":112}},
+                  {"uid":"missing-name","location":{"lat":28,"lng":112}},
+                  {"uid":"missing-location","name":"店"},
+                  {"uid":"bad-lat","name":"店","location":{"lat":"bad","lng":112}},
+                  {"uid":"bad-lng","name":"店","location":{"lat":28,"lng":"bad"}},
+                  {"uid":"a","name":"湘菜甲","address":"完整地址","location":{"lat":28,"lng":112}},
+                  {"uid":"b","name":"湘菜乙","district":"岳麓区","business":"大学城","location":{"lat":28,"lng":112}},
+                  {"uid":"c","name":"湘菜丙","district":"岳麓区","location":{"lat":28,"lng":112}},
+                  {"uid":"d","name":"湘菜丁","business":"大学城","location":{"lat":28,"lng":112}},
+                  {"uid":"e","name":"湘菜戊","location":{"lat":28,"lng":112}}]}
+                """;
+
+        PlatformSearchResult result = provider(properties()).searchSuggestion(null, " ", null);
+
+        assertThat(result.status()).isEqualTo(EvidenceStatus.AVAILABLE);
+        assertThat(result.total()).isEqualTo(5);
+        assertThat(result.evidence()).extracting(PlatformEvidence::address)
+                .containsExactly("完整地址", "岳麓区大学城", "岳麓区", "大学城", null);
+        assertThat(result.evidence()).allSatisfy(e -> {
+            assertThat(e.latitude()).isEqualTo(28.0);
+            assertThat(e.longitude()).isEqualTo(112.0);
+            assertThat(e.overallRating()).isNull();
+        });
+        assertThat(URLDecoder.decode(requests.get(0), StandardCharsets.UTF_8))
+                .contains("region=长沙").doesNotContain("location=");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"401,UPSTREAM_RATE_LIMIT", "302,DAILY_QUOTA", "2,UPSTREAM_ERROR"})
+    void businessErrorsHaveConsistentReasonsAcrossEndpoints(int status, String reason) {
+        responseBody = "{\"status\":" + status + "}";
+        BaiduPlaceApiProvider provider = provider(properties());
+
+        assertThat(provider.searchV3(new Location(28.2, 112.9), 500, 0).failureReason())
+                .isEqualTo(reason);
+        assertThat(provider.searchRegion(null, "").failureReason()).isEqualTo(reason);
+        assertThat(provider.searchSuggestion(null, null, "").failureReason()).isEqualTo(reason);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"status\":0}", "{\"status\":0,\"results\":[],\"result\":[]}"})
+    void missingOrEmptyResultArraysReturnNoData(String body) {
+        responseBody = body;
+        BaiduPlaceApiProvider provider = provider(properties());
+
+        assertThat(provider.searchV3(new Location(28.2, 112.9), 500, 0).status())
+                .isEqualTo(EvidenceStatus.NO_DATA);
+        assertThat(provider.searchRegion(null, null).status()).isEqualTo(EvidenceStatus.NO_DATA);
+        assertThat(provider.searchSuggestion(null, null, null).status()).isEqualTo(EvidenceStatus.NO_DATA);
+    }
+
+    @Test
+    void invalidPlaceRowsAreSkippedAndMalformedNumbersRemainUnknown() {
+        responseBody = """
+                {"status":0,"total":"unknown","results":[
+                  {"uid":"missing-name"},{"name":"missing-uid"},
+                  {"uid":"valid","name":"湘菜","location":{"lat":"bad","lng":"-"},
+                   "detail_info":{"overall_rating":"bad","price":" ","comment_num":"12.6条"}}]}
+                """;
+        BaiduProperties properties = properties();
+        properties.setPageSize(100);
+
+        PlatformSearchResult result = provider(properties).searchV3(new Location(28.2, 112.9),
+                500, -1, "湘菜");
+
+        assertThat(result.evidence()).hasSize(1);
+        assertThat(result.total()).isNull();
+        assertThat(result.pageNumber()).isZero();
+        assertThat(result.pageSize()).isEqualTo(20);
+        PlatformEvidence evidence = result.evidence().get(0);
+        assertThat(evidence.latitude()).isNull();
+        assertThat(evidence.longitude()).isNull();
+        assertThat(evidence.overallRating()).isNull();
+        assertThat(evidence.averagePrice()).isNull();
+        assertThat(evidence.commentCount()).isEqualTo(13);
+    }
+
+    @Test
+    void regionClampsPageSizeAndUsesDefaultQueryAndRegion() {
+        BaiduProperties properties = properties();
+        properties.setPageSize(1);
+
+        PlatformSearchResult result = provider(properties).searchRegion(" ", " ");
+
+        assertThat(result.pageSize()).isEqualTo(10);
+        assertThat(URLDecoder.decode(requests.get(0), StandardCharsets.UTF_8))
+                .contains("query=" + properties.getQuery()).contains("region=长沙")
+                .contains("page_size=10").contains("city_limit=true");
+    }
+
+    @Test
+    void disabledProviderDoesNotSendRequestsForAnyEndpoint() {
+        BaiduProperties properties = properties();
+        properties.setEnabled(false);
+        BaiduPlaceApiProvider provider = provider(properties);
+
+        assertThat(provider.searchV3(new Location(28.2, 112.9), 500, 0).status())
+                .isEqualTo(EvidenceStatus.UNAVAILABLE);
+        assertThat(provider.searchRegion(null, null).status()).isEqualTo(EvidenceStatus.UNAVAILABLE);
+        assertThat(provider.searchSuggestion(null, null, null).status()).isEqualTo(EvidenceStatus.UNAVAILABLE);
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void rejectedPermitAlsoPreventsRegionAndSuggestionRequests() {
+        BaiduPlaceRateLimiter limiter = mock(BaiduPlaceRateLimiter.class);
+        when(limiter.acquire()).thenReturn(new BaiduPlaceRateLimiter.Permit(false, 1000));
+        BaiduPlaceApiProvider provider = new BaiduPlaceApiProvider(properties(), limiter);
+
+        assertThat(provider.searchRegion(null, null).failureReason()).isEqualTo("LOCAL_QUEUE_TIMEOUT");
+        assertThat(provider.searchSuggestion(null, null, null).failureReason()).isEqualTo("LOCAL_QUEUE_TIMEOUT");
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void httpFailureDegradesEveryEndpointWithoutThrowing() {
+        responseStatus = 503;
+        BaiduPlaceApiProvider provider = provider(properties());
+
+        assertThat(provider.searchV3(new Location(28.2, 112.9), 500, 0).status())
+                .isEqualTo(EvidenceStatus.UNAVAILABLE);
+        assertThat(provider.searchRegion(null, null).status()).isEqualTo(EvidenceStatus.UNAVAILABLE);
+        assertThat(provider.searchSuggestion(null, null, null).status()).isEqualTo(EvidenceStatus.UNAVAILABLE);
+        assertThat(requests).hasSize(3);
     }
 
     @Test
@@ -153,7 +287,7 @@ class BaiduPlaceApiProviderTest {
         requests.add(exchange.getRequestURI().toString());
         byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json;charset=UTF-8");
-        exchange.sendResponseHeaders(200, bytes.length);
+        exchange.sendResponseHeaders(responseStatus, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();
     }

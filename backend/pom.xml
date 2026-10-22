@@ -91,8 +91,27 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <!-- 本机 JDK 20/Windows 下 Mockito 内联 mock maker 需要允许自附加;限制堆避免内存不足 -->
-          <argLine>-Djdk.attach.allowAttachSelf=true -Xmx512m</argLine>
+          <argLine>@{argLine} -Djdk.attach.allowAttachSelf=true -Xmx512m</argLine>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.12</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
