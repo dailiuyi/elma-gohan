@@ -169,8 +169,10 @@ public class DeepSeekWebEvidenceProvider implements DeepEvidenceProvider {
         Instant publishedAt = candidate.item().publishedAt();
         double ageDays = publishedAt == null ? 0
                 : Math.max(0, Duration.between(publishedAt, fetchedAt).toSeconds() / 86400.0);
-        double recency = publishedAt == null ? 0
-                : Math.pow(0.5, ageDays / properties.getDeepseekRecencyHalfLifeDays());
+        int halfLifeDays = properties.getDeepseekRecencyHalfLifeDays();
+        // 非正半衰期关闭新近度项，避免除零或负半衰期导致分数溢出。
+        double recency = halfLifeDays <= 0 || publishedAt == null ? 0
+                : Math.pow(0.5, ageDays / halfLifeDays);
         double combined = properties.getDeepseekRelevanceWeight() * relevance
                 + properties.getDeepseekRecencyWeight() * recency;
         return combined * (isShort(candidate.item()) ? properties.getDeepseekShortSnippetMultiplier() : 1);

@@ -237,6 +237,27 @@ class DeepSeekWebEvidenceProviderTest {
         assertThat(fetch(p).items().get(0).url()).endsWith("/older-relevant");
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1, Integer.MIN_VALUE})
+    void nonPositiveHalfLifeDisablesRecency(int halfLifeDays) {
+        responseBody = results(item("https://www.bilibili.com/video/future", 1, daysAgo(-1)),
+                item("https://www.bilibili.com/video/ancient", 2, daysAgo(3000)),
+                item("https://www.bilibili.com/video/undated", 4, null),
+                item("https://www.bilibili.com/video/recent", 3, daysAgo(1)));
+        var p = properties();
+        p.setDeepseekMaxAgeDays(0);
+        p.setDeepseekRecencyHalfLifeDays(halfLifeDays);
+        assertThat(fetch(p).items()).extracting(WebEvidenceItem::url).containsExactly(
+                "https://www.bilibili.com/video/undated", "https://www.bilibili.com/video/recent",
+                "https://www.bilibili.com/video/ancient", "https://www.bilibili.com/video/future");
+
+        p.setDeepseekRelevanceWeight(0);
+        assertThat(fetch(p).items()).extracting(WebEvidenceItem::url).containsExactly(
+                "https://www.bilibili.com/video/future", "https://www.bilibili.com/video/ancient",
+                "https://www.bilibili.com/video/undated", "https://www.bilibili.com/video/recent");
+        assertThat(braveRequests).isEmpty();
+    }
+
     @Test
     void v1FallbackNeverRestoresMissingTitlesInvalidLinksOrWrongStores() {
         responseBody = results(item("https://www.bilibili.com/video/no-title", 2, null)

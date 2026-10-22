@@ -17,6 +17,7 @@ public class DeepEvidenceProperties {
     private double deepseekShortSnippetMultiplier = 0.5;
     private double deepseekRelevanceWeight = 0.7;
     private double deepseekRecencyWeight = 0.3;
+    /** 非正值关闭新近度排序项。 */
     private int deepseekRecencyHalfLifeDays = 365;
     public int getDeepseekMinSnippetLength() { return deepseekMinSnippetLength; }
     public void setDeepseekMinSnippetLength(int value) { deepseekMinSnippetLength = value; }
