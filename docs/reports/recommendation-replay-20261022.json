@@ -1,0 +1,259 @@
+{
+  "sampleKind": "SYNTHETIC_BOUNDARY_CASES_NOT_USER_ACCEPTANCE",
+  "decisions": 104,
+  "firstChanges": 73,
+  "legacyEmpty": 0,
+  "shadowEmpty": 0,
+  "shadowLowestRiskFallbacks": 24,
+  "largestLegacyScoreGap": 30.0225,
+  "controlledSensitivity": {
+    "rating48to39TotalLoss": 8.524999999999991,
+    "rating48to39SafetyLoss": 4.925000000000001,
+    "rating48to39QualityLoss": 3.6000000000000014,
+    "completenessFullToMinimalQualityOnlyLoss": 3.5
+  },
+  "ablations": {
+    "v04-without-risk-ranking": {
+      "decisions": 104,
+      "empty": 0,
+      "largestCandidateScoreChange": 24.812500000000007,
+      "poolChanges": 1,
+      "firstChanges": 0
+    },
+    "v04-quality-completeness-neutral": {
+      "decisions": 104,
+      "empty": 0,
+      "largestCandidateScoreChange": 0.0,
+      "poolChanges": 0,
+      "firstChanges": 0
+    },
+    "v04-without-recent-diversity": {
+      "decisions": 104,
+      "empty": 0,
+      "largestCandidateScoreChange": 8.000000000000007,
+      "poolChanges": 0,
+      "firstChanges": 0
+    },
+    "v05-without-uncertainty-penalty": {
+      "decisions": 104,
+      "empty": 0,
+      "largestCandidateScoreChange": 10.0,
+      "poolChanges": 0,
+      "firstChanges": 0
+    },
+    "v05-quality-neutral": {
+      "decisions": 104,
+      "empty": 0,
+      "largestCandidateScoreChange": 14.922714448424856,
+      "poolChanges": 17,
+      "firstChanges": 1
+    },
+    "v05-without-recent-penalty": {
+      "decisions": 104,
+      "empty": 0,
+      "largestCandidateScoreChange": 39.99999999999999,
+      "poolChanges": 16,
+      "firstChanges": 16
+    }
+  },
+  "cases": [
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 8.175000000000011,
+      "shadowFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwMQ"
+      ],
+      "firstChanges": 7,
+      "scenario": "cold-start-top-k",
+      "legacyFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwMw",
+        "QU1BUABwNg",
+        "QU1BUABwOQ"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 6.719999999999999,
+      "shadowFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwMQ"
+      ],
+      "firstChanges": 7,
+      "scenario": "single-source",
+      "legacyFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwMw",
+        "QU1BUABwNg",
+        "QU1BUABwOQ"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 6.719999999999999,
+      "shadowFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwMQ"
+      ],
+      "firstChanges": 7,
+      "scenario": "baidu-rate-limited",
+      "legacyFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwMw",
+        "QU1BUABwNg",
+        "QU1BUABwOQ"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 8.175000000000011,
+      "shadowFirstChoices": [
+        "QU1BUABwMA"
+      ],
+      "firstChanges": 7,
+      "scenario": "stale-evidence",
+      "legacyFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwMw",
+        "QU1BUABwNg",
+        "QU1BUABwOQ"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 8.175000000000011,
+      "shadowFirstChoices": [
+        "QU1BUABwMQ",
+        "QU1BUABwMg"
+      ],
+      "firstChanges": 7,
+      "scenario": "exclude-after-risk",
+      "legacyFirstChoices": [
+        "QU1BUABwMQ",
+        "QU1BUABwMTA",
+        "QU1BUABwNA",
+        "QU1BUABwNw"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 30.0225,
+      "shadowFirstChoices": [
+        "QU1BUABrbm93bg"
+      ],
+      "firstChanges": 3,
+      "scenario": "missing-fields",
+      "legacyFirstChoices": [
+        "QU1BUABrbm93bg",
+        "QU1BUABtaXNzaW5n"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 0.0,
+      "shadowFirstChoices": [
+        "QU1BUABwMA"
+      ],
+      "firstChanges": 0,
+      "scenario": "sparse-pool",
+      "legacyFirstChoices": [
+        "QU1BUABwMA"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 6.196428571428569,
+      "shadowFirstChoices": [
+        "QU1BUABwMw",
+        "QU1BUABwNA"
+      ],
+      "firstChanges": 4,
+      "scenario": "budget-distance-boundaries",
+      "legacyFirstChoices": [
+        "QU1BUABwMw",
+        "QU1BUABwNg"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 8.175000000000011,
+      "shadowFirstChoices": [
+        "QU1BUABwMA"
+      ],
+      "firstChanges": 6,
+      "scenario": "dislikes-category",
+      "legacyFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwNg",
+        "QU1BUABwOQ"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 8.174999999999997,
+      "shadowFirstChoices": [
+        "QU1BUABwMg",
+        "QU1BUABwMw"
+      ],
+      "firstChanges": 7,
+      "scenario": "recent-history-boundaries",
+      "legacyFirstChoices": [
+        "QU1BUABwMTE",
+        "QU1BUABwMg",
+        "QU1BUABwNQ",
+        "QU1BUABwOA"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 8.435000000000002,
+      "shadowFirstChoices": [
+        "QU1BUABwMw"
+      ],
+      "firstChanges": 6,
+      "scenario": "personalized",
+      "legacyFirstChoices": [
+        "QU1BUABwMw",
+        "QU1BUABwNg",
+        "QU1BUABwOQ"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 0.0,
+      "shadowFirstChoices": [
+        "QU1BUAB0aWU1",
+        "QU1BUAB0aWU2",
+        "QU1BUAB0aWU3",
+        "QU1BUAB0aWUw",
+        "QU1BUAB0aWUx"
+      ],
+      "firstChanges": 8,
+      "scenario": "ties",
+      "legacyFirstChoices": [
+        "QU1BUAB0aWU0",
+        "QU1BUAB0aWU1",
+        "QU1BUAB0aWU3",
+        "QU1BUAB0aWUw",
+        "QU1BUAB0aWUy",
+        "QU1BUAB0aWUz"
+      ]
+    },
+    {
+      "decisions": 8,
+      "largestLegacyScoreGap": 5.219999999999999,
+      "shadowFirstChoices": [
+        "QU1BUABwMw"
+      ],
+      "firstChanges": 4,
+      "scenario": "platform-conflict",
+      "legacyFirstChoices": [
+        "QU1BUABwMA",
+        "QU1BUABwMw",
+        "QU1BUABwNg",
+        "QU1BUABwOQ"
+      ]
+    }
+  ]
+}

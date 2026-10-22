@@ -1,10 +1,6 @@
 package com.elma.gohan.provider.evidence;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.elma.gohan.config.BaiduProperties;
 import com.elma.gohan.domain.restaurant.Location;
@@ -151,13 +147,14 @@ class BaiduPlaceApiProviderTest {
     }
 
     @Test
-    void rejectedPermitAlsoPreventsRegionAndSuggestionRequests() {
-        BaiduPlaceRateLimiter limiter = mock(BaiduPlaceRateLimiter.class);
-        when(limiter.acquire()).thenReturn(new BaiduPlaceRateLimiter.Permit(false, 1000));
-        BaiduPlaceApiProvider provider = new BaiduPlaceApiProvider(properties(), limiter);
+    void exhaustedRequestBudgetAlsoPreventsRegionAndSuggestionRequests() throws InterruptedException {
+        BaiduPlaceApiProvider provider = provider(properties());
 
-        assertThat(provider.searchRegion(null, null).failureReason()).isEqualTo("LOCAL_QUEUE_TIMEOUT");
-        assertThat(provider.searchSuggestion(null, null, null).failureReason()).isEqualTo("LOCAL_QUEUE_TIMEOUT");
+        try (var ignored = new BaiduCallContext(1)) {
+            Thread.sleep(5);
+            assertThat(provider.searchRegion(null, null).failureReason()).isEqualTo("LOCAL_QUEUE_TIMEOUT");
+            assertThat(provider.searchSuggestion(null, null, null).failureReason()).isEqualTo("LOCAL_QUEUE_TIMEOUT");
+        }
         assertThat(requests).isEmpty();
     }
 
@@ -220,6 +217,30 @@ class BaiduPlaceApiProviderTest {
         assertThat(requests).hasSize(1);
     }
 
+    @ParameterizedTest
+    @CsvSource({"401,UPSTREAM_RATE_LIMIT", "402,UPSTREAM_RATE_LIMIT", "301,PERMANENT_QUOTA",
+            "302,DAILY_QUOTA", "240,CONFIGURATION_ERROR"})
+    void classifiesBusinessFailuresOnEveryEndpoint(int status, String reason) {
+        responseBody = "{\"status\":" + status + "}";
+        BaiduPlaceApiProvider provider = provider(properties());
+        Location center = new Location(28.2291, 112.9412);
+
+        assertThat(List.of(provider.searchV3(center, 500, 0),
+                provider.searchNearby(center, 500, "餐饮"),
+                provider.searchRegion("餐饮", "长沙"),
+                provider.searchSuggestion(center, "餐饮", "长沙"),
+                provider.searchV2(center, 500)))
+                .allSatisfy(result -> assertThat(result.failureReason()).isEqualTo(reason));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"429,UPSTREAM_RATE_LIMIT", "503,UPSTREAM_UNAVAILABLE", "403,CONFIGURATION_ERROR"})
+    void distinguishesHttpStatusFromBaiduBusinessCode(int status, String reason) {
+        responseStatus = status;
+        assertThat(provider(properties()).searchV3(new Location(28.2291,112.9412), 500, 0).failureReason())
+                .isEqualTo(reason);
+    }
+
     @Test
     void nearbyNameRecallUsesStrictRadiusAndDistanceOrder() {
         BaiduPlaceApiProvider provider = provider(properties());
@@ -238,11 +259,8 @@ class BaiduPlaceApiProviderTest {
     }
 
     @Test
-    void everyPlaceEndpointSharesTheSameGlobalRateLimiter() {
-        BaiduProperties properties = properties();
-        BaiduPlaceRateLimiter limiter = mock(BaiduPlaceRateLimiter.class);
-        when(limiter.acquire()).thenReturn(new BaiduPlaceRateLimiter.Permit(true, 0));
-        BaiduPlaceApiProvider provider = new BaiduPlaceApiProvider(properties, limiter);
+    void supportsEveryPlaceEndpoint() {
+        BaiduPlaceApiProvider provider = provider(properties());
         Location center = new Location(28.2291, 112.9412);
 
         provider.searchV3(center, 1000, 0);
@@ -251,25 +269,22 @@ class BaiduPlaceApiProviderTest {
         provider.searchSuggestion(center, "湘味小馆", "长沙");
         provider.searchV2(center, 1000);
 
-        verify(limiter, times(5)).acquire();
         assertThat(requests).hasSize(5);
     }
 
     @Test
-    void rejectedGlobalPermitDoesNotCallBaiduAndReturnsUnavailable() {
-        BaiduPlaceRateLimiter limiter = mock(BaiduPlaceRateLimiter.class);
-        when(limiter.acquire()).thenReturn(new BaiduPlaceRateLimiter.Permit(false, 1000));
-        BaiduPlaceApiProvider provider = new BaiduPlaceApiProvider(properties(), limiter);
-
-        PlatformSearchResult result = provider.searchV3(
-                new Location(28.2291, 112.9412), 1000, 0);
-
-        assertThat(result.status()).isEqualTo(EvidenceStatus.UNAVAILABLE);
+    void expiredDeadlineDoesNotCallBaidu() throws InterruptedException {
+        BaiduPlaceApiProvider provider = provider(properties());
+        try (var ignored = new BaiduCallContext(1)) {
+            Thread.sleep(5);
+            assertThat(provider.searchV3(new Location(28.2291, 112.9412), 1000, 0).status())
+                    .isEqualTo(EvidenceStatus.UNAVAILABLE);
+        }
         assertThat(requests).isEmpty();
     }
 
     private BaiduPlaceApiProvider provider(BaiduProperties properties) {
-        return new BaiduPlaceApiProvider(properties, new BaiduPlaceRateLimiter(properties));
+        return new BaiduPlaceApiProvider(properties);
     }
 
     private BaiduProperties properties() {
@@ -278,8 +293,6 @@ class BaiduPlaceApiProviderTest {
         properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
         properties.setConnectTimeoutMs(500);
         properties.setReadTimeoutMs(500);
-        properties.setRateLimitPerSecond(1000);
-        properties.setRateLimitMaxWaitMs(100);
         return properties;
     }
 

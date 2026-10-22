@@ -52,7 +52,7 @@ class SafeRegretShadowServiceTest {
         properties.setShadowEnabled(false);
         RecommendationDecisionSnapshotRepository repository =
                 mock(RecommendationDecisionSnapshotRepository.class);
-        SafeRegretShadowService service = new SafeRegretShadowService(
+        SafeRegretShadowService service = service(
                 properties, new TasteProperties(), repository, objectMapper);
 
         assertThat(service.capture(input())).isEmpty();
@@ -65,7 +65,7 @@ class SafeRegretShadowServiceTest {
         RecommendationDecisionSnapshotRepository repository =
                 mock(RecommendationDecisionSnapshotRepository.class);
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        SafeRegretShadowService service = new SafeRegretShadowService(
+        SafeRegretShadowService service = service(
                 new SafeRegretProperties(), new TasteProperties(), repository, objectMapper);
 
         RecommendationDecisionSnapshotEntity entity = service.capture(input()).orElseThrow();
@@ -127,7 +127,7 @@ class SafeRegretShadowServiceTest {
         RecommendationDecisionSnapshotRepository repository =
                 mock(RecommendationDecisionSnapshotRepository.class);
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        SafeRegretShadowService service = new SafeRegretShadowService(
+        SafeRegretShadowService service = service(
                 new SafeRegretProperties(), new TasteProperties(), repository, objectMapper);
         SafeRegretShadowInput base = input();
         Restaurant served = base.preExclusionRestaurants().get(0);
@@ -156,7 +156,7 @@ class SafeRegretShadowServiceTest {
         RecommendationDecisionSnapshotRepository repository =
                 mock(RecommendationDecisionSnapshotRepository.class);
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        SafeRegretShadowService service = new SafeRegretShadowService(
+        SafeRegretShadowService service = service(
                 new SafeRegretProperties(), new TasteProperties(), repository, objectMapper);
 
         RecommendationDecisionSnapshotEntity first = service.capture(input()).orElseThrow();
@@ -173,7 +173,7 @@ class SafeRegretShadowServiceTest {
         RecommendationDecisionSnapshotRepository repository =
                 mock(RecommendationDecisionSnapshotRepository.class);
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        SafeRegretShadowService service = new SafeRegretShadowService(
+        SafeRegretShadowService service = service(
                 new SafeRegretProperties(), new TasteProperties(), repository, objectMapper);
         SafeRegretShadowInput input = input();
         RecommendationDecisionSnapshotEntity existing = service.capture(input).orElseThrow();
@@ -197,14 +197,20 @@ class SafeRegretShadowServiceTest {
         TasteProperties secondTaste = new TasteProperties();
         secondTaste.setMaxAbsoluteWeight(firstTaste.getMaxAbsoluteWeight() + 1.0);
 
-        RecommendationDecisionSnapshotEntity first = new SafeRegretShadowService(
+        RecommendationDecisionSnapshotEntity first = service(
                 new SafeRegretProperties(), firstTaste, firstRepository, objectMapper)
                 .capture(input()).orElseThrow();
-        RecommendationDecisionSnapshotEntity second = new SafeRegretShadowService(
+        RecommendationDecisionSnapshotEntity second = service(
                 new SafeRegretProperties(), secondTaste, secondRepository, objectMapper)
                 .capture(input()).orElseThrow();
 
         assertThat(second.getConfigHash()).isNotEqualTo(first.getConfigHash());
+    }
+
+    private static SafeRegretShadowService service(SafeRegretProperties properties, TasteProperties taste,
+            RecommendationDecisionSnapshotRepository repository, ObjectMapper mapper) {
+        return new SafeRegretShadowService(properties, new SafeRegretShadowSnapshotWriter(repository),
+                new SafeRegretShadowCalculator(properties, taste, mapper));
     }
 
     private SafeRegretShadowInput input() {

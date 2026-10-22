@@ -16,7 +16,10 @@ public class BaiduProperties {
     private int nameRecallRadiusMeters = 500;
     private int recallMaxCalls = 22;
     private int recallTimeBudgetMs = 8000;
-    private int rateLimitPerSecond = 3;
+    private int rateLimitPerSecond = 2;
+    private int dispatchQueueCapacity = 64;
+    public int getDispatchQueueCapacity() { return dispatchQueueCapacity; }
+    public void setDispatchQueueCapacity(int value) { dispatchQueueCapacity = value; }
     private int rateLimitMaxWaitMs = 1000;
     private String region = "长沙";
     private int connectTimeoutMs = 1500;

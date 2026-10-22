@@ -104,7 +104,7 @@ public class EvidenceAggregator {
                                                 Map<String, Double> priceBaselines) {
         boolean realtime = baiduProperties.isAsyncEnrichmentEnabled() && !BACKGROUND.get();
         int budget = realtime ? baiduProperties.getRealtimeBudgetMs() : baiduProperties.getRecallTimeBudgetMs();
-        try (var ignored = new com.elma.gohan.provider.evidence.BaiduCallContext(budget)) {
+        try (var ignored = new com.elma.gohan.provider.evidence.BaiduCallContext(budget, BACKGROUND.get())) {
             return collectWithinBudget(restaurants, center, radiusMeters, priceBaselines, realtime);
         }
     }
@@ -170,7 +170,7 @@ public class EvidenceAggregator {
                         PlatformSearchResult secondPage = safeSearchV3(center, radiusMeters, 1);
                         if (secondPage.status() == EvidenceStatus.UNAVAILABLE) {
                             recallTruncated = true;
-                            addNoMatchPrimaryIds(incompleteRecallPrimaryIds, unresolved,
+                            addUnresolvedPrimaryIds(incompleteRecallPrimaryIds, unresolved,
                                     currentMatches);
                         } else {
                             v3Result = mergeV3Pages(firstPage, secondPage);
@@ -179,17 +179,23 @@ public class EvidenceAggregator {
                         }
                     } else {
                         recallTruncated = true;
-                        addNoMatchPrimaryIds(incompleteRecallPrimaryIds, unresolved,
+                        addUnresolvedPrimaryIds(incompleteRecallPrimaryIds, unresolved,
                                 currentMatches);
                     }
                 }
 
+                if (hasMoreResults(v3Result)) {
+                    currentMatches.forEach((id, match) -> {
+                        if (match.status() == EntityMatchStatus.AMBIGUOUS) incompleteRecallPrimaryIds.add(id);
+                    });
+                    recallTruncated = true;
+                }
                 List<Restaurant> stillUnmatched = unmatchedRestaurants(unresolved, currentMatches);
                 if (!realtime) {
                     nameRecall = recallUnmatchedByName(stillUnmatched, recallBudget, reservedProviderIds);
                 } else {
                     addPrimaryIds(incompleteRecallPrimaryIds, stillUnmatched);
-                    recallTruncated = !stillUnmatched.isEmpty();
+                    recallTruncated = recallTruncated || !stillUnmatched.isEmpty();
                 }
                 supplementalRecallUsed = supplementalRecallUsed || nameRecall.requestCount() > 0;
                 recallTruncated = recallTruncated || nameRecall.truncated();
@@ -307,6 +313,8 @@ public class EvidenceAggregator {
                 || !properties.getAlgorithmVersion().equals(mapping.getMatchAlgorithmVersion())) return null;
         EntityMatchStatus status = EntityMatchStatus.valueOf(mapping.getMatchStatus());
         if (status != EntityMatchStatus.MATCHED) {
+            if (fromFeaturesJson(mapping.getMatchFeaturesJson())
+                    .getOrDefault("reasonBudgetOrAvailability", 0.0) > 0) return null;
             return new EntityMatchResult(status, mapping.getMatchConfidence(), null,
                     fromFeaturesJson(mapping.getMatchFeaturesJson()));
         }
@@ -461,9 +469,10 @@ public class EvidenceAggregator {
                 .toList();
     }
 
-    private void addNoMatchPrimaryIds(Set<String> target, List<Restaurant> restaurants,
+    private void addUnresolvedPrimaryIds(Set<String> target, List<Restaurant> restaurants,
                                       Map<String, EntityMatchResult> matches) {
-        unmatchedRestaurants(restaurants, matches).stream()
+        restaurants.stream().filter(r -> matches.get(r.sourcePoiId()) != null
+                        && matches.get(r.sourcePoiId()).status() != EntityMatchStatus.MATCHED)
                 .map(Restaurant::sourcePoiId).forEach(target::add);
     }
 
@@ -485,12 +494,16 @@ public class EvidenceAggregator {
                 || firstPage.pageSize() <= 0) {
             return false;
         }
-        boolean moreResults = firstPage.total() == null
-                ? firstPage.evidence().size() >= firstPage.pageSize()
-                : firstPage.total() > firstPage.pageSize();
+        boolean moreResults = hasMoreResults(firstPage);
         boolean hasUnmatched = matches.values().stream()
-                .anyMatch(match -> match.status() == EntityMatchStatus.NO_MATCH);
+                .anyMatch(match -> match.status() != EntityMatchStatus.MATCHED);
         return moreResults && hasUnmatched;
+    }
+
+    private boolean hasMoreResults(PlatformSearchResult result) {
+        return result.status() == EvidenceStatus.AVAILABLE && result.pageSize() > 0
+                && (result.total() == null ? result.evidence().size() >= result.pageSize()
+                        : result.total() > result.pageSize());
     }
 
     private PlatformSearchResult mergeV3Pages(PlatformSearchResult firstPage,
@@ -563,7 +576,7 @@ public class EvidenceAggregator {
         }
         LocalDateTime expiresAt = switch (match.status()) {
             case MATCHED -> now.plusDays(properties.getMatchedTtlDays());
-            case AMBIGUOUS -> now.plusHours(properties.getAmbiguousTtlHours());
+            case AMBIGUOUS -> cacheNoMatch ? now.plusHours(properties.getAmbiguousTtlHours()) : now;
             case NO_MATCH -> cacheNoMatch
                     ? now.plusMinutes(properties.getNoMatchTtlMinutes()) : now;
             // 瞬时平台故障不做负缓存，下次新推荐可以立即恢复。

@@ -22,7 +22,7 @@ class DefaultRecommendationEngineTest {
 
     private final RecommendationProperties props = recommendationProperties();
     private final DefaultRecommendationEngine engine = new DefaultRecommendationEngine(
-            new HardFilter(), new LowRegretScorer(props), props, new TasteProperties());
+            new LowRegretScorer(props), props, new TasteProperties());
 
     private static RecommendationProperties recommendationProperties() {
         RecommendationProperties properties = new RecommendationProperties();
@@ -94,11 +94,13 @@ class DefaultRecommendationEngineTest {
     }
 
     @Test
-    @DisplayName("全部被硬过滤 -> 空候选池")
-    void emptyWhenAllFiltered() {
+    @DisplayName("应用侧硬过滤后无候选 -> 空候选池")
+    void emptyWhenApplicationFilteredAllCandidates() {
         Restaurant far = TestRestaurants.full("far", 4.5, 5000);
-        var result = engine.recommend(List.of(far), risks(List.of(far)),
-                new UserPreference(new SearchCondition(1000, null, "ANY", List.of())));
+        var condition = new SearchCondition(1000, null, "ANY", List.of());
+        var filtered = new HardFilter().filter(List.of(far), condition);
+        assertThat(filtered).isEmpty();
+        var result = engine.recommend(filtered, risks(List.of(far)), new UserPreference(condition));
         assertThat(result.pool()).isEmpty();
     }
 
@@ -117,7 +119,7 @@ class DefaultRecommendationEngineTest {
         RecommendationProperties explorationProps = new RecommendationProperties();
         explorationProps.setExplorationRate(1.0);
         DefaultRecommendationEngine explorationEngine = new DefaultRecommendationEngine(
-                new HardFilter(), new LowRegretScorer(explorationProps), explorationProps,
+                new LowRegretScorer(explorationProps), explorationProps,
                 new TasteProperties());
         Restaurant familiar = categoryRestaurant("c", "CHINESE", 4.9);
         Restaurant novel = categoryRestaurant("f", "FOREIGN", 4.2);

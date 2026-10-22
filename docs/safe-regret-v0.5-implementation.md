@@ -134,6 +134,8 @@
 
 ## 下一次恢复入口
 
+2026-10-22 更新：计算与持久化已分离，`SafeRegretShadowCalculator` 供在线 shadow 和无 IO 离线诊断共用，服务类只保留开关与幂等保存。当前恢复工作优先参阅[职责整理与回放对照](recommendation-algorithm-stage2-20261022.md)；104 次冻结基线保持一致，真实 PostgreSQL/API 导出和选池重放已验证，serving 安全闩继续关闭。
+
 1. 阅读本文件“当前检查点”和最后一条阶段记录；不要重新实现已通过的纯领域核心。
 2. 独立验收 Agent 在 `backend/` 使用测试数据库凭据执行 `mvn clean test`；不得复用可能含旧迁移的 `target/classes`，并等待异步 shadow 快照落库后断言。
 3. 从 `recommendation_decision_snapshot` 收集新旧风险分歧、无可选率、首推变化、propensity 和请求尾延迟。

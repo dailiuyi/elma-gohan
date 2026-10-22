@@ -2,6 +2,8 @@
 
 当前百度异步补数、严格匹配与深挖检索配置以 [Evidence v0.4](../docs/evidence-reliability-v0.4.md) 为准。正文中的 V0.3 示例保留作历史说明。
 
+推荐模块的最新职责划分、冻结回归与离线回放命令见 [2026-10-22 算法阶段记录](../docs/recommendation-algorithm-stage2-20261022.md)。当前推荐仍服务 v0.4.1，v0.5 仅做 shadow。
+
 Java 17 + Spring Boot 3.5 + PostgreSQL 的模块化单体。高德与百度提供结构化 Evidence，`risk-v0.3.1` 只表达客观风险；`taste-v0.1` 和 `recommendation-v0.4.1` 负责匿名用户画像、近期历史、有限探索、个性化排序与确定性选择重放。百度 AI 搜索（兼容 Brave Search）仍只在用户主动深挖时提供公开弱线索。接口契约见 [`../contracts/openapi.yaml`](../contracts/openapi.yaml)，个性化规则见 [`../docs/V0.4-personalized-decision-loop.md`](../docs/V0.4-personalized-decision-loop.md)。
 
 ## 构建与测试
@@ -28,8 +30,9 @@ mvn spring-boot:run   # 启动开发服务(默认 8080)
 | `BAIDU_NAME_RECALL_RADIUS_METERS` | 逐店严格周边检索半径（米） | `500` |
 | `BAIDU_RECALL_MAX_CALLS` | 通用页、逐店召回和可选 V2 合计调用上限 | `22` |
 | `BAIDU_RECALL_TIME_BUDGET_MS` | 整次百度召回时间预算（毫秒） | `8000` |
-| `BAIDU_RATE_LIMIT_PER_SECOND` | 单 JVM 内所有百度 Place 请求共享的全局速率上限 | `3` |
-| `BAIDU_RATE_LIMIT_MAX_WAIT_MS` | 单次百度 Place 请求等待全局限速许可的最长时间；超时按平台不可用处理 | `1000` |
+| `BAIDU_RATE_LIMIT_PER_SECOND` | 同数据库所有实例的百度 Place 串行通道，默认每次完成后至少间隔 500ms | `2` |
+| `BAIDU_RATE_LIMIT_MAX_WAIT_MS` | 取得跨实例锁后等待下一次出站时刻的最长时间 | `1000` |
+| `BAIDU_DISPATCH_QUEUE_CAPACITY` | 每实例不同查询的等待队列上限，相同查询合并 | `64` |
 | `EVIDENCE_PROVIDER` | Evidence 实现：`file` 或 `empty` | `file` |
 | `EVIDENCE_FILE` | 标准化评论证据 JSON，可用外部文件覆盖 | `classpath:evidence/restaurant-evidence.json` |
 | `BAIDU_AI_SEARCH_ENABLED` | 是否启用按需公开 Web Evidence | `false` |

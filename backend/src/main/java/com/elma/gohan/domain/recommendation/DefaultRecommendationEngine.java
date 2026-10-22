@@ -20,16 +20,15 @@ import org.springframework.stereotype.Component;
 /** recommendation-v0.4.1：V0.4 个性化排序加可重放的探索与候选池抽取。 */
 @Component
 public class DefaultRecommendationEngine implements RecommendationEngine {
-    private record Scored(Restaurant restaurant, RiskResult risk, PersonalizedScore score) { }
+    private record Scored(Restaurant restaurant, RiskResult risk, PersonalizedScore score,
+                          RecommendationFeatures features) { }
     private record SelectionPlan(List<SelectionCandidate> selected, String explorationKey) { }
-    private final HardFilter hardFilter;
     private final LowRegretScorer scorer;
     private final RecommendationProperties props;
     private final TasteProperties tasteProperties;
 
-    public DefaultRecommendationEngine(HardFilter hardFilter, LowRegretScorer scorer,
+    public DefaultRecommendationEngine(LowRegretScorer scorer,
             RecommendationProperties props, TasteProperties tasteProperties) {
-        this.hardFilter = hardFilter;
         this.scorer = scorer;
         this.props = props;
         this.tasteProperties = tasteProperties;
@@ -40,7 +39,7 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
     public RecommendationResult recommend(List<Restaurant> candidates,
             Map<String, RiskResult> risks, UserPreference preference, long seed) {
         SearchCondition condition = preference.condition();
-        List<Restaurant> filtered = hardFilter.filter(candidates, condition).stream()
+        List<Restaurant> filtered = candidates.stream()
                 .filter(r -> risks.get(r.sourcePoiId()) != null)
                 .filter(r -> !isBlocked(risks.get(r.sourcePoiId())))
                 .toList();
@@ -48,9 +47,10 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
             return new RecommendationResult(List.of(), props.getAlgorithmVersion(), seed, List.of());
         }
 
+        RecentFoodIndex history = new RecentFoodIndex(preference.recentHistory());
         List<Scored> scored = filtered.stream()
-                .map(r -> new Scored(r, risks.get(r.sourcePoiId()),
-                        scorer.details(r, risks.get(r.sourcePoiId()), preference)))
+                .map(r -> scorer.features(r, risks.get(r.sourcePoiId()), preference, history.forRestaurant(r)))
+                .map(features -> new Scored(features.restaurant(), features.risk(), scorer.details(features), features))
                 .sorted(Comparator.comparingDouble((Scored s) -> s.score().score()).reversed()
                         .thenComparing(s -> stableKey(s.restaurant())))
                 .toList();
@@ -60,7 +60,7 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
             Scored item = scored.get(i);
             selectionSnapshot.add(new SelectionCandidate(item.restaurant().source(),
                     item.restaurant().sourcePoiId(), diversityKey(item.restaurant(), condition),
-                    item.score().score(), i < topKSize, explorationEligible(item, preference)));
+                    item.score().score(), i < topKSize, explorationEligible(item)));
         }
         int poolSize = Math.min(props.getPoolSize(), scored.size());
         SelectionPlan plan = planSelection(selectionSnapshot, poolSize, seed);
@@ -70,7 +70,7 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
                 .map(item -> scoredByKey.get(item.candidateKey()))
                 .filter(java.util.Objects::nonNull)
                 .map(item -> itemKey(item).equals(plan.explorationKey())
-                        ? new Scored(item.restaurant(), item.risk(), scorer.withExploration(item.score()))
+                        ? new Scored(item.restaurant(), item.risk(), scorer.withExploration(item.score()), item.features())
                         : item)
                 .toList();
 
@@ -92,13 +92,12 @@ public class DefaultRecommendationEngine implements RecommendationEngine {
                 List.copyOf(selectionSnapshot));
     }
 
-    private boolean explorationEligible(Scored scored, UserPreference preference) {
-        Restaurant r = scored.restaurant();
+    private boolean explorationEligible(Scored scored) {
         return scored.risk().riskLevel() == RiskLevel.LOW
                 && scored.risk().confidence() >= props.getExplorationMinimumConfidence()
-                && !preference.recentHistory().ateCategoryWithinDays(r.categoryCode(), 7)
-                && !preference.recentHistory().dislikedCategoryWithinDays(r.categoryCode(), 30)
-                && preference.tasteProfile().categoryWeight(r)
+                && !scored.features().recent().ateCategoryWithinSevenDays()
+                && !scored.features().recent().dislikedCategoryWithinThirtyDays()
+                && scored.features().categoryWeight()
                     >= props.getExplorationNegativePreferenceThreshold();
     }
 

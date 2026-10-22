@@ -16,7 +16,9 @@ public record UserPreference(
 ) {
     public UserPreference {
         tasteProfile = tasteProfile == null ? TasteProfile.empty() : tasteProfile;
-        flavorTagsByRestaurant = flavorTagsByRestaurant == null ? Map.of() : Map.copyOf(flavorTagsByRestaurant);
+        flavorTagsByRestaurant = flavorTagsByRestaurant == null ? Map.of() : flavorTagsByRestaurant.entrySet().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, entry ->
+                        java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(entry.getValue()))));
         recentHistory = recentHistory == null
                 ? RecentFoodHistory.empty(LocalDateTime.now()) : recentHistory;
     }

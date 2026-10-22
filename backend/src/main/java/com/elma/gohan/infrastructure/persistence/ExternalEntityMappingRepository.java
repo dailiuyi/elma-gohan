@@ -33,7 +33,8 @@ public interface ExternalEntityMappingRepository
           AND (external_entity_mapping.match_algorithm_version IS DISTINCT FROM excluded.match_algorithm_version
             OR external_entity_mapping.match_status <> 'MATCHED' OR excluded.match_status = 'MATCHED'
             OR external_entity_mapping.expires_at <= (now() AT TIME ZONE 'UTC')
-            OR (excluded.match_status IN ('NO_MATCH','AMBIGUOUS') AND excluded.expires_at>excluded.updated_at))
+            OR (excluded.match_status IN ('NO_MATCH','AMBIGUOUS') AND excluded.expires_at>excluded.updated_at
+              AND COALESCE((excluded.match_features_json->>'reasonBudgetOrAvailability')::numeric,0)=0))
         """, nativeQuery = true)
     void store(@org.springframework.data.repository.query.Param("value") ExternalEntityMappingEntity value);
 
